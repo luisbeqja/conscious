@@ -3,12 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Conscious: a personal life assistant that lives in WhatsApp",
+  "description": "Conscious: a personal life assistant you text on iMessage and WhatsApp",
   "engines": {
     "node": ">=22.19.0"
   },
   "scripts": {
     "chat": "tsx --env-file-if-exists=.env src/main.ts",
+    "photon": "tsx --env-file-if-exists=.env src/photon.ts",
     "start": "node --env-file-if-exists=.env dist/main.js",
     "build": "tsc -p tsconfig.build.json && node scripts/copy-assets.mjs",
     "typecheck": "tsc --noEmit",
@@ -20,6 +21,9 @@
   "dependencies": {
     "@earendil-works/pi-agent-core": "0.87.0",
     "@earendil-works/pi-ai": "0.87.0",
+    "@spectrum-ts/core": "12.10.1",
+    "@spectrum-ts/imessage": "12.10.1",
+    "@spectrum-ts/whatsapp-business": "12.10.1",
     "croner": "^9.1.0",
     "typebox": "1.3.27"
   },
