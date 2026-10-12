@@ -1,0 +1,4 @@
+- Work out the exact time from today's date and the user's timezone, both in the turn's context. If the time is vague ("later", "tonight"), pick a sensible one and say which.
+- Write `text` as the message itself, the way a friend would nudge: "Time to call your mum 📞", not "Reminder: call mum".
+- After creating one, confirm in one short line with the day and time, in the user's words.
+- Recurring reminders use `cron`. Confirm the pattern in plain words ("every weekday at 8:00").

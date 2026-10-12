@@ -1,0 +1,48 @@
+import type { Static, TSchema } from "typebox";
+import type { BackgroundAgents } from "../agents/background-agents.js";
+import type { Scheduler } from "../scheduler/scheduler.js";
+
+/**
+ * What a tool does in the user's life. The engine enforces it, not the prompt:
+ * `read` and `draft` run freely, `commit` (sends, books, pays, deletes) needs the user's yes first.
+ */
+export type Effect = "read" | "draft" | "commit";
+
+export interface ToolContext {
+    userId: string;
+    timezone: string;
+    scheduler: Scheduler;
+    /** Absent inside a background agent: sub-agents do not spawn sub-agents. */
+    background?: BackgroundAgents;
+    signal?: AbortSignal;
+}
+
+export interface ToolOutput {
+    data: unknown;
+    /** A rule that applies to this result only, read by the model beside the data. */
+    guidance?: string;
+}
+
+export interface RegisteredTool<TParams extends TSchema = TSchema> {
+    /** `<capability>_<verb>_<noun>`. */
+    name: string;
+    label: string;
+    description: string;
+    parameters: TParams;
+    effect: Effect;
+    execute(params: Static<TParams>, context: ToolContext): Promise<ToolOutput>;
+}
+
+export interface Capability {
+    id: string;
+    /** One line in the index the orchestrator always sees. */
+    summary: string;
+    /** How to use the tools well, loaded with them. */
+    skill: string;
+    tools: RegisteredTool[];
+    /** A capability backed by a connector is offered only once the user has connected it. */
+    available?(userId: string): Promise<boolean> | boolean;
+}
+
+export const defineTool = <TParams extends TSchema>(tool: RegisteredTool<TParams>): RegisteredTool =>
+    tool as unknown as RegisteredTool;

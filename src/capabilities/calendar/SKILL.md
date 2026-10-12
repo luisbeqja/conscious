@@ -1,0 +1,3 @@
+- Read the narrowest window that answers the question: today for "what's on today", seven days for "this week".
+- Give times in the user's timezone, in the order they happen. Leave out what they did not ask about.
+- Creating or moving events is not built yet. Offer a reminder instead.
