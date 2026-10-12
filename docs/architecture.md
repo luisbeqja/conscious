@@ -23,18 +23,25 @@
 
 ## A message, end to end
 
-1. The terminal (later WhatsApp) hands the orchestrator your text. It waits behind any message still being answered for you.
+1. The terminal, or Photon (iMessage and WhatsApp), hands the orchestrator your text. It waits behind any message still being answered for you.
 2. The orchestrator loads the conversation, builds the turn (the time in your timezone, background tasks that finished or are still running, your text), and runs the loop with the packs available to you.
 3. The answer streams back as it is written, tool calls shown as they start, and the conversation is saved.
 4. Reminders and finished background tasks reach you through `notify`, the one way Conscious speaks first.
 
+## Channels
+
+Conscious reaches people through [Photon Spectrum](https://photon.codes/spectrum): one SDK and one message stream for iMessage and WhatsApp. `src/channels/photon.ts` is the only code that knows about it.
+
+- **A user is their sender id** (phone number or Apple ID), so the same person on iMessage and WhatsApp is one conversation. Only ids on `CONSCIOUS_ALLOWED_USERS` are answered.
+- **Replies and notifications go to the chat the user last wrote from.** Nobody is messaged before they write first, which also keeps the numbers looking like normal chats to Apple's and Meta's spam checks.
+- **Spectrum Cloud owns the numbers and lines.** WhatsApp goes through the WhatsApp Business API, so Meta's rule against general-purpose assistants applies; it is allowed in the EU while the Commission's interim order stands.
+
 ## Next, in order
 
-1. **WhatsApp.** A webhook in, the Cloud API out, an allow-list of numbers. The orchestrator already knows nothing about the terminal.
-2. **Durable storage.** Conversations, reminders and background tasks live in memory today; a restart forgets them. A store (Postgres or Mongo) that re-arms reminders on boot.
-3. **Approvals on WhatsApp.** A `commit` becomes an interactive message with Yes / No buttons; only the tap runs it.
-4. **Google Calendar connector** with OAuth. Then Gmail, Linear, GitHub, Spotify.
-5. **Memory.** What Conscious knows about you (people, preferences, routines), separate from the transcript.
-6. **Voice notes and photos** in, read with transcription and vision.
-7. **The sandbox:** a hosted browser for booking, forms and price checks.
-8. **Tracing** with Langfuse, one trace per message, sub-agents as child agents.
+1. **Durable storage.** Conversations, reminders and background tasks live in memory today; a restart forgets them. A store (Postgres or Mongo) that re-arms reminders on boot.
+2. **Approvals in the chat.** A `commit` becomes a Yes / No question (an iMessage poll or mini-app, a typed yes on WhatsApp); only the answer runs it.
+3. **Google Calendar connector** with OAuth. Then Gmail, Linear, GitHub, Spotify.
+4. **Memory.** What Conscious knows about you (people, preferences, routines), separate from the transcript.
+5. **Voice notes and photos** in, read with transcription and vision.
+6. **The sandbox:** a hosted browser for booking, forms and price checks.
+7. **Tracing** with Langfuse, one trace per message, sub-agents as child agents.
