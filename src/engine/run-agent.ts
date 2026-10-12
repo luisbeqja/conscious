@@ -13,7 +13,11 @@ export interface AgentRun {
     budgets: Budgets;
     sessionId: string;
     signal?: AbortSignal;
+    /** Live progress, for a terminal or a typing indicator. Never stored. */
+    onProgress?: (progress: RunProgress) => void;
 }
+
+export type RunProgress = { type: "text"; delta: string } | { type: "tool"; name: string };
 
 export interface AgentRunResult {
     messages: AgentMessage[];
@@ -73,6 +77,10 @@ export const runAgent = async (run: AgentRun): Promise<AgentRunResult> => {
 
     let turns = 0;
     agent.subscribe((event) => {
+        if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") {
+            run.onProgress?.({ type: "text", delta: event.assistantMessageEvent.delta });
+        }
+        if (event.type === "tool_execution_start") run.onProgress?.({ type: "tool", name: event.toolName });
         if (event.type === "turn_end" && ++turns >= run.budgets.maxTurnsPerRun) {
             status = "budget_exhausted";
             agent.abort();
