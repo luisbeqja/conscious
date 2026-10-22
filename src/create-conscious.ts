@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { BackgroundAgents, type Notify } from "./agents/background-agents.js";
 import { createRegistry } from "./capabilities/index.js";
 import type { Capability } from "./capabilities/types.js";
+import { createWebCapability } from "./capabilities/web/capability.js";
 import type { Config } from "./config.js";
 import { SandboxConversationStore } from "./conversations/sandbox-store.js";
 import { InMemoryConversationStore } from "./conversations/store.js";
@@ -18,6 +19,7 @@ import { Scheduler } from "./scheduler/scheduler.js";
 import { SkillLibrary } from "./skills/library.js";
 import { createVaultServer, verifyWithService } from "./vault/server.js";
 import { loadOrCreateVaultKey, Vault } from "./vault/vault.js";
+import { createSearchProvider } from "./web/search.js";
 
 /**
  * Composition root: which implementation sits behind each seam. `notify` is how Conscious
@@ -51,7 +53,8 @@ export const createConscious = (config: Config, notify: Notify, extra: readonly 
         credentials: vault,
         transport: fetchTransport,
     };
-    const registry = createRegistry(sandboxes, extra, {
+    const web = createWebCapability({ search: createSearchProvider(config.search) });
+    const registry = createRegistry(sandboxes, [web, ...extra], {
         plugins,
         vault: { vault, publicUrl: config.vault.publicUrl },
     }).addSource(pluginCapabilities(plugins));

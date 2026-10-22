@@ -2,6 +2,7 @@ import { join } from "node:path";
 import type { ModelConfig } from "./engine/models.js";
 import { type McpServerEntry, readCatalog, selectServers } from "./mcp/catalog.js";
 import type { E2BOptions } from "./sandbox/e2b.js";
+import type { SearchConfig } from "./web/search.js";
 
 export interface Config {
     timezone: string;
@@ -16,6 +17,8 @@ export interface Config {
     sandbox?: E2BOptions;
     /** MCP servers from the repo's catalog that this install connects to. */
     mcpServers: McpServerEntry[];
+    /** Where web searches go. */
+    search: SearchConfig;
 }
 
 export type PhotonPlatform = "imessage" | "whatsapp";
@@ -74,7 +77,18 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): Config => {
         budgets: { maxTurnsPerRun: 20, maxToolCallsPerRun: 40, maxBackgroundAgents: 3 },
         sandbox: loadSandboxConfig(env),
         mcpServers: selectServers(readCatalog(), env.CONSCIOUS_MCP_SERVERS),
+        search: loadSearchConfig(env),
     };
+};
+
+/** A Brave key or a SearXNG address picks that engine; with neither, DuckDuckGo needs no setup. */
+const loadSearchConfig = (env: NodeJS.ProcessEnv): SearchConfig => {
+    const provider =
+        env.CONSCIOUS_SEARCH || (env.BRAVE_API_KEY ? "brave" : env.CONSCIOUS_SEARXNG_URL ? "searxng" : "duckduckgo");
+    if (provider === "brave") return { provider, apiKey: required(env, "BRAVE_API_KEY") };
+    if (provider === "searxng") return { provider, url: required(env, "CONSCIOUS_SEARXNG_URL") };
+    if (provider === "duckduckgo") return { provider };
+    throw new Error(`CONSCIOUS_SEARCH must be "duckduckgo", "brave" or "searxng", not "${provider}"`);
 };
 
 const loadSandboxConfig = (env: NodeJS.ProcessEnv): E2BOptions | undefined => {
