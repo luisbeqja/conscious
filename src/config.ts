@@ -90,8 +90,8 @@ const list = (value: string | undefined): string[] =>
         .map((item) => item.trim())
         .filter(Boolean);
 
-const required = (env: NodeJS.ProcessEnv, name: string): string => {
-    const value = env[name];
+const required = (env: NodeJS.ProcessEnv, name: string, alias?: string): string => {
+    const value = env[name] || (alias ? env[alias] : undefined);
     if (!value) throw new Error(`${name} is not set (see .env.example)`);
     return value;
 };
@@ -103,8 +103,9 @@ export const loadPhotonConfig = (env: NodeJS.ProcessEnv = process.env): PhotonCo
     const allowedUsers = new Set(list(env.CONSCIOUS_ALLOWED_USERS));
     if (allowedUsers.size === 0) throw new Error("CONSCIOUS_ALLOWED_USERS is empty, so nobody could talk to Conscious");
     return {
-        projectId: required(env, "PHOTON_PROJECT_ID"),
-        projectSecret: required(env, "PHOTON_PROJECT_SECRET"),
+        // Photon's dashboard hands out the SPECTRUM_ names, so both are read.
+        projectId: required(env, "PHOTON_PROJECT_ID", "SPECTRUM_PROJECT_ID"),
+        projectSecret: required(env, "PHOTON_PROJECT_SECRET", "SPECTRUM_PROJECT_SECRET"),
         platforms: platforms as PhotonPlatform[],
         allowedUsers,
     };
