@@ -16,7 +16,7 @@ const photon = loadPhotonConfig();
 
 // The channel needs the orchestrator and the orchestrator's notifications need the channel.
 let channel: PhotonChannel | undefined;
-const { orchestrator, scheduler } = createConscious(config, (userId, text) =>
+const { orchestrator, scheduler, sandboxes } = createConscious(config, (userId, text) =>
     channel ? channel.notify(userId, text) : Promise.resolve(),
 );
 channel = new PhotonChannel(orchestrator, photon.allowedUsers);
@@ -33,6 +33,7 @@ console.log(`Conscious on Photon · ${photon.platforms.join(", ")} · ${config.m
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
     process.on(signal, async () => {
         scheduler.stopAll();
+        await sandboxes?.shutdown();
         await spectrum.stop();
         process.exit(0);
     });
