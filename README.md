@@ -67,7 +67,18 @@ No secrets go in: the sandbox starts with an empty environment, and account toke
 
 Skills are instructions for jobs that come up often, in the [AgentSkills](https://agentskills.io) format. They live on the user's computer, in `skills/`: the repo's [`skills/`](skills/) folder is copied in when a computer starts, next to the skills the agent wrote for that user. The system prompt lists the ones that can run there, and the agent reads a skill's `SKILL.md` before it uses it.
 
-Three ship today: `weather`, `maps` and `rss-feeds`. They need the internet, so they show up only with `CONSCIOUS_SANDBOX_INTERNET=true`. To copy another one at a pinned commit:
+22 ship today:
+
+| Area | Skills |
+| --- | --- |
+| Search | `duckduckgo-search`, `reddit-reading`, `youtube-content`, `blocked-page-recovery`, `rss-feeds` |
+| Watching | `product-price-monitor`, `watchers`, `stocks` |
+| Daily life | `weather`, `maps`, `fitness-nutrition` |
+| Planning | `weekly-review-planning`, `decision-questionnaire`, `one-three-one-rule`, `social-media-content-calendar`, `llm-wiki` |
+| Documents | `pdf`, `docx`, `xlsx`, `powerpoint`, `document-to-action-items` |
+| Agent | `skill-creator` |
+
+Skills that fetch from the web show up only with `CONSCIOUS_SANDBOX_INTERNET=true`. Watching skills check when the user asks; checks on a schedule come later. To copy another one at a pinned commit:
 
 ```bash
 pnpm skills:import https://github.com/<owner>/<repo> skills/<name> --commit <sha> --internet
