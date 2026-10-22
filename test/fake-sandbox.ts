@@ -27,9 +27,15 @@ export class FakeSandbox implements Sandbox {
 
     async listFiles(path: string): Promise<FileEntry[]> {
         const dir = resolvePath(this.home, path);
-        return [...this.files]
+        const files: FileEntry[] = [...this.files]
             .filter(([file]) => posix.dirname(file) === dir)
             .map(([file, content]) => ({ name: posix.basename(file), type: "file", size: content.length }));
+        const dirs = new Set(
+            [...this.files.keys()]
+                .filter((file) => file.startsWith(`${dir}/`) && posix.dirname(file) !== dir)
+                .map((file) => file.slice(dir.length + 1).split("/")[0] ?? ""),
+        );
+        return [...files, ...[...dirs].map((name): FileEntry => ({ name, type: "dir", size: 0 }))];
     }
 }
 

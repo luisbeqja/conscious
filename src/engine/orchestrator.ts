@@ -3,10 +3,11 @@ import type { CapabilityRegistry } from "../capabilities/registry.js";
 import type { Capability, ToolContext } from "../capabilities/types.js";
 import type { Budgets } from "../config.js";
 import type { ConversationStore } from "../conversations/store.js";
-import { buildBackgroundPrompt, buildSystemPrompt, buildUserTurn } from "../prompts/prompts.js";
+import { buildBackgroundPrompt, buildSystemPrompt, buildUserTurn, type ComputerContext } from "../prompts/prompts.js";
 import { loadMemory } from "../sandbox/memory.js";
 import type { SandboxProvider } from "../sandbox/sandbox.js";
 import type { Scheduler } from "../scheduler/scheduler.js";
+import type { SkillLibrary } from "../skills/library.js";
 import type { ModelRuntime } from "./models.js";
 import { type RunProgress, runAgent } from "./run-agent.js";
 import { adaptTool } from "./tool-adapter.js";
@@ -21,6 +22,8 @@ export interface OrchestratorDeps {
     background: BackgroundAgents;
     /** The users' computers. Without them Conscious has no memory beyond the conversation. */
     sandboxes?: SandboxProvider;
+    /** The skills on each computer. Only used with `sandboxes`. */
+    skills?: SkillLibrary;
 }
 
 const FALLBACK = "Sorry, something went wrong on my side. Try again in a moment?";
@@ -61,7 +64,7 @@ export class Orchestrator {
         const { tools, effects } = toolsFor(capabilities, { userId, timezone, scheduler, background });
         const result = await runAgent({
             runtime,
-            systemPrompt: buildSystemPrompt(registry.renderIndex(capabilities), await this.memory(userId)),
+            systemPrompt: buildSystemPrompt(registry.renderIndex(capabilities), await this.computer(userId)),
             tools,
             effects,
             history: await store.load(userId),
@@ -88,7 +91,7 @@ export class Orchestrator {
         const { tools, effects } = toolsFor(capabilities, { userId: task.userId, timezone, scheduler });
         const result = await runAgent({
             runtime,
-            systemPrompt: buildBackgroundPrompt(registry.renderIndex(capabilities), await this.memory(task.userId)),
+            systemPrompt: buildBackgroundPrompt(registry.renderIndex(capabilities), await this.computer(task.userId)),
             tools,
             effects,
             history: [],
@@ -101,14 +104,21 @@ export class Orchestrator {
         return result.text;
     };
 
-    /** A computer that cannot be reached costs the user their memory for one message, not the answer. */
-    private async memory(userId: string): Promise<string | undefined> {
-        if (!this.deps.sandboxes) return undefined;
+    /** A computer that cannot be reached costs the user their memory and skills for one message, not the answer. */
+    private async computer(userId: string): Promise<ComputerContext | undefined> {
+        const { sandboxes, skills } = this.deps;
+        if (!sandboxes) return undefined;
         try {
-            return await loadMemory(await this.deps.sandboxes.forUser(userId));
+            const sandbox = await sandboxes.forUser(userId);
+            const [memory, skillList] = await Promise.all([
+                loadMemory(sandbox),
+                skills ? skills.render(userId, sandbox) : "None yet.",
+            ]);
+            return { memory, skills: skillList };
         } catch (error) {
-            console.error(`[orchestrator] could not read memory for ${userId}`, error);
-            return "(Your computer could not be reached, so your memory is unavailable for this message.)";
+            console.error(`[orchestrator] could not read the computer for ${userId}`, error);
+            const unreachable = "(Your computer could not be reached, so this is unavailable for this message.)";
+            return { memory: unreachable, skills: unreachable };
         }
     }
 }

@@ -7,6 +7,7 @@ import { createModelRuntime } from "./engine/models.js";
 import { Orchestrator } from "./engine/orchestrator.js";
 import { createE2BClient, E2BSandboxes } from "./sandbox/e2b.js";
 import { Scheduler } from "./scheduler/scheduler.js";
+import { SkillLibrary } from "./skills/library.js";
 
 /**
  * Composition root: which implementation sits behind each seam. `notify` is how Conscious
@@ -32,6 +33,7 @@ export const createConscious = (config: Config, notify: Notify) => {
         scheduler,
         background,
         sandboxes,
+        skills: config.sandbox ? new SkillLibrary({ internet: config.sandbox.internet }) : undefined,
     });
     return { orchestrator, scheduler, background, sandboxes };
 };

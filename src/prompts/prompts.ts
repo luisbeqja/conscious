@@ -3,17 +3,31 @@ import { promptFile } from "./prompt-file.js";
 
 const SYSTEM = promptFile(import.meta.url, "system.md");
 const BACKGROUND = promptFile(import.meta.url, "background.md");
+const SKILLS = promptFile(import.meta.url, "skills.md");
 
-const fill = (template: string, capabilities: string, memory?: string): string => {
+/** What the user's computer holds for the prompt. Absent when they have no computer. */
+export interface ComputerContext {
+    /** The memory index. */
+    memory: string;
+    /** The skills list. */
+    skills: string;
+}
+
+const fill = (template: string, capabilities: string, computer?: ComputerContext): string => {
     const prompt = template.replace("{{capabilities}}", capabilities);
-    return memory === undefined ? prompt : `${prompt}\n\n# What you remember about the user\n\n${memory}`;
+    if (!computer) return prompt;
+    return [
+        prompt,
+        SKILLS.replace("{{skills}}", computer.skills),
+        `# What you remember about the user\n\n${computer.memory}`,
+    ].join("\n\n");
 };
 
-/** `memory` is the user's memory index, when they have a computer to keep one on. */
-export const buildSystemPrompt = (capabilities: string, memory?: string): string => fill(SYSTEM, capabilities, memory);
+export const buildSystemPrompt = (capabilities: string, computer?: ComputerContext): string =>
+    fill(SYSTEM, capabilities, computer);
 
-export const buildBackgroundPrompt = (capabilities: string, memory?: string): string =>
-    fill(BACKGROUND, capabilities, memory);
+export const buildBackgroundPrompt = (capabilities: string, computer?: ComputerContext): string =>
+    fill(BACKGROUND, capabilities, computer);
 
 const formatNow = (now: Date, timezone: string): string =>
     `${new Intl.DateTimeFormat("en-GB", { dateStyle: "full", timeStyle: "short", timeZone: timezone }).format(now)} (${timezone})`;
