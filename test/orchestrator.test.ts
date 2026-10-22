@@ -49,7 +49,9 @@ describe("Orchestrator", () => {
         });
 
         const progress: RunProgress[] = [];
-        const reply = await orchestrator.send("me", "remind me to call mum in an hour", (p) => progress.push(p));
+        const reply = await orchestrator.send("me", "remind me to call mum in an hour", {
+            onProgress: (p) => progress.push(p),
+        });
 
         expect(reply).toBe("Done, I'll remind you in an hour.");
         expect(scheduler.list("me").map((reminder) => reminder.text)).toEqual(["Call mum 📞"]);
@@ -58,6 +60,38 @@ describe("Orchestrator", () => {
 
         await orchestrator.send("me", "what did I ask?");
         expect((await store.load("me")).filter((message) => message.role === "user")).toHaveLength(2);
+    });
+
+    it("reacts to the message, and a reaction alone is a whole answer", async () => {
+        const { faux, runtime } = scriptedModel();
+        faux.setResponses([
+            fauxAssistantMessage(fauxText("Anytime!")),
+            fauxAssistantMessage(fauxToolCall("reactions_react_message", { emoji: "❤️" }), { stopReason: "toolUse" }),
+            fauxAssistantMessage([]),
+        ]);
+        const orchestrator = new Orchestrator({
+            registry: createRegistry(),
+            store: new InMemoryConversationStore(),
+            runtime,
+            budgets: { maxTurnsPerRun: 10, maxToolCallsPerRun: 10, maxBackgroundAgents: 1 },
+            timezone: "Europe/Rome",
+            scheduler,
+            background: new BackgroundAgents(
+                async () => "",
+                async () => {},
+                1,
+            ),
+        });
+        const reactions: string[] = [];
+        const react = async (emoji: string) => {
+            reactions.push(emoji);
+            return true;
+        };
+
+        expect(await orchestrator.send("me", "thanks", { react })).toBe("Anytime!");
+        // The earlier "Anytime!" must not be sent again for a message answered with a reaction.
+        expect(await orchestrator.send("me", "thanks again", { react })).toBe("");
+        expect(reactions).toEqual(["❤️"]);
     });
 
     it("tells the next answer what Conscious said on its own, once", async () => {

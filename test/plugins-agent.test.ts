@@ -87,7 +87,7 @@ describe("plugins in the agent loop", () => {
 
         expect(await orchestrator.send("me", "connect my github")).toBe("Installed GitHub.");
         const progress: RunProgress[] = [];
-        await orchestrator.send("me", "anything on github?", (p) => progress.push(p));
+        await orchestrator.send("me", "anything on github?", { onProgress: (p) => progress.push(p) });
 
         expect(progress).toContainEqual({ type: "tool", name: "github_list_notifications" });
         expect(requests).toEqual(["GET https://api.github.com/notifications?per_page=15"]);

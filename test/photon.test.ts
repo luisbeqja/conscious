@@ -62,6 +62,30 @@ describe("PhotonChannel", () => {
         expect(sent).toEqual(["you said: ciao"]);
     });
 
+    it("lets the agent react to the message, and sends nothing when the reaction is the answer", async () => {
+        const reactions: string[] = [];
+        const message = {
+            ...inbound("m1", "+39333", "thanks!", "whatsapp_business"),
+            react: async (emoji: string) => {
+                reactions.push(emoji);
+                return { id: "r1" };
+            },
+        } as unknown as Message;
+        const orchestrator = {
+            send: async (_userId: string, _text: string, options: { react: (emoji: string) => Promise<boolean> }) => {
+                expect(await options.react("❤️")).toBe(true);
+                return "";
+            },
+        };
+        const channel = new PhotonChannel(orchestrator, new Set(["+39333"]));
+        const { space, sent } = fakeSpace("chat-1");
+
+        await channel.handle(space, message);
+
+        expect(reactions).toEqual(["❤️"]);
+        expect(sent).toEqual([]);
+    });
+
     it("matches an Apple ID whatever its case", () => {
         expect(userIdOf(" Luis@iCloud.com ")).toBe("luis@icloud.com");
     });

@@ -14,6 +14,8 @@ export interface ToolContext {
     scheduler: Scheduler;
     /** Absent inside a background agent: sub-agents do not spawn sub-agents. */
     background?: BackgroundAgents;
+    /** Reacts to the message being answered; false when the chat cannot show it. Absent where there is none. */
+    react?: (emoji: string) => Promise<boolean>;
     signal?: AbortSignal;
 }
 

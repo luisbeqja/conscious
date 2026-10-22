@@ -2,7 +2,7 @@ import type { Message, Space } from "@spectrum-ts/core";
 
 /** The parts of the orchestrator a channel needs: answer a message, nothing else. */
 export interface Answerer {
-    send(userId: string, text: string): Promise<string>;
+    send(userId: string, text: string, options: { react: (emoji: string) => Promise<boolean> }): Promise<string>;
 }
 
 const SEEN_LIMIT = 1000;
@@ -63,8 +63,10 @@ export class PhotonChannel {
         }
         const text = message.content.text;
         // `responding` shows the typing indicator, so no "working on it" message is needed.
-        const reply = await space.responding(() => this.orchestrator.send(userId, text));
-        await space.send(reply);
+        const react = async (emoji: string) => (await message.react(emoji)) !== undefined;
+        const reply = await space.responding(() => this.orchestrator.send(userId, text, { react }));
+        // Empty when a reaction was the whole answer.
+        if (reply) await space.send(reply);
     }
 
     /** How Conscious speaks first. Only users who have written since startup can be reached. */

@@ -61,13 +61,19 @@ for await (const input of terminal) {
     }
     stdout.write(`${bold("conscious")} `);
     let streamed = false;
-    const reply = await orchestrator.send(USER, line, (progress) => {
-        if (progress.type === "text") {
-            streamed = true;
-            stdout.write(progress.delta);
-        } else {
-            stdout.write(dim(`[${progress.name}] `));
-        }
+    const reply = await orchestrator.send(USER, line, {
+        onProgress: (progress) => {
+            if (progress.type === "text") {
+                streamed = true;
+                stdout.write(progress.delta);
+            } else {
+                stdout.write(dim(`[${progress.name}] `));
+            }
+        },
+        react: async (emoji) => {
+            stdout.write(`${emoji} `);
+            return true;
+        },
     });
     // A failed run streams nothing; its fallback still has to be shown.
     stdout.write(streamed ? "\n\n" : `${reply}\n\n`);

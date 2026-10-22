@@ -135,6 +135,7 @@ src/
 ├─ capabilities/         one folder per pack: capability.ts + SKILL.md
 │  ├─ reminders/
 │  ├─ background/
+│  ├─ reactions/         an emoji on the user's message, before an answer or instead of one
 │  ├─ computer/          shell and files in the user's sandbox
 │  ├─ skills/            the agent saves its own skills, with undo
 │  ├─ plugins/           search, install and write plugins
