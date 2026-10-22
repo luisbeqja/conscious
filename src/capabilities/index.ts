@@ -4,6 +4,7 @@ import type { Vault } from "../vault/vault.js";
 import { backgroundCapability } from "./background/capability.js";
 import { createComputerCapability } from "./computer/capability.js";
 import { createPluginsCapability } from "./plugins/capability.js";
+import { reactionsCapability } from "./reactions/capability.js";
 import { CapabilityRegistry } from "./registry.js";
 import { remindersCapability } from "./reminders/capability.js";
 import { createSkillsCapability } from "./skills/capability.js";
@@ -22,7 +23,10 @@ export const createRegistry = (
     extra: readonly Capability[] = [],
     plugins?: PluginOptions,
 ): CapabilityRegistry => {
-    const registry = new CapabilityRegistry().register(remindersCapability).register(backgroundCapability);
+    const registry = new CapabilityRegistry()
+        .register(remindersCapability)
+        .register(backgroundCapability)
+        .register(reactionsCapability);
     for (const capability of extra) registry.register(capability);
     if (plugins) {
         registry

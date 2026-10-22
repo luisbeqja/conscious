@@ -42,6 +42,14 @@ export class SentLog {
     }
 }
 
+/** How the user's chat takes part in one answer. */
+export interface SendOptions {
+    /** Live progress, for a terminal or a typing indicator. */
+    onProgress?: (progress: RunProgress) => void;
+    /** Reacts to the message being answered. Without it the agent cannot react. */
+    react?: (emoji: string) => Promise<boolean>;
+}
+
 const FALLBACK = "Sorry, something went wrong on my side. Try again in a moment?";
 
 const toolsFor = (capabilities: readonly Capability[], context: ToolContext) => {
@@ -62,10 +70,13 @@ export class Orchestrator {
 
     constructor(private readonly deps: OrchestratorDeps) {}
 
-    /** Answers one message. Messages from the same user wait for the one before them. */
-    send(userId: string, text: string, onProgress?: (progress: RunProgress) => void): Promise<string> {
+    /**
+     * Answers one message. Messages from the same user wait for the one before them.
+     * An empty answer means a reaction said it all, so there is nothing to send.
+     */
+    send(userId: string, text: string, options: SendOptions = {}): Promise<string> {
         const previous = this.queues.get(userId) ?? Promise.resolve();
-        const next = previous.catch(() => {}).then(() => this.handle(userId, text, onProgress));
+        const next = previous.catch(() => {}).then(() => this.handle(userId, text, options));
         this.queues.set(userId, next);
         return next;
     }
@@ -74,10 +85,20 @@ export class Orchestrator {
         await this.deps.store.save(userId, []);
     }
 
-    private async handle(userId: string, text: string, onProgress?: (progress: RunProgress) => void): Promise<string> {
+    private async handle(userId: string, text: string, options: SendOptions): Promise<string> {
         const { store, registry, runtime, budgets, timezone, scheduler, background } = this.deps;
-        const capabilities = await registry.available(userId);
-        const { tools, effects } = toolsFor(capabilities, { userId, timezone, scheduler, background });
+        const capabilities = (await registry.available(userId)).filter(
+            (capability) => options.react || capability.id !== "reactions",
+        );
+        let reacted = false;
+        const react = options.react
+            ? async (emoji: string) => {
+                  const done = await options.react?.(emoji);
+                  reacted ||= done === true;
+                  return done === true;
+              }
+            : undefined;
+        const { tools, effects } = toolsFor(capabilities, { userId, timezone, scheduler, background, react });
         const result = await runAgent({
             runtime,
             systemPrompt: buildSystemPrompt(registry.renderIndex(capabilities), await this.computer(userId)),
@@ -93,9 +114,10 @@ export class Orchestrator {
             }),
             budgets,
             sessionId: userId,
-            onProgress,
+            onProgress: options.onProgress,
         });
         await store.save(userId, result.messages);
+        if (!result.text && reacted && result.status === "completed") return "";
         return result.text || FALLBACK;
     }
 
@@ -103,7 +125,8 @@ export class Orchestrator {
     runBackgroundTask = async (task: BackgroundTask, signal: AbortSignal): Promise<string> => {
         const { registry, runtime, budgets, timezone, scheduler } = this.deps;
         const capabilities = (await registry.available(task.userId)).filter(
-            (capability) => capability.id !== "background",
+            // Its job came from a brief, not a message, so there is nothing to react to.
+            (capability) => capability.id !== "background" && capability.id !== "reactions",
         );
         const { tools, effects } = toolsFor(capabilities, { userId: task.userId, timezone, scheduler });
         const result = await runAgent({

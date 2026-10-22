@@ -45,6 +45,7 @@ export const lastAssistantText = (messages: readonly AgentMessage[]): string => 
  */
 export const runAgent = async (run: AgentRun): Promise<AgentRunResult> => {
     let toolCalls = 0;
+    const history = run.history.filter((message) => message.role !== "system");
     let status: AgentRunResult["status"] = "completed";
     const agent = new Agent({
         initialState: {
@@ -54,7 +55,7 @@ export const runAgent = async (run: AgentRun): Promise<AgentRunResult> => {
             tools: run.tools,
             // A saved system message would win over this run's prompt and tools, and the prompt
             // changes between messages (memory, capabilities), so the transcript never carries one.
-            messages: run.history.filter((message) => message.role !== "system"),
+            messages: history,
         },
         streamFn: run.runtime.streamFn,
         sessionId: run.sessionId,
@@ -102,9 +103,11 @@ export const runAgent = async (run: AgentRun): Promise<AgentRunResult> => {
         console.error(`[agent ${run.sessionId}] ${agent.state.errorMessage}`);
         status = "failed";
     }
+    const messages = agent.state.messages.filter((message) => message.role !== "system");
     return {
-        messages: agent.state.messages.filter((message) => message.role !== "system"),
-        text: lastAssistantText(agent.state.messages),
+        messages,
+        // Only this run: an answer to an earlier message must never be sent again.
+        text: lastAssistantText(messages.slice(history.length)),
         status,
     };
 };
