@@ -1,7 +1,7 @@
+import { createModels, fauxAssistantMessage, fauxProvider, fauxText, fauxToolCall } from "@earendil-works/pi-ai";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
-import { createModels, fauxAssistantMessage, fauxProvider, fauxText, fauxToolCall } from "@earendil-works/pi-ai";
 import { afterEach, describe, expect, it } from "vitest";
 import { BackgroundAgents } from "../src/agents/background-agents.js";
 import { createRegistry } from "../src/capabilities/index.js";
