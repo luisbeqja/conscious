@@ -10,6 +10,7 @@
   "scripts": {
     "chat": "tsx --env-file-if-exists=.env src/main.ts",
     "photon": "tsx --env-file-if-exists=.env src/photon.ts",
+    "skills:import": "tsx scripts/import-skill.ts",
     "start": "node --env-file-if-exists=.env dist/main.js",
     "build": "tsc -p tsconfig.build.json && node scripts/copy-assets.mjs",
     "typecheck": "tsc --noEmit",
