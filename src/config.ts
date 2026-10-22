@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import type { ModelConfig } from "./engine/models.js";
+import type { GoogleClient } from "./google/oauth.js";
 import { type McpServerEntry, readCatalog, selectServers } from "./mcp/catalog.js";
 import type { E2BOptions } from "./sandbox/e2b.js";
 import type { SearchConfig } from "./web/search.js";
@@ -19,6 +20,8 @@ export interface Config {
     mcpServers: McpServerEntry[];
     /** Where web searches go. */
     search: SearchConfig;
+    /** This install's Google OAuth client. Without it, Google Calendar and Gmail are not offered. */
+    google?: GoogleClient;
 }
 
 export type PhotonPlatform = "imessage" | "whatsapp";
@@ -80,6 +83,10 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): Config => {
         sandbox: loadSandboxConfig(env),
         mcpServers: selectServers(readCatalog(), env.CONSCIOUS_MCP_SERVERS),
         search: loadSearchConfig(env),
+        google:
+            env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET
+                ? { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET }
+                : undefined,
     };
 };
 

@@ -102,7 +102,20 @@ pnpm skills:import https://github.com/<owner>/<repo> skills/<name> --commit <sha
 
 The agent also saves its own skills after work worth repeating (`skills_save_skill`), and keeps every earlier version so a change can be undone.
 
-## MCP servers
+## Google Calendar and Gmail
+
+Ask "what's on this week?" and Conscious sends a Vault link with a **Sign in with Google** button. After that it can check and add calendar events, and search, read and draft email. It never sends email, deletes, or invites anyone: drafts wait in Gmail for you.
+
+Conscious is self-hosted, so each install brings its own Google sign-in client. Once:
+
+1. In [Google Cloud](https://console.cloud.google.com/), create a project and enable the **Google Calendar API** and **Gmail API**.
+2. Under Google Auth Platform, set up the consent screen as **External**, and add your own Google address as a test user.
+3. Create an OAuth client of type **Web application**, with this redirect URI: your `CONSCIOUS_PUBLIC_URL` followed by `/vault/oauth/google` (for example `https://conscious.example.com/vault/oauth/google`, or `http://localhost:8787/vault/oauth/google` in the terminal).
+4. Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in `.env`.
+
+While the app is in Testing, Google ends the sign-in after 7 days, and Conscious asks you to sign in again. Publishing it removes that limit; for Gmail, Google asks for a review only if people other than you will use it.
+
+
 
 Conscious connects to vendor-hosted MCP servers listed in [`mcp/`](mcp/), from the host, and offers their tools like any capability. By default that is Kiwi.com flights and trivago hotels, which need no account; set `CONSCIOUS_MCP_SERVERS` to choose (`alltrails`, or `none`). A tool that is not marked read-only waits for your yes. Servers that need a sign-in come with OAuth on the Vault page.
 
@@ -112,7 +125,7 @@ Ask Conscious about an app it has no capability for and it installs a plugin tha
 
 Ask "anything new on GitHub?". Conscious installs the GitHub plugin and sends you a **Vault** link: a private page where you paste a GitHub token. It checks the token with GitHub, saves it encrypted, and tells you in the chat when you are connected. Secrets never pass through the chat or the model.
 
-For a service with no built-in connection, Conscious reads the service's API docs and defines the connection in the plugin it writes. The Vault page then shows exactly which hosts your key will go to, and says that Conscious wrote this connection itself. Your key only ever goes to those hosts. Sign-in by redirect (OAuth, open banking) is not supported yet.
+For a service with no built-in connection, Conscious reads the service's API docs and defines the connection in the plugin it writes. The Vault page then shows exactly which hosts your key will go to, and says that Conscious wrote this connection itself. Your key only ever goes to those hosts. Sign-in by redirect works for Google (above); open banking and other providers come later.
 
 The Vault page runs on `CONSCIOUS_VAULT_PORT` (8787). In the terminal, `http://localhost:8787` works. For a phone, set `CONSCIOUS_PUBLIC_URL` to an https tunnel to that port.
 

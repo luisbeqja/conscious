@@ -1,3 +1,4 @@
+import type { Connector } from "../plugins/connectors.js";
 import { type PluginDeps, userConnectors } from "../plugins/plugins.js";
 import type { SandboxProvider } from "../sandbox/sandbox.js";
 import type { Vault } from "../vault/vault.js";
@@ -15,6 +16,8 @@ import { createVaultCapability } from "./vault/capability.js";
 export interface PluginOptions {
     plugins: PluginDeps;
     vault: { vault: Vault; publicUrl: string };
+    /** Accounts connected by signing in, such as Google, when this install is set up for them. */
+    signInConnectors?: readonly Connector[];
 }
 
 /** `extra` are capabilities found at startup, such as the tools of connected MCP servers. */
@@ -31,9 +34,10 @@ export const createRegistry = (
     if (plugins) {
         registry
             .register(
-                createVaultCapability(plugins.vault.vault, plugins.vault.publicUrl, (userId) =>
-                    userConnectors(plugins.plugins, userId),
-                ),
+                createVaultCapability(plugins.vault.vault, plugins.vault.publicUrl, (userId) => [
+                    ...(plugins.signInConnectors ?? []),
+                    ...userConnectors(plugins.plugins, userId),
+                ]),
             )
             .register(createPluginsCapability(plugins.plugins));
     }

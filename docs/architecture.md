@@ -87,13 +87,13 @@ Secrets never pass through the chat. When a plugin needs an account you have not
 - Each connector says where to get its token, which hosts it goes to, which header carries it, and how to check it.
 - **The agent can define a connector itself.** Built-in connectors live in `src/plugins/connectors.ts` (GitHub today). For any other service with an API key or personal token, the agent reads the service's docs and defines the connector inside its plugin's `auth`: name, hosts, how-to link and steps, a verify URL on one of the hosts, and the header. Review checks it: public hosts only, https, the verify URL on the connector's hosts, no reserved header, and a built-in id cannot be redefined.
 - **The hosts you see are what you approve.** The Vault page lists the hosts the token will go to, and warns you when Conscious wrote the connection itself. The Vault stores those hosts with the sealed token. At every call the plugin's hosts must all be approved hosts; if not, the agent is told to get a fresh link. So a second plugin that reuses a connector id with an extra host cannot carry your token there.
-- Services that sign in by redirect only (OAuth, open banking) are not covered yet: they need a one-time app registration with the provider, then a sign-in button on the same page.
+- **Sign-in by redirect.** Google uses the install's own OAuth client: the Vault page sends the user to Google with the link's code as `state`, and the callback keeps the refresh token. The `google` capability runs on the host, refreshes access tokens itself, and a plugin can never use that connector. Open banking and OAuth MCP servers come next on the same page.
 
 ## Next, in order
 
 1. **Durable storage.** With a computer, the conversation and memory survive restarts in the user's sandbox; without one, the conversation is saved in `.conscious/conversations/`. The Vault, plugins, installs, reminders and the chat each user writes from are saved in `.conscious/` on the host. Background tasks still live in memory; a restart forgets them.
 2. **Approvals in the chat.** A `commit` becomes a Yes / No question (an iMessage poll or mini-app, a typed yes on WhatsApp); only the answer runs it.
-3. **Sign-in on the Vault page.** OAuth 2.1 with dynamic registration for MCP servers (Todoist, Notion, Strava, Dropbox), and the install's own client for Google Calendar, Gmail and Spotify.
+3. **More sign-in on the Vault page.** OAuth 2.1 with dynamic registration for MCP servers (Todoist, Notion, Strava, Dropbox), and Spotify with the install's own client, like Google.
 4. **An egress proxy for the computer**, so skills can reach only the hosts the user approved, with the Vault adding tokens on the way out instead of the computer holding them.
 5. **Memory, better.** Today it is `memory/MEMORY.md` in the sandbox, written by the agent and read into every prompt. Next: search over older notes when the index outgrows the prompt.
 6. **Voice notes and photos** in, read with transcription and vision.

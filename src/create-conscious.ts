@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { BackgroundAgents, type Notify } from "./agents/background-agents.js";
+import { createGoogleCapability } from "./capabilities/google/capability.js";
 import { createRegistry } from "./capabilities/index.js";
 import type { Capability } from "./capabilities/types.js";
 import { createWebCapability } from "./capabilities/web/capability.js";
@@ -8,6 +9,8 @@ import { FileConversationStore } from "./conversations/file-store.js";
 import { SandboxConversationStore } from "./conversations/sandbox-store.js";
 import { createModelRuntime } from "./engine/models.js";
 import { Orchestrator, SentLog } from "./engine/orchestrator.js";
+import { GoogleApi } from "./google/api.js";
+import { GOOGLE_CONNECTOR, GoogleOAuth } from "./google/oauth.js";
 import { fetchTransport } from "./plugins/broker.js";
 import { manifestProblems } from "./plugins/manifest.js";
 import { loadPluginFolder, type PluginDeps, pluginCapabilities } from "./plugins/plugins.js";
@@ -20,6 +23,8 @@ import { SkillLibrary } from "./skills/library.js";
 import { createVaultServer, verifyWithService } from "./vault/server.js";
 import { loadOrCreateVaultKey, Vault } from "./vault/vault.js";
 import { createSearchProvider } from "./web/search.js";
+
+const GOOGLE_CALLBACK = "/vault/oauth/google";
 
 /**
  * Composition root: which implementation sits behind each seam. `notify` is how Conscious
@@ -65,9 +70,14 @@ export const createConscious = (config: Config, notify: Notify, extra: readonly 
         transport: fetchTransport,
     };
     const web = createWebCapability({ search: createSearchProvider(config.search) });
-    const registry = createRegistry(sandboxes, [web, ...extra], {
+    const google = config.google
+        ? new GoogleOAuth(config.google, `${config.vault.publicUrl.replace(/\/$/, "")}${GOOGLE_CALLBACK}`, vault)
+        : undefined;
+    const builtIn = google ? [web, createGoogleCapability(new GoogleApi(google), vault)] : [web];
+    const registry = createRegistry(sandboxes, [...builtIn, ...extra], {
         plugins,
         vault: { vault, publicUrl: config.vault.publicUrl },
+        signInConnectors: google ? [GOOGLE_CONNECTOR] : [],
     }).addSource(pluginCapabilities(plugins));
     plugins.registry.reserve(registry.ids());
     persistPlugins(join(config.dataDir, "plugins.json"), plugins.registry, plugins.installs);
@@ -96,6 +106,11 @@ export const createConscious = (config: Config, notify: Notify, extra: readonly 
         const server = createVaultServer({
             vault,
             verify: verifyWithService,
+            signIn: google && {
+                callbackPath: GOOGLE_CALLBACK,
+                authUrl: (state) => google.authUrl(state),
+                exchange: (code) => google.exchange(code),
+            },
             onConnected: (userId, connector) =>
                 say(userId, `${connector.name} is connected ✅ You can ask me about it now.`),
         });
