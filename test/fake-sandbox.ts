@@ -6,6 +6,7 @@ import { resolvePath } from "../src/sandbox/sandbox.js";
 export class FakeSandbox implements Sandbox {
     readonly home = "/home/user";
     readonly files = new Map<string, string>();
+    readonly bytes = new Map<string, Uint8Array>();
     readonly commands: string[] = [];
 
     constructor(
@@ -21,8 +22,16 @@ export class FakeSandbox implements Sandbox {
         return this.files.get(resolvePath(this.home, path));
     }
 
-    async writeFile(path: string, content: string): Promise<void> {
-        this.files.set(resolvePath(this.home, path), content);
+    async readBytes(path: string): Promise<Uint8Array | undefined> {
+        const absolute = resolvePath(this.home, path);
+        const text = this.files.get(absolute);
+        return this.bytes.get(absolute) ?? (text === undefined ? undefined : new TextEncoder().encode(text));
+    }
+
+    async writeFile(path: string, content: string | Uint8Array): Promise<void> {
+        const absolute = resolvePath(this.home, path);
+        if (typeof content === "string") this.files.set(absolute, content);
+        else this.bytes.set(absolute, content);
     }
 
     async listFiles(path: string): Promise<FileEntry[]> {

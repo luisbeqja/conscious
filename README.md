@@ -21,7 +21,11 @@ you remind me to call mum tomorrow at 9
 conscious [reminders_create_reminder] Done: tomorrow at 9:00 I'll nudge you to call mum 📞
 ```
 
-Reminders and finished background tasks print on their own, above the prompt. Commands: `/reminders`, `/tasks`, `/reset` (forget the conversation), `/exit`. Without a computer (below) everything lives in memory, so quitting forgets it all.
+Reminders and finished background tasks print on their own, above the prompt. Commands: `/reminders`, `/tasks`, `/reset` (forget the conversation), `/exit`.
+
+Reminders, scheduled checks and the conversation are saved in `.conscious/`, so a restart keeps them. A one-off reminder that came due while Conscious was off is sent, marked late, when it starts again (up to 12 hours late).
+
+A **scheduled check** is a reminder with a job: at the time, an agent does the work with all of Conscious's tools and messages you only if it finds something. "Every morning at 8, tell me if it will rain", "check the Lisbon flight daily and tell me if it drops under 120 EUR".
 
 ## Choose your model
 
@@ -49,7 +53,21 @@ Text the project's number. Conscious answers only the senders on the list, and o
 
 On WhatsApp, Conscious has a number of its own: a WhatsApp Business line in your Photon project. You text it from your usual WhatsApp, so your own number goes in `CONSCIOUS_ALLOWED_USERS`, not in Photon. A number that becomes a business line can no longer be used in the WhatsApp app. Set `PHOTON_PLATFORMS=whatsapp` if you only enabled WhatsApp.
 
-Messages reach Conscious over an outgoing connection to Photon, so it runs on a laptop with no public address. A sender who is not on the list is logged, so a typo in the list is easy to find. WhatsApp lets a business line write freely only within 24 hours of your last message, so a reminder set further out than that can fail to arrive.
+Messages reach Conscious over an outgoing connection to Photon, so it runs on a laptop with no public address. A sender who is not on the list is logged, so a typo in the list is easy to find. Conscious remembers which chat each user writes from, so reminders still arrive after a restart.
+
+WhatsApp lets a business line write freely only within 24 hours of your last message. Past that, Meta accepts only an approved message template. So reminders and checks arrive on any day, create one template in WhatsApp Manager (Message templates, category Utility) with one variable, for example:
+
+```
+Message from Conscious: {{1}} Reply to keep chatting.
+```
+
+Meta refuses a body that starts or ends with the variable. Once it is approved, set `CONSCIOUS_WHATSAPP_TEMPLATE` to its name (and `CONSCIOUS_WHATSAPP_TEMPLATE_LANGUAGE` if it is not `en`). Conscious then sends anything past the window inside it, on one line.
+
+### Voice notes, photos and files
+
+Send a voice note and Conscious answers what you said. It needs a transcription service: Mistral's Voxtral with `MISTRAL_API_KEY` (picked first, hosted in the EU), OpenAI with `OPENAI_API_KEY`, or your own Whisper server (whisper.cpp, Speaches) with `CONSCIOUS_TRANSCRIBE_URL`. Without one, it asks you to write instead. `CONSCIOUS_TRANSCRIBE` and `CONSCIOUS_TRANSCRIBE_MODEL` choose explicitly.
+
+Photos go to the model when it can see them. Every file you send is saved on its computer in `files/inbox/`, where the PDF, Word and Excel skills open it, and it can send files back: a plan as a PDF, a converted spreadsheet. Without a computer, it reads small text files (CSV, plain text) and photos, and says it cannot open the rest.
 
 ## Give it a computer
 
@@ -65,7 +83,9 @@ The sandbox pauses after 10 minutes without a message and resumes on the next on
 
 To keep data in Europe, ask E2B support for its EU cluster, or run E2B yourself: its runtime is open source ([e2b-dev/infra](https://github.com/e2b-dev/infra)) and needs a Linux host with KVM. Set `E2B_DOMAIN` to either.
 
-No secrets go in: the sandbox starts with an empty environment, and account tokens stay on the host. Internet is off unless you set `CONSCIOUS_SANDBOX_INTERNET=true`.
+No secrets go in: the sandbox starts with an empty environment, and account tokens stay on the host. Internet is off unless you set `CONSCIOUS_SANDBOX_INTERNET=true`; most skills need it, so turn it on unless you have a reason not to. The setting applies to existing computers too, the next time they wake.
+
+To check a setup before you text it, run `pnpm computer:check`. It starts a throwaway computer with your `.env`, checks that internet matches the setting, lists the programs skills rely on and the skills that show up, then deletes it.
 
 ## Skills
 
@@ -82,7 +102,9 @@ Skills are instructions for jobs that come up often, in the [AgentSkills](https:
 | Documents | `pdf`, `docx`, `xlsx`, `powerpoint`, `document-to-action-items` |
 | Agent | `skill-creator` |
 
-Skills that fetch from the web show up only with `CONSCIOUS_SANDBOX_INTERNET=true`. Watching skills check when the user asks; checks on a schedule come later. To copy another one at a pinned commit:
+Without a computer, the skills that need no scripts and no files still work, read straight from the repo and followed with Conscious's own tools (web search, page reading, reminders): `weather`, `product-price-monitor`, `weekly-review-planning`, `decision-questionnaire`, `one-three-one-rule`, `social-media-content-calendar`, `document-to-action-items`. The rest need a computer. A skill can opt out with `"computer": true` in its `conscious.json`.
+
+Skills that fetch from the web show up on a computer only with `CONSCIOUS_SANDBOX_INTERNET=true`. Watching skills can run on a schedule as checks (see Chat with it). To copy another one at a pinned commit:
 
 ```bash
 pnpm skills:import https://github.com/<owner>/<repo> skills/<name> --commit <sha> --internet
@@ -90,7 +112,20 @@ pnpm skills:import https://github.com/<owner>/<repo> skills/<name> --commit <sha
 
 The agent also saves its own skills after work worth repeating (`skills_save_skill`), and keeps every earlier version so a change can be undone.
 
-## MCP servers
+## Google Calendar and Gmail
+
+Ask "what's on this week?" and Conscious sends a Vault link with a **Sign in with Google** button. After that it can check and add calendar events, and search, read and draft email. It never sends email, deletes, or invites anyone: drafts wait in Gmail for you.
+
+Conscious is self-hosted, so each install brings its own Google sign-in client. Once:
+
+1. In [Google Cloud](https://console.cloud.google.com/), create a project and enable the **Google Calendar API** and **Gmail API**.
+2. Under Google Auth Platform, set up the consent screen as **External**, and add your own Google address as a test user.
+3. Create an OAuth client of type **Web application**, with this redirect URI: your `CONSCIOUS_PUBLIC_URL` followed by `/vault/oauth/google` (for example `https://conscious.example.com/vault/oauth/google`, or `http://localhost:8787/vault/oauth/google` in the terminal).
+4. Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in `.env`.
+
+While the app is in Testing, Google ends the sign-in after 7 days, and Conscious asks you to sign in again. Publishing it removes that limit; for Gmail, Google asks for a review only if people other than you will use it.
+
+
 
 Conscious connects to vendor-hosted MCP servers listed in [`mcp/`](mcp/), from the host, and offers their tools like any capability. By default that is Kiwi.com flights and trivago hotels, which need no account; set `CONSCIOUS_MCP_SERVERS` to choose (`alltrails`, or `none`). A tool that is not marked read-only waits for your yes. Servers that need a sign-in come with OAuth on the Vault page.
 
@@ -100,7 +135,7 @@ Ask Conscious about an app it has no capability for and it installs a plugin tha
 
 Ask "anything new on GitHub?". Conscious installs the GitHub plugin and sends you a **Vault** link: a private page where you paste a GitHub token. It checks the token with GitHub, saves it encrypted, and tells you in the chat when you are connected. Secrets never pass through the chat or the model.
 
-For a service with no built-in connection, Conscious reads the service's API docs and defines the connection in the plugin it writes. The Vault page then shows exactly which hosts your key will go to, and says that Conscious wrote this connection itself. Your key only ever goes to those hosts. Sign-in by redirect (OAuth, open banking) is not supported yet.
+For a service with no built-in connection, Conscious reads the service's API docs and defines the connection in the plugin it writes. The Vault page then shows exactly which hosts your key will go to, and says that Conscious wrote this connection itself. Your key only ever goes to those hosts. Sign-in by redirect works for Google (above); open banking and other providers come later.
 
 The Vault page runs on `CONSCIOUS_VAULT_PORT` (8787). In the terminal, `http://localhost:8787` works. For a phone, set `CONSCIOUS_PUBLIC_URL` to an https tunnel to that port.
 

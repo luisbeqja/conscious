@@ -1,0 +1,6 @@
+- Search whenever the answer depends on today: news, opening hours, prices, timetables, events, weather alerts. Do not answer those from memory.
+- Search, then read the one or two best pages. Snippets are often old or cut off.
+- Give the answer, then the source as a bare link on its own line, so WhatsApp shows a preview.
+- For something local, pass the user's country and language.
+- A page that comes back empty probably needs JavaScript. Try another result instead of reading it again.
+- For research that takes more than a few searches, start a background task.

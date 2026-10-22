@@ -123,3 +123,79 @@ describe("Orchestrator", () => {
         expect(turns[1]).not.toContain("GitHub is connected");
     });
 });
+
+describe("Scheduled checks", () => {
+    const scheduler = new Scheduler(async () => {});
+    afterEach(() => scheduler.stopAll());
+
+    const orchestratorWith = (runtime: ModelRuntime) =>
+        new Orchestrator({
+            registry: createRegistry(),
+            store: new InMemoryConversationStore(),
+            runtime,
+            budgets: { maxTurnsPerRun: 10, maxToolCallsPerRun: 10, maxBackgroundAgents: 1 },
+            timezone: "Europe/Rome",
+            scheduler,
+            background: new BackgroundAgents(
+                async () => "",
+                async () => {},
+                1,
+            ),
+        });
+
+    const reminder = {
+        id: "c1",
+        userId: "me",
+        text: "Lisbon flight price",
+        check: "Tell me only if MXP-LIS on 3 Nov is under 120 EUR.",
+        cron: "0 9 * * *",
+        timezone: "Europe/Rome",
+        createdAt: new Date(),
+    };
+
+    it("sends what the check found", async () => {
+        const { faux, runtime } = scriptedModel();
+        faux.setResponses([fauxAssistantMessage(fauxText("Lisbon is down to 98 EUR on 3 Nov ✈️"))]);
+        expect(await orchestratorWith(runtime).runCheck(reminder)).toBe("Lisbon is down to 98 EUR on 3 Nov ✈️");
+    });
+
+    it("stays quiet when the check found nothing", async () => {
+        const { faux, runtime } = scriptedModel();
+        faux.setResponses([fauxAssistantMessage(fauxText("NOTHING."))]);
+        expect(await orchestratorWith(runtime).runCheck(reminder)).toBe("");
+    });
+});
+
+describe("Messages with files", () => {
+    const scheduler = new Scheduler(async () => {});
+
+    it("tells the agent what came in, and saves the conversation without the photo", async () => {
+        const { faux, runtime } = scriptedModel();
+        faux.setResponses([fauxAssistantMessage(fauxText("Milk and eggs, got it."))]);
+        const store = new InMemoryConversationStore();
+        const orchestrator = new Orchestrator({
+            registry: createRegistry(),
+            store,
+            runtime: { ...runtime, model: { ...runtime.model, input: ["text", "image"] } },
+            budgets: { maxTurnsPerRun: 10, maxToolCallsPerRun: 10, maxBackgroundAgents: 1 },
+            timezone: "Europe/Rome",
+            scheduler,
+            background: new BackgroundAgents(
+                async () => "",
+                async () => {},
+                1,
+            ),
+        });
+        await orchestrator.send("me", "", {
+            files: [
+                { name: "list.csv", mimeType: "text/csv", data: new TextEncoder().encode("milk,eggs") },
+                { name: "fridge.png", mimeType: "image/png", data: new Uint8Array([137, 80, 78, 71]) },
+            ],
+        });
+        const saved = JSON.stringify(await store.load("me"));
+        expect(saved).toContain("milk,eggs");
+        expect(saved).toContain("fridge.png (image/png");
+        expect(saved).toContain("[a photo the user sent]");
+        expect(saved).not.toContain("iVBORw");
+    });
+});

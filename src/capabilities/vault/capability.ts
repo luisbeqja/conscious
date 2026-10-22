@@ -21,7 +21,7 @@ export const createVaultCapability = (
         effect: "draft",
         parameters: Type.Object({
             connector: Type.String({
-                description: "A built-in connector id (github), or the connector id of an installed plugin",
+                description: "A built-in connector id (github, google), or the connector id of an installed plugin",
             }),
         }),
         execute: async (params, context) => {

@@ -1,6 +1,7 @@
 import type { Message, Space } from "@spectrum-ts/core";
 import { describe, expect, it } from "vitest";
-import { PhotonChannel, userIdOf } from "../src/channels/photon.js";
+import { ChatBook } from "../src/channels/chats.js";
+import { PhotonChannel, templateParam, userIdOf } from "../src/channels/photon.js";
 
 const fakeSpace = (id: string) => {
     const sent: string[] = [];
@@ -127,17 +128,135 @@ describe("PhotonChannel", () => {
         expect(imessageChat.sent).not.toContain("Call mum 📞");
     });
 
-    it("tells the user it can only read text", async () => {
+    it("writes out a voice note and hands the agent the text", async () => {
+        const orchestrator = echo();
+        const heard: string[] = [];
+        const channel = new PhotonChannel(orchestrator, new Set(["+39333"]), {
+            transcriber: {
+                name: "fake",
+                transcribe: async (_audio, mimeType) => {
+                    heard.push(mimeType);
+                    return "remind me to buy milk";
+                },
+            },
+        });
+        const { space, sent } = fakeSpace("chat-1");
+        await channel.handle(space, {
+            ...inbound("m1", "+39333", ""),
+            content: { type: "voice", mimeType: "audio/ogg; codecs=opus", read: async () => Buffer.from("ogg") },
+        } as unknown as Message);
+
+        expect(heard).toEqual(["audio/ogg; codecs=opus"]);
+        expect(orchestrator.calls).toEqual([["+39333", "(voice note) remind me to buy milk"]]);
+        expect(sent).toEqual(["you said: (voice note) remind me to buy milk"]);
+    });
+
+    it("says so when it cannot listen, without bothering the agent", async () => {
         const orchestrator = echo();
         const channel = new PhotonChannel(orchestrator, new Set(["+39333"]));
         const { space, sent } = fakeSpace("chat-1");
-
         await channel.handle(space, {
             ...inbound("m1", "+39333", ""),
-            content: { type: "attachment" },
+            content: { type: "voice", mimeType: "audio/ogg", read: async () => Buffer.from("") },
         } as unknown as Message);
 
         expect(orchestrator.calls).toEqual([]);
-        expect(sent).toEqual(["I can only read text for now."]);
+        expect(sent[0]).toMatch(/voice notes/);
+    });
+
+    it("passes files to the agent and lets it send files back", async () => {
+        const got: { files?: { name: string; data: Uint8Array }[] }[] = [];
+        const orchestrator = {
+            send: async (
+                _userId: string,
+                _text: string,
+                options: {
+                    files?: { name: string; mimeType: string; data: Uint8Array }[];
+                    sendFile?: (file: { name: string; mimeType: string; data: Uint8Array }) => Promise<void>;
+                },
+            ) => {
+                got.push(options);
+                await options.sendFile?.({ name: "plan.pdf", mimeType: "application/pdf", data: new Uint8Array([1]) });
+                return "Here's your plan.";
+            },
+        };
+        const channel = new PhotonChannel(orchestrator as never, new Set(["+39333"]));
+        const { space, sent } = fakeSpace("chat-1");
+        await channel.handle(space, {
+            ...inbound("m1", "+39333", ""),
+            content: {
+                type: "attachment",
+                name: "ticket.pdf",
+                mimeType: "application/pdf",
+                size: 3,
+                read: async () => Buffer.from("pdf"),
+            },
+        } as unknown as Message);
+
+        expect(got[0]?.files?.map((file) => file.name)).toEqual(["ticket.pdf"]);
+        expect(sent).toHaveLength(2);
+        expect(sent[1]).toBe("Here's your plan.");
+    });
+
+    it("ignores reactions instead of answering them", async () => {
+        const orchestrator = echo();
+        const channel = new PhotonChannel(orchestrator, new Set(["+39333"]));
+        const { space, sent } = fakeSpace("chat-1");
+        await channel.handle(space, {
+            ...inbound("m1", "+39333", ""),
+            content: { type: "reaction" },
+        } as unknown as Message);
+        expect(orchestrator.calls).toEqual([]);
+        expect(sent).toEqual([]);
+    });
+});
+
+describe("PhotonChannel speaking first", () => {
+    const hour = 3_600_000;
+
+    it("finds the chat again after a restart", async () => {
+        const chats = new ChatBook();
+        const before = new PhotonChannel(echo(), new Set(["+39333"]), { chats });
+        await before.handle(fakeSpace("chat-1").space, inbound("m1", "+39333", "hi", "imessage"));
+
+        const reopened = fakeSpace("chat-1");
+        const opened: string[] = [];
+        const after = new PhotonChannel(echo(), new Set(["+39333"]), {
+            chats,
+            openSpace: async (platform, spaceId) => {
+                opened.push(`${platform}/${spaceId}`);
+                return reopened.space;
+            },
+        });
+        await after.notify("+39333", "Time to call mum 📞");
+        expect(opened).toEqual(["imessage/chat-1"]);
+        expect(reopened.sent).toEqual(["Time to call mum 📞"]);
+    });
+
+    it("wraps a WhatsApp message in the template once the 24-hour window has closed", async () => {
+        let now = new Date("2026-10-22T09:00:00Z");
+        const channel = new PhotonChannel(echo(), new Set(["+39333"]), {
+            template: { name: "conscious_message", languageCode: "en" },
+            now: () => now,
+        });
+        const { space, sent } = fakeSpace("39333");
+        await channel.handle(space, inbound("m1", "39333", "hi", "whatsapp_business"));
+
+        now = new Date(now.getTime() + 2 * hour);
+        await channel.notify("+39333", "Inside the window");
+        now = new Date(now.getTime() + 30 * hour);
+        await channel.notify("+39333", "Line one\nline two");
+
+        expect(sent[1]).toBe("Inside the window");
+        expect(await (sent[2] as unknown as { build(): Promise<unknown> }).build()).toMatchObject({
+            type: "whatsapp-template",
+            name: "conscious_message",
+            bodyParams: ["Line one · line two"],
+        });
+    });
+
+    it("keeps template text inside WhatsApp's rules", () => {
+        expect(templateParam("a\n\n  b\tc     d")).toBe("a · b c d");
+        expect(templateParam("x".repeat(2000))).toHaveLength(900);
     });
 });

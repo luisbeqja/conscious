@@ -1,12 +1,16 @@
 import { join } from "node:path";
 import { BackgroundAgents, type Notify } from "./agents/background-agents.js";
+import { createGoogleCapability } from "./capabilities/google/capability.js";
 import { createRegistry } from "./capabilities/index.js";
 import type { Capability } from "./capabilities/types.js";
+import { createWebCapability } from "./capabilities/web/capability.js";
 import type { Config } from "./config.js";
+import { FileConversationStore } from "./conversations/file-store.js";
 import { SandboxConversationStore } from "./conversations/sandbox-store.js";
-import { InMemoryConversationStore } from "./conversations/store.js";
 import { createModelRuntime } from "./engine/models.js";
 import { Orchestrator, SentLog } from "./engine/orchestrator.js";
+import { GoogleApi } from "./google/api.js";
+import { GOOGLE_CONNECTOR, GoogleOAuth } from "./google/oauth.js";
 import { fetchTransport } from "./plugins/broker.js";
 import { manifestProblems } from "./plugins/manifest.js";
 import { loadPluginFolder, type PluginDeps, pluginCapabilities } from "./plugins/plugins.js";
@@ -18,6 +22,9 @@ import { Scheduler } from "./scheduler/scheduler.js";
 import { SkillLibrary } from "./skills/library.js";
 import { createVaultServer, verifyWithService } from "./vault/server.js";
 import { loadOrCreateVaultKey, Vault } from "./vault/vault.js";
+import { createSearchProvider } from "./web/search.js";
+
+const GOOGLE_CALLBACK = "/vault/oauth/google";
 
 /**
  * Composition root: which implementation sits behind each seam. `notify` is how Conscious
@@ -33,7 +40,18 @@ export const createConscious = (config: Config, notify: Notify, extra: readonly 
         sent.record(userId, text);
         return notify(userId, text);
     };
-    const scheduler = new Scheduler((reminder) => say(reminder.userId, reminder.text));
+    // The fire callback runs only after `start`, once `orchestrator` exists.
+    const scheduler: Scheduler = new Scheduler(
+        async (reminder, late) => {
+            if (!reminder.check) {
+                const text = late ? `${reminder.text}\n\n(Late: I was offline when this was due.)` : reminder.text;
+                return say(reminder.userId, text);
+            }
+            const text = await orchestrator.runCheck(reminder);
+            if (text) await say(reminder.userId, text);
+        },
+        { file: join(config.dataDir, "reminders.json") },
+    );
     // The runner is only called after startup, once `orchestrator` exists.
     const background: BackgroundAgents = new BackgroundAgents(
         (task, signal): Promise<string> => orchestrator.runBackgroundTask(task, signal),
@@ -51,9 +69,15 @@ export const createConscious = (config: Config, notify: Notify, extra: readonly 
         credentials: vault,
         transport: fetchTransport,
     };
-    const registry = createRegistry(sandboxes, extra, {
+    const web = createWebCapability({ search: createSearchProvider(config.search) });
+    const google = config.google
+        ? new GoogleOAuth(config.google, `${config.vault.publicUrl.replace(/\/$/, "")}${GOOGLE_CALLBACK}`, vault)
+        : undefined;
+    const builtIn = google ? [web, createGoogleCapability(new GoogleApi(google), vault)] : [web];
+    const registry = createRegistry(sandboxes, [...builtIn, ...extra], {
         plugins,
         vault: { vault, publicUrl: config.vault.publicUrl },
+        signInConnectors: google ? [GOOGLE_CONNECTOR] : [],
     }).addSource(pluginCapabilities(plugins));
     plugins.registry.reserve(registry.ids());
     persistPlugins(join(config.dataDir, "plugins.json"), plugins.registry, plugins.installs);
@@ -65,7 +89,9 @@ export const createConscious = (config: Config, notify: Notify, extra: readonly 
     }
     const orchestrator = new Orchestrator({
         registry,
-        store: sandboxes ? new SandboxConversationStore(sandboxes) : new InMemoryConversationStore(),
+        store: sandboxes
+            ? new SandboxConversationStore(sandboxes)
+            : new FileConversationStore(join(config.dataDir, "conversations")),
         runtime: createModelRuntime(config.model),
         budgets: config.budgets,
         timezone: config.timezone,
@@ -80,6 +106,11 @@ export const createConscious = (config: Config, notify: Notify, extra: readonly 
         const server = createVaultServer({
             vault,
             verify: verifyWithService,
+            signIn: google && {
+                callbackPath: GOOGLE_CALLBACK,
+                authUrl: (state) => google.authUrl(state),
+                exchange: (code) => google.exchange(code),
+            },
             onConnected: (userId, connector) =>
                 say(userId, `${connector.name} is connected ✅ You can ask me about it now.`),
         });

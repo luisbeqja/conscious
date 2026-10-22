@@ -29,6 +29,18 @@ export const buildSystemPrompt = (capabilities: string, computer?: ComputerConte
 export const buildBackgroundPrompt = (capabilities: string, computer?: ComputerContext): string =>
     fill(BACKGROUND, capabilities, computer);
 
+/** What a scheduled check's agent answers when there is nothing to tell the user. */
+const NOTHING = "NOTHING";
+
+export const isNothing = (text: string): boolean => text.trim().replace(/[.*_]/g, "").toUpperCase() === NOTHING;
+
+export const buildCheckBrief = (title: string, job: string): string =>
+    `This is a scheduled check the user set up: "${title}". It runs on its own, so the user is not waiting for it.
+
+${job}
+
+If there is something the user should hear, your final answer is that message. If there is nothing new or worth a message, answer exactly ${NOTHING} and nothing else: the user then gets no message.`;
+
 const formatNow = (now: Date, timezone: string): string =>
     `${new Intl.DateTimeFormat("en-GB", { dateStyle: "full", timeStyle: "short", timeZone: timezone }).format(now)} (${timezone})`;
 
@@ -42,6 +54,8 @@ export const buildUserTurn = (
         running: readonly BackgroundTask[];
         /** What Conscious said on its own since the last message: reminders, accounts connected. */
         sent?: readonly string[];
+        /** What came with the message: photos, documents, and where they were saved. */
+        files?: readonly string[];
     },
 ): string => {
     const lines = [`Now: ${formatNow(context.now, context.timezone)}`];
@@ -50,5 +64,6 @@ export const buildUserTurn = (
         lines.push(`Background task "${task.title}" ${task.status}; the user was sent: ${task.result ?? "(nothing)"}`);
     }
     for (const task of context.running) lines.push(`Still running in the background: "${task.title}" (${task.id})`);
+    lines.push(...(context.files ?? []));
     return `<context>\n${lines.join("\n")}\n</context>\n\n${text}`;
 };

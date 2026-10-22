@@ -1,7 +1,10 @@
 import { join } from "node:path";
 import type { ModelConfig } from "./engine/models.js";
+import type { GoogleClient } from "./google/oauth.js";
 import { type McpServerEntry, readCatalog, selectServers } from "./mcp/catalog.js";
+import type { TranscriptionConfig } from "./media/transcribe.js";
 import type { E2BOptions } from "./sandbox/e2b.js";
+import type { SearchConfig } from "./web/search.js";
 
 export interface Config {
     timezone: string;
@@ -16,6 +19,12 @@ export interface Config {
     sandbox?: E2BOptions;
     /** MCP servers from the repo's catalog that this install connects to. */
     mcpServers: McpServerEntry[];
+    /** Where web searches go. */
+    search: SearchConfig;
+    /** This install's Google OAuth client. Without it, Google Calendar and Gmail are not offered. */
+    google?: GoogleClient;
+    /** Where voice notes are turned into text. Without it, Conscious says it cannot listen yet. */
+    transcription?: TranscriptionConfig;
 }
 
 export type PhotonPlatform = "imessage" | "whatsapp";
@@ -26,6 +35,8 @@ export interface PhotonConfig {
     platforms: readonly PhotonPlatform[];
     /** Conscious is personal: senders not on this list are ignored. */
     allowedUsers: ReadonlySet<string>;
+    /** The approved template that carries messages outside WhatsApp's 24-hour window. */
+    whatsappTemplate?: { name: string; languageCode: string };
 }
 
 export interface VaultConfig {
@@ -74,7 +85,58 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): Config => {
         budgets: { maxTurnsPerRun: 20, maxToolCallsPerRun: 40, maxBackgroundAgents: 3 },
         sandbox: loadSandboxConfig(env),
         mcpServers: selectServers(readCatalog(), env.CONSCIOUS_MCP_SERVERS),
+        search: loadSearchConfig(env),
+        google:
+            env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET
+                ? { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET }
+                : undefined,
+        transcription: loadTranscriptionConfig(env),
     };
+};
+
+/** Mistral's Voxtral when there is a Mistral key, else OpenAI's, else a local Whisper server if one is set. */
+const loadTranscriptionConfig = (env: NodeJS.ProcessEnv): TranscriptionConfig | undefined => {
+    const provider =
+        env.CONSCIOUS_TRANSCRIBE ||
+        (env.MISTRAL_API_KEY
+            ? "mistral"
+            : env.OPENAI_API_KEY
+              ? "openai"
+              : env.CONSCIOUS_TRANSCRIBE_URL
+                ? "local"
+                : "none");
+    const model = env.CONSCIOUS_TRANSCRIBE_MODEL || undefined;
+    if (provider === "none") return undefined;
+    if (provider === "mistral") {
+        return {
+            provider,
+            baseUrl: "https://api.mistral.ai/v1",
+            model: model ?? "voxtral-mini-latest",
+            apiKey: required(env, "MISTRAL_API_KEY"),
+        };
+    }
+    if (provider === "openai") {
+        return {
+            provider,
+            baseUrl: "https://api.openai.com/v1",
+            model: model ?? "gpt-4o-mini-transcribe",
+            apiKey: required(env, "OPENAI_API_KEY"),
+        };
+    }
+    if (provider === "local") {
+        return { provider, baseUrl: required(env, "CONSCIOUS_TRANSCRIBE_URL"), model: model ?? "whisper-1" };
+    }
+    throw new Error(`CONSCIOUS_TRANSCRIBE must be "mistral", "openai", "local" or "none", not "${provider}"`);
+};
+
+/** A Brave key or a SearXNG address picks that engine; with neither, DuckDuckGo needs no setup. */
+const loadSearchConfig = (env: NodeJS.ProcessEnv): SearchConfig => {
+    const provider =
+        env.CONSCIOUS_SEARCH || (env.BRAVE_API_KEY ? "brave" : env.CONSCIOUS_SEARXNG_URL ? "searxng" : "duckduckgo");
+    if (provider === "brave") return { provider, apiKey: required(env, "BRAVE_API_KEY") };
+    if (provider === "searxng") return { provider, url: required(env, "CONSCIOUS_SEARXNG_URL") };
+    if (provider === "duckduckgo") return { provider };
+    throw new Error(`CONSCIOUS_SEARCH must be "duckduckgo", "brave" or "searxng", not "${provider}"`);
 };
 
 const loadSandboxConfig = (env: NodeJS.ProcessEnv): E2BOptions | undefined => {
@@ -125,5 +187,11 @@ export const loadPhotonConfig = (env: NodeJS.ProcessEnv = process.env): PhotonCo
         projectSecret: required(env, "PHOTON_PROJECT_SECRET", "SPECTRUM_PROJECT_SECRET"),
         platforms: platforms as PhotonPlatform[],
         allowedUsers,
+        whatsappTemplate: env.CONSCIOUS_WHATSAPP_TEMPLATE
+            ? {
+                  name: env.CONSCIOUS_WHATSAPP_TEMPLATE,
+                  languageCode: env.CONSCIOUS_WHATSAPP_TEMPLATE_LANGUAGE || "en",
+              }
+            : undefined,
     };
 };

@@ -23,8 +23,10 @@ export interface Sandbox {
     run(command: string, options?: { cwd?: string; timeoutMs?: number }): Promise<CommandResult>;
     /** Undefined when the file does not exist. */
     readFile(path: string): Promise<string | undefined>;
+    /** Undefined when the file does not exist. For files that are not text: photos, PDFs. */
+    readBytes(path: string): Promise<Uint8Array | undefined>;
     /** Creates missing parent directories. */
-    writeFile(path: string, content: string): Promise<void>;
+    writeFile(path: string, content: string | Uint8Array): Promise<void>;
     listFiles(path: string): Promise<FileEntry[]>;
 }
 

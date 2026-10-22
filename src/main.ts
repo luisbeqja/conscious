@@ -38,6 +38,7 @@ const COMMANDS: Record<string, () => Promise<void> | void> = {
 };
 
 const vaultServer = startVault();
+scheduler.start();
 console.log(
     dim(
         `Conscious · ${config.model.provider}/${config.model.id} · ${config.timezone} · computer: ${config.sandbox ? "e2b" : "none"} · mcp: ${mcp.capabilities.map((capability) => capability.id).join(", ") || "none"}`,
