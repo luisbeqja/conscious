@@ -1,6 +1,6 @@
 import type { Message, Space } from "@spectrum-ts/core";
 import { describe, expect, it } from "vitest";
-import { PhotonChannel } from "../src/channels/photon.js";
+import { PhotonChannel, userIdOf } from "../src/channels/photon.js";
 
 const fakeSpace = (id: string) => {
     const sent: string[] = [];
@@ -49,6 +49,21 @@ describe("PhotonChannel", () => {
         expect(orchestrator.calls).toEqual([["+39333", "hi"]]);
         expect(sent).toEqual(["you said: hi"]);
         expect(respondingCalls()).toBe(1);
+    });
+
+    it("knows a WhatsApp number written as bare digits is the same person", async () => {
+        const orchestrator = echo();
+        const channel = new PhotonChannel(orchestrator, new Set(["+39 333 123 4567"]));
+        const { space, sent } = fakeSpace("393331234567");
+
+        await channel.handle(space, inbound("m1", "393331234567", "ciao", "whatsapp_business"));
+
+        expect(orchestrator.calls).toEqual([["+393331234567", "ciao"]]);
+        expect(sent).toEqual(["you said: ciao"]);
+    });
+
+    it("matches an Apple ID whatever its case", () => {
+        expect(userIdOf(" Luis@iCloud.com ")).toBe("luis@icloud.com");
     });
 
     it("ignores senders not on the list and its own outbound messages", async () => {

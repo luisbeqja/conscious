@@ -47,6 +47,10 @@ pnpm photon
 
 Text the project's number. Conscious answers only the senders on the list, and only after they have written first.
 
+On WhatsApp, Conscious has a number of its own: a WhatsApp Business line in your Photon project. You text it from your usual WhatsApp, so your own number goes in `CONSCIOUS_ALLOWED_USERS`, not in Photon. A number that becomes a business line can no longer be used in the WhatsApp app. Set `PHOTON_PLATFORMS=whatsapp` if you only enabled WhatsApp.
+
+Messages reach Conscious over an outgoing connection to Photon, so it runs on a laptop with no public address. A sender who is not on the list is logged, so a typo in the list is easy to find. WhatsApp lets a business line write freely only within 24 hours of your last message, so a reminder set further out than that can fail to arrive.
+
 ## Give it a computer
 
 Conscious can have a computer of its own: one [E2B](https://e2b.dev) sandbox per user. Everything it knows about you lives there: its memory (`memory/MEMORY.md`, read into every conversation), the files it keeps for you (`files/`), and the conversation itself (`.conscious/conversation.json`). It also gets a shell and file tools that run there, never on your machine.

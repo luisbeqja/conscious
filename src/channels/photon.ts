@@ -8,6 +8,17 @@ export interface Answerer {
 const SEEN_LIMIT = 1000;
 
 /**
+ * One id per person across platforms. WhatsApp reports a number as bare digits
+ * (393331234567) while iMessage and the allow list use E.164 (+39 333 123 4567),
+ * so phone numbers become "+" and digits; an Apple ID email is only lowercased.
+ */
+export const userIdOf = (sender: string): string => {
+    const trimmed = sender.trim();
+    if (/^\+?[\d\s().-]+$/.test(trimmed)) return `+${trimmed.replace(/\D/g, "")}`;
+    return trimmed.toLowerCase();
+};
+
+/**
  * Conscious on Photon Spectrum: iMessage and WhatsApp through one message stream.
  * A user is their sender id (phone number or Apple ID), so the same person on two
  * platforms is one conversation. Replies and notifications go to the chat they last wrote from.
@@ -17,10 +28,14 @@ export class PhotonChannel {
     // Delivery is at-least-once; a redelivered message must not be answered twice.
     private readonly seen = new Set<string>();
 
+    private readonly allowedUsers: ReadonlySet<string>;
+
     constructor(
         private readonly orchestrator: Answerer,
-        private readonly allowedUsers: ReadonlySet<string>,
-    ) {}
+        allowedUsers: ReadonlySet<string>,
+    ) {
+        this.allowedUsers = new Set([...allowedUsers].map(userIdOf));
+    }
 
     async listen(messages: AsyncIterable<[Space, Message]>): Promise<void> {
         for await (const [space, message] of messages) {
@@ -32,8 +47,13 @@ export class PhotonChannel {
     }
 
     async handle(space: Space, message: Message): Promise<void> {
-        const userId = message.sender?.id;
-        if (message.direction !== "inbound" || !userId || !this.allowedUsers.has(userId)) return;
+        const userId = message.sender?.id ? userIdOf(message.sender.id) : undefined;
+        if (message.direction !== "inbound" || !userId) return;
+        if (!this.allowedUsers.has(userId)) {
+            // Without this line, a typo in CONSCIOUS_ALLOWED_USERS looks like Conscious being down.
+            console.warn(`[photon] ignored ${message.platform} message from ${userId}: not in CONSCIOUS_ALLOWED_USERS`);
+            return;
+        }
         if (!this.markSeen(`${message.platform}:${message.id}`)) return;
         this.lastSpace.set(userId, space);
 

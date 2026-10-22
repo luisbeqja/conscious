@@ -43,16 +43,17 @@ export interface Budgets {
     maxBackgroundAgents: number;
 }
 
+// `||`, not `??`: a line left empty in a copied .env.example means "use the default".
 export const loadConfig = (env: NodeJS.ProcessEnv = process.env): Config => ({
-    timezone: env.CONSCIOUS_TIMEZONE ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
-    pluginsDir: env.CONSCIOUS_PLUGINS_DIR ?? join(process.cwd(), "plugins"),
-    dataDir: env.CONSCIOUS_DATA_DIR ?? join(process.cwd(), ".conscious"),
+    timezone: env.CONSCIOUS_TIMEZONE || Intl.DateTimeFormat().resolvedOptions().timeZone,
+    pluginsDir: env.CONSCIOUS_PLUGINS_DIR || join(process.cwd(), "plugins"),
+    dataDir: env.CONSCIOUS_DATA_DIR || join(process.cwd(), ".conscious"),
     vault: loadVaultConfig(env),
     model: {
-        provider: env.CONSCIOUS_MODEL_PROVIDER ?? "anthropic",
-        id: env.CONSCIOUS_MODEL ?? "claude-sonnet-5",
-        baseUrl: env.CONSCIOUS_MODEL_BASE_URL,
-        apiKey: env.CONSCIOUS_MODEL_API_KEY,
+        provider: env.CONSCIOUS_MODEL_PROVIDER || "anthropic",
+        id: env.CONSCIOUS_MODEL || "claude-sonnet-5",
+        baseUrl: env.CONSCIOUS_MODEL_BASE_URL || undefined,
+        apiKey: env.CONSCIOUS_MODEL_API_KEY || undefined,
     },
     budgets: { maxTurnsPerRun: 20, maxToolCallsPerRun: 40, maxBackgroundAgents: 3 },
     sandbox: loadSandboxConfig(env),
@@ -60,7 +61,7 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): Config => ({
 });
 
 const loadSandboxConfig = (env: NodeJS.ProcessEnv): E2BOptions | undefined => {
-    const backend = env.CONSCIOUS_SANDBOX ?? "none";
+    const backend = env.CONSCIOUS_SANDBOX || "none";
     if (backend === "none") return undefined;
     if (backend !== "e2b") throw new Error(`CONSCIOUS_SANDBOX must be "e2b" or "none", not "${backend}"`);
     return {
@@ -73,10 +74,10 @@ const loadSandboxConfig = (env: NodeJS.ProcessEnv): E2BOptions | undefined => {
 };
 
 const loadVaultConfig = (env: NodeJS.ProcessEnv): VaultConfig => {
-    const port = Number(env.CONSCIOUS_VAULT_PORT ?? 8787);
+    const port = Number(env.CONSCIOUS_VAULT_PORT || 8787);
     return {
         port,
-        publicUrl: env.CONSCIOUS_PUBLIC_URL ?? `http://localhost:${port}`,
+        publicUrl: env.CONSCIOUS_PUBLIC_URL || `http://localhost:${port}`,
         key: env.CONSCIOUS_VAULT_KEY ? Buffer.from(env.CONSCIOUS_VAULT_KEY, "base64") : undefined,
     };
 };
@@ -96,7 +97,7 @@ const required = (env: NodeJS.ProcessEnv, name: string): string => {
 };
 
 export const loadPhotonConfig = (env: NodeJS.ProcessEnv = process.env): PhotonConfig => {
-    const platforms = list(env.PHOTON_PLATFORMS ?? "imessage,whatsapp");
+    const platforms = list(env.PHOTON_PLATFORMS || "imessage,whatsapp");
     const unknown = platforms.filter((platform) => !PLATFORMS.includes(platform as PhotonPlatform));
     if (unknown.length) throw new Error(`PHOTON_PLATFORMS has unknown platforms: ${unknown.join(", ")}`);
     const allowedUsers = new Set(list(env.CONSCIOUS_ALLOWED_USERS));
