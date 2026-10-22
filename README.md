@@ -2,6 +2,8 @@
 
 A personal assistant for your life, not your job: reminders, plans, errands, things to look up. It keeps talking while longer jobs run in the background, and tells you when they are done. You text it on iMessage or WhatsApp through [Photon](https://photon.codes), or chat with it in the terminal.
 
+Conscious is open source and built in Europe. You run it yourself, on your own machine or server, with the model you choose: a hosted one such as Mistral, Claude or GPT, or a local one through Ollama. Your accounts and plugins stay on your install. With a computer (below), memory and conversations live in an E2B sandbox that you can also run yourself.
+
 The agent loop is [`pi-agent-core`](https://github.com/earendil-works/pi). Design: [`docs/architecture.md`](docs/architecture.md).
 
 ## Chat with it
@@ -10,7 +12,7 @@ Needs Node >= 22.19.
 
 ```bash
 pnpm install
-cp .env.example .env        # set ANTHROPIC_API_KEY
+cp .env.example .env        # pick a model and set its API key
 pnpm chat
 ```
 
@@ -20,6 +22,20 @@ conscious [reminders_create_reminder] Done: tomorrow at 9:00 I'll nudge you to c
 ```
 
 Reminders and finished background tasks print on their own, above the prompt. Commands: `/reminders`, `/tasks`, `/reset` (forget the conversation), `/exit`. Without a computer (below) everything lives in memory, so quitting forgets it all.
+
+## Choose your model
+
+Set `CONSCIOUS_MODEL_PROVIDER` and `CONSCIOUS_MODEL` in `.env`. Every provider in [pi-ai](https://github.com/earendil-works/pi) works, with its usual API key variable:
+
+| You want | Provider | Model, for example | Key |
+|---|---|---|---|
+| Mistral (Paris) | `mistral` | `mistral-large-latest` | `MISTRAL_API_KEY` |
+| Claude | `anthropic` | `claude-sonnet-5` | `ANTHROPIC_API_KEY` |
+| GPT | `openai` | the model id | `OPENAI_API_KEY` |
+| Many models, one key | `openrouter` | the model id | `OPENROUTER_API_KEY` |
+| A model on your own machine | `local` | e.g. `qwen3:8b` | none; set `CONSCIOUS_MODEL_BASE_URL` |
+
+`local` is any server that speaks the OpenAI chat API: Ollama (`http://localhost:11434/v1`), LM Studio, vLLM. Conscious leans on tool calls, so pick a model that handles them well. A wrong provider or model id stops Conscious at start, with the ids it knows.
 
 ## Text it on iMessage and WhatsApp
 
@@ -63,6 +79,18 @@ The agent also saves its own skills after work worth repeating (`skills_save_ski
 
 Conscious connects to vendor-hosted MCP servers listed in [`mcp/`](mcp/), from the host, and offers their tools like any capability. By default that is Kiwi.com flights and trivago hotels, which need no account; set `CONSCIOUS_MCP_SERVERS` to choose (`alltrails`, or `none`). A tool that is not marked read-only waits for your yes. Servers that need a sign-in come with OAuth on the Vault page.
 
+## Plugins
+
+Ask Conscious about an app it has no capability for and it installs a plugin that ships with Conscious, or writes one itself. A plugin it writes stays on your install. Plugins run in a sandbox and reach only the hosts they declare. See [Plugins](docs/architecture.md#plugins).
+
+Ask "anything new on GitHub?". Conscious installs the GitHub plugin and sends you a **Vault** link: a private page where you paste a GitHub token. It checks the token with GitHub, saves it encrypted, and tells you in the chat when you are connected. Secrets never pass through the chat or the model.
+
+For a service with no built-in connection, Conscious reads the service's API docs and defines the connection in the plugin it writes. The Vault page then shows exactly which hosts your key will go to, and says that Conscious wrote this connection itself. Your key only ever goes to those hosts. Sign-in by redirect (OAuth, open banking) is not supported yet.
+
+The Vault page runs on `CONSCIOUS_VAULT_PORT` (8787). In the terminal, `http://localhost:8787` works. For a phone, set `CONSCIOUS_PUBLIC_URL` to an https tunnel to that port.
+
+Connected accounts, plugins (including ones the agent wrote) and installs are saved in `.conscious/` on the host and survive a restart.
+
 ## Check it
 
 ```bash
@@ -85,7 +113,7 @@ src/
 │  ├─ orchestrator.ts    the agent you talk to: one message at a time per user
 │  ├─ run-agent.ts       one pi-agent-core loop + policy (budgets, commits held)
 │  ├─ tool-adapter.ts    capability tool → pi tool
-│  └─ models.ts          provider + model from pi-ai
+│  └─ models.ts          the model you chose: any pi-ai provider, or a local server
 ├─ agents/               background sub-agents: spawn, list, cancel, report back
 ├─ scheduler/            reminders: one-off and cron, in your timezone
 ├─ sandbox/              each user's computer: the Sandbox seam, the E2B backend, memory
@@ -93,14 +121,19 @@ src/
 │  ├─ reminders/
 │  ├─ background/
 │  ├─ computer/          shell and files in the user's sandbox
-│  └─ skills/            the agent saves its own skills, with undo
+│  ├─ skills/            the agent saves its own skills, with undo
+│  ├─ plugins/           search, install and write plugins
+│  └─ vault/             connect and disconnect accounts through Vault links
 ├─ skills/               the skill library: copy into the computer, list what can run, import
+├─ plugins/              plugins: manifest, connectors, sandbox, broker, review, local store
+├─ vault/                the user's secrets: sealed store and the Vault page
 ├─ mcp/                  MCP catalog and client: each server becomes a capability
 ├─ conversations/        one conversation per user, in memory or in their sandbox
 └─ prompts/              system and background prompts as markdown
 skills/                  bundled skills, copied into every computer
 mcp/                     MCP server manifests, one folder per server
 test/                    vitest
+plugins/                 the bundled plugins, one folder per plugin
 ```
 
 ## Add a capability
@@ -109,3 +142,11 @@ test/                    vitest
 2. Name tools `<id>_<verb>_<noun>` and set `effect` honestly: `read`, `draft` or `commit`.
 3. If only some users can have it (a connected account), return `available` for them.
 4. Register it in `src/capabilities/index.ts` and add a test.
+
+## Contribute
+
+Conscious is built in the open. To add a plugin for everyone who runs Conscious, open a pull request with its folder in `plugins/` (see [`plugins/README.md`](plugins/README.md)). A plugin your agent wrote is a good start: it already has tests.
+
+## License
+
+[MIT](LICENSE).

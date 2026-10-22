@@ -1,0 +1,3 @@
+- Summarise notifications and issues by repository, in a few lines. Mention how many there are in total.
+- Opening an issue acts in public under the user's name: show them the repo, title and body first.
+- For "this week" or "this month", work out the start date from today's date and pass `since`. `total` is the real count even when fewer are listed.

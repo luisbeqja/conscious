@@ -35,9 +35,17 @@ const formatNow = (now: Date, timezone: string): string =>
 /** The user's words, with what changed since their last message: the time, and background work that ended. */
 export const buildUserTurn = (
     text: string,
-    context: { now: Date; timezone: string; finished: readonly BackgroundTask[]; running: readonly BackgroundTask[] },
+    context: {
+        now: Date;
+        timezone: string;
+        finished: readonly BackgroundTask[];
+        running: readonly BackgroundTask[];
+        /** What Conscious said on its own since the last message: reminders, accounts connected. */
+        sent?: readonly string[];
+    },
 ): string => {
     const lines = [`Now: ${formatNow(context.now, context.timezone)}`];
+    for (const text of context.sent ?? []) lines.push(`You messaged the user on your own: ${text}`);
     for (const task of context.finished) {
         lines.push(`Background task "${task.title}" ${task.status}; the user was sent: ${task.result ?? "(nothing)"}`);
     }

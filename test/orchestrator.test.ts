@@ -4,7 +4,7 @@ import { BackgroundAgents } from "../src/agents/background-agents.js";
 import { createRegistry } from "../src/capabilities/index.js";
 import { InMemoryConversationStore } from "../src/conversations/store.js";
 import type { ModelRuntime } from "../src/engine/models.js";
-import { Orchestrator } from "../src/engine/orchestrator.js";
+import { Orchestrator, SentLog } from "../src/engine/orchestrator.js";
 import type { RunProgress } from "../src/engine/run-agent.js";
 import { Scheduler } from "../src/scheduler/scheduler.js";
 
@@ -58,5 +58,34 @@ describe("Orchestrator", () => {
 
         await orchestrator.send("me", "what did I ask?");
         expect((await store.load("me")).filter((message) => message.role === "user")).toHaveLength(2);
+    });
+
+    it("tells the next answer what Conscious said on its own, once", async () => {
+        const { faux, runtime } = scriptedModel();
+        faux.setResponses([fauxAssistantMessage(fauxText("Great.")), fauxAssistantMessage(fauxText("Sure."))]);
+        const store = new InMemoryConversationStore();
+        const sent = new SentLog();
+        const orchestrator = new Orchestrator({
+            registry: createRegistry(),
+            store,
+            runtime,
+            budgets: { maxTurnsPerRun: 10, maxToolCallsPerRun: 10, maxBackgroundAgents: 1 },
+            timezone: "Europe/Rome",
+            scheduler,
+            background: new BackgroundAgents(
+                async () => "",
+                async () => {},
+                1,
+            ),
+            sent,
+        });
+        sent.record("me", "GitHub is connected ✅");
+        await orchestrator.send("me", "i did");
+        await orchestrator.send("me", "thanks");
+        const turns = (await store.load("me"))
+            .filter((message) => message.role === "user")
+            .map((message) => JSON.stringify(message.content));
+        expect(turns[0]).toContain("You messaged the user on your own: GitHub is connected");
+        expect(turns[1]).not.toContain("GitHub is connected");
     });
 });

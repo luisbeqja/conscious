@@ -2,6 +2,7 @@
   "name": "conscious",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "description": "Conscious: a personal life assistant you text on iMessage and WhatsApp",
   "engines": {

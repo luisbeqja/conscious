@@ -4,6 +4,7 @@ import { whatsappBusiness } from "@spectrum-ts/whatsapp-business";
 import { PhotonChannel } from "./channels/photon.js";
 import { loadConfig, loadPhotonConfig, type PhotonPlatform } from "./config.js";
 import { createConscious } from "./create-conscious.js";
+import { modelSetupProblem } from "./engine/models.js";
 import { connectServers } from "./mcp/servers.js";
 
 // With Spectrum Cloud credentials, both providers take their numbers and lines from the project.
@@ -14,16 +15,27 @@ const PROVIDERS: Record<PhotonPlatform, () => PlatformProviderConfig> = {
 
 const config = loadConfig();
 const photon = loadPhotonConfig();
+const problem = await modelSetupProblem(config.model);
+if (problem) {
+    console.error(problem);
+    process.exit(1);
+}
 const mcp = await connectServers(config.mcpServers);
 
 // The channel needs the orchestrator and the orchestrator's notifications need the channel.
 let channel: PhotonChannel | undefined;
-const { orchestrator, scheduler, sandboxes } = createConscious(
+const { orchestrator, scheduler, sandboxes, startVault } = createConscious(
     config,
     (userId, text) => (channel ? channel.notify(userId, text) : Promise.resolve()),
     mcp.capabilities,
 );
 channel = new PhotonChannel(orchestrator, photon.allowedUsers);
+const vaultServer = startVault();
+if (!config.vault.publicUrl.startsWith("https://")) {
+    console.warn(
+        `Vault links point to ${config.vault.publicUrl}; set CONSCIOUS_PUBLIC_URL to an https address phones can open.`,
+    );
+}
 
 const spectrum = await Spectrum({
     projectId: photon.projectId,
@@ -37,6 +49,7 @@ console.log(`Conscious on Photon · ${photon.platforms.join(", ")} · ${config.m
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
     process.on(signal, async () => {
         scheduler.stopAll();
+        vaultServer.close();
         await sandboxes?.shutdown();
         await mcp.close();
         await spectrum.stop();

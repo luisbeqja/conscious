@@ -1,0 +1,107 @@
+{
+    "id": "github",
+    "version": "1.1.0",
+    "name": "GitHub",
+    "summary": "Your GitHub notifications, pull requests and assigned issues, and opening new issues.",
+    "hosts": [
+        "api.github.com"
+    ],
+    "auth": {
+        "connector": "github",
+        "scopes": [
+            "notifications",
+            "repo"
+        ]
+    },
+    "tools": [
+        {
+            "name": "github_list_notifications",
+            "label": "List GitHub notifications",
+            "description": "The user's unread GitHub notifications, newest first.",
+            "effect": "read",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "limit": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 50,
+                        "description": "Default 15"
+                    }
+                }
+            }
+        },
+        {
+            "name": "github_list_pull_requests",
+            "label": "List your pull requests",
+            "description": "Pull requests the user opened, newest first, with the total count. Filter by date and state.",
+            "effect": "read",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "since": {
+                        "type": "string",
+                        "description": "Only PRs created on or after this day, YYYY-MM-DD"
+                    },
+                    "state": {
+                        "type": "string",
+                        "enum": [
+                            "open",
+                            "closed",
+                            "all"
+                        ],
+                        "description": "Default all"
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 50,
+                        "description": "Default 15"
+                    }
+                }
+            }
+        },
+        {
+            "name": "github_list_issues",
+            "label": "List assigned issues",
+            "description": "Open issues and pull requests assigned to the user, across all their repositories.",
+            "effect": "read",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "limit": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 50,
+                        "description": "Default 15"
+                    }
+                }
+            }
+        },
+        {
+            "name": "github_create_issue",
+            "label": "Open a GitHub issue",
+            "description": "Open an issue in a repository the user can write to.",
+            "effect": "commit",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "repo": {
+                        "type": "string",
+                        "description": "owner/name, e.g. octocat/hello-world"
+                    },
+                    "title": {
+                        "type": "string"
+                    },
+                    "body": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "repo",
+                    "title"
+                ]
+            }
+        }
+    ]
+}

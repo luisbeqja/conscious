@@ -1,5 +1,7 @@
 # Architecture
 
+Conscious is open source and self-hosted. Whoever runs it picks the model and keeps the data: the Vault, plugins and installs live in the install's own data folder, and memory and conversations live in each user's computer (an E2B sandbox, hosted or self-run). There is no Conscious server that sees any of it.
+
 ## The idea
 
 1. **One orchestrator per user, many capability packs.** The orchestrator is the agent you chat with. Each area of life (reminders, calendar, email, travel, music) is a pack: tools plus a short `SKILL.md` on how to use them.
@@ -22,6 +24,8 @@
 | Connectors | The user's own accounts, linked one by one. |
 | Skills | `SKILL.md` instructions on the user's computer: copied from the repo, or written by the agent. |
 | MCP servers | Vendor-hosted tool servers from a reviewed catalog, called from the host. |
+| Plugins | Apps without a capability: bundled with Conscious or written by the agent on your install, run in a sandbox. |
+| Vault | Your secrets, saved through a private page and sealed. Only the broker reads them. |
 
 ## A message, end to end
 
@@ -57,9 +61,37 @@ A skill is a folder with a `SKILL.md` in the [AgentSkills](https://agentskills.i
 - A tool's effect is the manifest's, then `read` if the server marks it read-only, then the manifest's `default_effect`, and `commit` when nothing says otherwise.
 - Today: Kiwi.com flights and trivago hotels (on by default), AllTrails (off: its schemas cost about 24K tokens a message). Servers that need a sign-in (Todoist, Notion, Strava) wait for OAuth 2.1 on the Vault page.
 
+## Plugins
+
+Plugins let the agent reach apps it has no capability for. When you ask about one, it looks at the plugins on your install and installs a match. If nothing fits, it writes a plugin itself. A plugin it writes stays on your install, for you only.
+
+**A plugin** is a manifest (id, version, the hosts it calls, the account it acts as, its tools with an effect each), one ES module with no imports, a short `SKILL.md`, and a test per tool with recorded responses. Installed plugin tools join the agent's tools like any capability's, and their `effect` is enforced the same way: a `commit` waits for your yes.
+
+**Safety comes from what a plugin can reach.**
+
+- **The sandbox.** Each call runs in a short-lived Node process under the permission model: no files, no child processes, no environment, a small heap, a deadline. Sockets are closed before the plugin loads. In production this becomes a hosted sandbox with no network at all.
+- **The broker.** `ctx.http` is the plugin's only way out. The host checks every request: https, a declared host, GET only for a `read` tool. It adds your token itself, only for the connector's own hosts, so plugin code never holds it. A plugin that acts as your account may only call that account's hosts, so it cannot carry what it reads elsewhere.
+- **Review before anyone else runs it.** The manifest is valid, the code passes a tripwire scan, it exports exactly the tools it declares, and every tool's test passes in the sandbox against recorded responses.
+- **Quarantine.** A plugin that tries an undeclared host at runtime is disabled at once, even if it caught the refusal.
+- **Pinned versions.** An install pins the content hash. A new version reaches you only when you install it again.
+
+**Where plugins come from.** `bundled` plugins ship in the repository's `plugins/` folder; each was reviewed as a pull request, and every user of an install can use them. `agent` plugins are the ones the agent wrote on this install; only the user it wrote them for can install them. There is no shared catalog: to give a plugin to everyone who runs Conscious, open a pull request that adds its folder.
+
+## The Vault
+
+Secrets never pass through the chat. When a plugin needs an account you have not connected, the agent sends a **Vault link**: a private page, single-use, valid 15 minutes. You paste the token there; Conscious checks it with the service, seals it (AES-256-GCM) and tells you in the chat that you are connected. Sealed secrets are saved in `.conscious/vault.json`. The key is `CONSCIOUS_VAULT_KEY`, or one created on first start in `.conscious/vault.key` (owner-only); in production the key belongs in a secret manager, not beside the data.
+
+- The model sees which accounts are connected, never a secret. The broker adds the token to a plugin's request at the moment of the call, only for that connector's hosts.
+- The code in the link is the only thing that grants access. Five rejected tokens retire it.
+- The page has a strict content security policy, no caching, no referrer, and cannot be framed.
+- Each connector says where to get its token, which hosts it goes to, which header carries it, and how to check it.
+- **The agent can define a connector itself.** Built-in connectors live in `src/plugins/connectors.ts` (GitHub today). For any other service with an API key or personal token, the agent reads the service's docs and defines the connector inside its plugin's `auth`: name, hosts, how-to link and steps, a verify URL on one of the hosts, and the header. Review checks it: public hosts only, https, the verify URL on the connector's hosts, no reserved header, and a built-in id cannot be redefined.
+- **The hosts you see are what you approve.** The Vault page lists the hosts the token will go to, and warns you when Conscious wrote the connection itself. The Vault stores those hosts with the sealed token. At every call the plugin's hosts must all be approved hosts; if not, the agent is told to get a fresh link. So a second plugin that reuses a connector id with an extra host cannot carry your token there.
+- Services that sign in by redirect only (OAuth, open banking) are not covered yet: they need a one-time app registration with the provider, then a sign-in button on the same page.
+
 ## Next, in order
 
-1. **Durable storage.** With a computer, the conversation and memory survive restarts in the user's sandbox. Reminders and background tasks still live in memory; a restart forgets them.
+1. **Durable storage.** With a computer, the conversation and memory survive restarts in the user's sandbox. The Vault, plugins and installs are saved in `.conscious/` on the host. Reminders and background tasks still live in memory; a restart forgets them.
 2. **Approvals in the chat.** A `commit` becomes a Yes / No question (an iMessage poll or mini-app, a typed yes on WhatsApp); only the answer runs it.
 3. **Sign-in on the Vault page.** OAuth 2.1 with dynamic registration for MCP servers (Todoist, Notion, Strava, Dropbox), and the install's own client for Google Calendar, Gmail and Spotify.
 4. **An egress proxy for the computer**, so skills can reach only the hosts the user approved, with the Vault adding tokens on the way out instead of the computer holding them.
@@ -67,3 +99,4 @@ A skill is a folder with a `SKILL.md` in the [AgentSkills](https://agentskills.i
 6. **Voice notes and photos** in, read with transcription and vision.
 7. **A browser in the sandbox** for booking, forms and price checks, with internet scoped so reads and commits stay apart.
 8. **Tracing** with Langfuse, one trace per message, sub-agents as child agents.
+9. **A stronger plugin sandbox:** run plugin calls in a container or microVM with no network, for installs with many users.
