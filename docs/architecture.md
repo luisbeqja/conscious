@@ -20,6 +20,8 @@
 | Budgets | Turns and tool calls are capped per message. |
 | Conversations | One conversation per user, no threads. |
 | Connectors | The user's own accounts, linked one by one. |
+| Skills | `SKILL.md` instructions on the user's computer: copied from the repo, or written by the agent. |
+| MCP servers | Vendor-hosted tool servers from a reviewed catalog, called from the host. |
 
 ## A message, end to end
 
@@ -36,12 +38,32 @@ Conscious reaches people through [Photon Spectrum](https://photon.codes/spectrum
 - **Replies and notifications go to the chat the user last wrote from.** Nobody is messaged before they write first, which also keeps the numbers looking like normal chats to Apple's and Meta's spam checks.
 - **Spectrum Cloud owns the numbers and lines.** WhatsApp goes through the WhatsApp Business API, so Meta's rule against general-purpose assistants applies; it is allowed in the EU while the Commission's interim order stands.
 
+## Skills
+
+A skill is a folder with a `SKILL.md` in the [AgentSkills](https://agentskills.io) format: a name, a one-line description, requirements, and instructions. Other agents write theirs the same way, so their skills can be copied as they are.
+
+- **Where they live.** On the user's computer, in `skills/`. The repo's `skills/` folder is copied in the first time the process sees a user, and again when it changes; a `.bundled` file holds the hash of what was copied. A skill without that file is the user's own and is never overwritten, even when the repo has one with the same name.
+- **What the agent sees.** Each turn, the system prompt lists the skills that can run on that computer, by name, path and description. The agent reads the whole `SKILL.md` before using one. A skill is hidden when a program it needs is missing, it needs a secret (the computer holds none), it is for another operating system, or it needs the internet and the computer has none. Requirements are read from `metadata.conscious`, and from the same keys under another agent's name.
+- **Copied skills.** `pnpm skills:import` copies one folder at a full commit SHA and only under MIT or Apache-2.0. With `--internet` it writes `conscious.json` so the skill shows only on a computer with internet. A bump to a newer commit is a reviewed diff.
+- **Learned skills.** `skills_save_skill` writes a skill after work worth repeating, or fixes one that misled the agent. Every change keeps the previous version in `.history/`, and `skills_restore_version` puts one back. Saving over a bundled skill makes it the user's own.
+- **A skill grants nothing.** It is instructions only. Its commands run on the computer, with the computer's limits; commits still wait for a yes.
+
+## MCP servers
+
+`mcp/<name>/manifest.yaml` lists a vendor-hosted MCP server: its URL, auth and tools, plus `enabled_by_default`, `default_effect` and `effects`. Being in the folder means it was reviewed in a pull request.
+
+- At startup Conscious connects to the chosen servers (`CONSCIOUS_MCP_SERVERS`, or the catalog's defaults) and turns each into a capability with tools named `<server>_<tool>`. A server that does not answer is left out and logged.
+- Calls run on the host, never on the user's computer, so a future token for the server never enters the sandbox.
+- A tool's effect is the manifest's, then `read` if the server marks it read-only, then the manifest's `default_effect`, and `commit` when nothing says otherwise.
+- Today: Kiwi.com flights and trivago hotels (on by default), AllTrails (off: its schemas cost about 24K tokens a message). Servers that need a sign-in (Todoist, Notion, Strava) wait for OAuth 2.1 on the Vault page.
+
 ## Next, in order
 
 1. **Durable storage.** With a computer, the conversation and memory survive restarts in the user's sandbox. Reminders and background tasks still live in memory; a restart forgets them.
 2. **Approvals in the chat.** A `commit` becomes a Yes / No question (an iMessage poll or mini-app, a typed yes on WhatsApp); only the answer runs it.
-3. **Google Calendar connector** with OAuth. Then Gmail, Linear, GitHub, Spotify.
-4. **Memory, better.** Today it is `memory/MEMORY.md` in the sandbox, written by the agent and read into every prompt. Next: search over older notes when the index outgrows the prompt.
-5. **Voice notes and photos** in, read with transcription and vision.
-6. **A browser in the sandbox** for booking, forms and price checks, with internet scoped so reads and commits stay apart.
-7. **Tracing** with Langfuse, one trace per message, sub-agents as child agents.
+3. **Sign-in on the Vault page.** OAuth 2.1 with dynamic registration for MCP servers (Todoist, Notion, Strava, Dropbox), and the install's own client for Google Calendar, Gmail and Spotify.
+4. **An egress proxy for the computer**, so skills can reach only the hosts the user approved, with the Vault adding tokens on the way out instead of the computer holding them.
+5. **Memory, better.** Today it is `memory/MEMORY.md` in the sandbox, written by the agent and read into every prompt. Next: search over older notes when the index outgrows the prompt.
+6. **Voice notes and photos** in, read with transcription and vision.
+7. **A browser in the sandbox** for booking, forms and price checks, with internet scoped so reads and commits stay apart.
+8. **Tracing** with Langfuse, one trace per message, sub-agents as child agents.

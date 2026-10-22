@@ -47,6 +47,22 @@ To keep data in Europe, ask E2B support for its EU cluster, or run E2B yourself:
 
 No secrets go in: the sandbox starts with an empty environment, and account tokens stay on the host. Internet is off unless you set `CONSCIOUS_SANDBOX_INTERNET=true`.
 
+## Skills
+
+Skills are instructions for jobs that come up often, in the [AgentSkills](https://agentskills.io) format. They live on the user's computer, in `skills/`: the repo's [`skills/`](skills/) folder is copied in when a computer starts, next to the skills the agent wrote for that user. The system prompt lists the ones that can run there, and the agent reads a skill's `SKILL.md` before it uses it.
+
+Three ship today: `weather`, `maps` and `rss-feeds`. They need the internet, so they show up only with `CONSCIOUS_SANDBOX_INTERNET=true`. To copy another one at a pinned commit:
+
+```bash
+pnpm skills:import https://github.com/<owner>/<repo> skills/<name> --commit <sha> --internet
+```
+
+The agent also saves its own skills after work worth repeating (`skills_save_skill`), and keeps every earlier version so a change can be undone.
+
+## MCP servers
+
+Conscious connects to vendor-hosted MCP servers listed in [`mcp/`](mcp/), from the host, and offers their tools like any capability. By default that is Kiwi.com flights and trivago hotels, which need no account; set `CONSCIOUS_MCP_SERVERS` to choose (`alltrails`, or `none`). A tool that is not marked read-only waits for your yes. Servers that need a sign-in come with OAuth on the Vault page.
+
 ## Check it
 
 ```bash
@@ -76,9 +92,14 @@ src/
 ├─ capabilities/         one folder per pack: capability.ts + SKILL.md
 │  ├─ reminders/
 │  ├─ background/
-│  └─ computer/          shell and files in the user's sandbox
+│  ├─ computer/          shell and files in the user's sandbox
+│  └─ skills/            the agent saves its own skills, with undo
+├─ skills/               the skill library: copy into the computer, list what can run, import
+├─ mcp/                  MCP catalog and client: each server becomes a capability
 ├─ conversations/        one conversation per user, in memory or in their sandbox
 └─ prompts/              system and background prompts as markdown
+skills/                  bundled skills, copied into every computer
+mcp/                     MCP server manifests, one folder per server
 test/                    vitest
 ```
 
