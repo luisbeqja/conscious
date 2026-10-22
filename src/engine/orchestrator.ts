@@ -4,6 +4,8 @@ import type { Capability, ToolContext } from "../capabilities/types.js";
 import type { Budgets } from "../config.js";
 import type { ConversationStore } from "../conversations/store.js";
 import { buildBackgroundPrompt, buildSystemPrompt, buildUserTurn } from "../prompts/prompts.js";
+import { loadMemory } from "../sandbox/memory.js";
+import type { SandboxProvider } from "../sandbox/sandbox.js";
 import type { Scheduler } from "../scheduler/scheduler.js";
 import type { ModelRuntime } from "./models.js";
 import { type RunProgress, runAgent } from "./run-agent.js";
@@ -17,6 +19,8 @@ export interface OrchestratorDeps {
     timezone: string;
     scheduler: Scheduler;
     background: BackgroundAgents;
+    /** The users' computers. Without them Conscious has no memory beyond the conversation. */
+    sandboxes?: SandboxProvider;
 }
 
 const FALLBACK = "Sorry, something went wrong on my side. Try again in a moment?";
@@ -57,7 +61,7 @@ export class Orchestrator {
         const { tools, effects } = toolsFor(capabilities, { userId, timezone, scheduler, background });
         const result = await runAgent({
             runtime,
-            systemPrompt: buildSystemPrompt(registry.renderIndex(capabilities)),
+            systemPrompt: buildSystemPrompt(registry.renderIndex(capabilities), await this.memory(userId)),
             tools,
             effects,
             history: await store.load(userId),
@@ -84,7 +88,7 @@ export class Orchestrator {
         const { tools, effects } = toolsFor(capabilities, { userId: task.userId, timezone, scheduler });
         const result = await runAgent({
             runtime,
-            systemPrompt: buildBackgroundPrompt(registry.renderIndex(capabilities)),
+            systemPrompt: buildBackgroundPrompt(registry.renderIndex(capabilities), await this.memory(task.userId)),
             tools,
             effects,
             history: [],
@@ -96,4 +100,15 @@ export class Orchestrator {
         if (result.status === "failed" || !result.text) throw new Error("the sub-agent did not finish");
         return result.text;
     };
+
+    /** A computer that cannot be reached costs the user their memory for one message, not the answer. */
+    private async memory(userId: string): Promise<string | undefined> {
+        if (!this.deps.sandboxes) return undefined;
+        try {
+            return await loadMemory(await this.deps.sandboxes.forUser(userId));
+        } catch (error) {
+            console.error(`[orchestrator] could not read memory for ${userId}`, error);
+            return "(Your computer could not be reached, so your memory is unavailable for this message.)";
+        }
+    }
 }

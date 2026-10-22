@@ -1,7 +1,11 @@
+import type { E2BOptions } from "./sandbox/e2b.js";
+
 export interface Config {
     timezone: string;
     model: { provider: string; id: string };
     budgets: Budgets;
+    /** Unset means no computer: memory and the conversation live in this process only. */
+    sandbox?: E2BOptions;
 }
 
 export type PhotonPlatform = "imessage" | "whatsapp";
@@ -28,7 +32,21 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): Config => ({
         id: env.CONSCIOUS_MODEL ?? "claude-sonnet-5",
     },
     budgets: { maxTurnsPerRun: 20, maxToolCallsPerRun: 40, maxBackgroundAgents: 3 },
+    sandbox: loadSandboxConfig(env),
 });
+
+const loadSandboxConfig = (env: NodeJS.ProcessEnv): E2BOptions | undefined => {
+    const backend = env.CONSCIOUS_SANDBOX ?? "none";
+    if (backend === "none") return undefined;
+    if (backend !== "e2b") throw new Error(`CONSCIOUS_SANDBOX must be "e2b" or "none", not "${backend}"`);
+    return {
+        apiKey: required(env, "E2B_API_KEY"),
+        domain: env.E2B_DOMAIN || undefined,
+        template: env.CONSCIOUS_SANDBOX_TEMPLATE || "base",
+        idleMs: Number(env.CONSCIOUS_SANDBOX_IDLE_MINUTES || 10) * 60_000,
+        internet: env.CONSCIOUS_SANDBOX_INTERNET === "true",
+    };
+};
 
 const PLATFORMS: readonly PhotonPlatform[] = ["imessage", "whatsapp"];
 

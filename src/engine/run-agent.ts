@@ -52,7 +52,9 @@ export const runAgent = async (run: AgentRun): Promise<AgentRunResult> => {
             model: run.runtime.model,
             thinkingLevel: "low",
             tools: run.tools,
-            messages: run.history,
+            // A saved system message would win over this run's prompt and tools, and the prompt
+            // changes between messages (memory, capabilities), so the transcript never carries one.
+            messages: run.history.filter((message) => message.role !== "system"),
         },
         streamFn: run.runtime.streamFn,
         sessionId: run.sessionId,
@@ -100,5 +102,9 @@ export const runAgent = async (run: AgentRun): Promise<AgentRunResult> => {
         console.error(`[agent ${run.sessionId}] ${agent.state.errorMessage}`);
         status = "failed";
     }
-    return { messages: agent.state.messages, text: lastAssistantText(agent.state.messages), status };
+    return {
+        messages: agent.state.messages.filter((message) => message.role !== "system"),
+        text: lastAssistantText(agent.state.messages),
+        status,
+    };
 };

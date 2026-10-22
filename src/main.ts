@@ -15,7 +15,7 @@ if (config.model.provider === "anthropic" && !process.env.ANTHROPIC_API_KEY) {
 const terminal = createInterface({ input: stdin, output: stdout });
 
 // Reminders and finished background tasks arrive on their own, so they print above the prompt.
-const { orchestrator, scheduler, background } = createConscious(config, async (_userId, text) => {
+const { orchestrator, scheduler, background, sandboxes } = createConscious(config, async (_userId, text) => {
     stdout.write(`\r\x1b[K${bold("conscious")} ${text}\n`);
     terminal.prompt(true);
 });
@@ -29,7 +29,11 @@ const COMMANDS: Record<string, () => Promise<void> | void> = {
     "/tasks": () => console.log(dim(JSON.stringify(background.list(USER), null, 2))),
 };
 
-console.log(dim(`Conscious · ${config.model.provider}/${config.model.id} · ${config.timezone}`));
+console.log(
+    dim(
+        `Conscious · ${config.model.provider}/${config.model.id} · ${config.timezone} · computer: ${config.sandbox ? "e2b" : "none"}`,
+    ),
+);
 console.log(dim(`Commands: ${Object.keys(COMMANDS).join(" ")} /exit\n`));
 terminal.setPrompt("you ");
 
@@ -61,4 +65,5 @@ for await (const input of terminal) {
 }
 terminal.close();
 scheduler.stopAll();
+await sandboxes?.shutdown();
 process.exit(0);

@@ -4,10 +4,16 @@ import { promptFile } from "./prompt-file.js";
 const SYSTEM = promptFile(import.meta.url, "system.md");
 const BACKGROUND = promptFile(import.meta.url, "background.md");
 
-export const buildSystemPrompt = (capabilities: string): string => SYSTEM.replace("{{capabilities}}", capabilities);
+const fill = (template: string, capabilities: string, memory?: string): string => {
+    const prompt = template.replace("{{capabilities}}", capabilities);
+    return memory === undefined ? prompt : `${prompt}\n\n# What you remember about the user\n\n${memory}`;
+};
 
-export const buildBackgroundPrompt = (capabilities: string): string =>
-    BACKGROUND.replace("{{capabilities}}", capabilities);
+/** `memory` is the user's memory index, when they have a computer to keep one on. */
+export const buildSystemPrompt = (capabilities: string, memory?: string): string => fill(SYSTEM, capabilities, memory);
+
+export const buildBackgroundPrompt = (capabilities: string, memory?: string): string =>
+    fill(BACKGROUND, capabilities, memory);
 
 const formatNow = (now: Date, timezone: string): string =>
     `${new Intl.DateTimeFormat("en-GB", { dateStyle: "full", timeStyle: "short", timeZone: timezone }).format(now)} (${timezone})`;

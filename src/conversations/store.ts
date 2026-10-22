@@ -10,7 +10,7 @@ export interface ConversationStore {
 }
 
 // Older turns cost tokens on every message; a memory layer, not the transcript, is what keeps facts.
-const MAX_MESSAGES = 200;
+export const MAX_MESSAGES = 200;
 
 export class InMemoryConversationStore implements ConversationStore {
     private readonly conversations = new Map<string, AgentMessage[]>();

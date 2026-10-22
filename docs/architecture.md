@@ -38,10 +38,10 @@ Conscious reaches people through [Photon Spectrum](https://photon.codes/spectrum
 
 ## Next, in order
 
-1. **Durable storage.** Conversations, reminders and background tasks live in memory today; a restart forgets them. A store (Postgres or Mongo) that re-arms reminders on boot.
+1. **Durable storage.** With a computer, the conversation and memory survive restarts in the user's sandbox. Reminders and background tasks still live in memory; a restart forgets them.
 2. **Approvals in the chat.** A `commit` becomes a Yes / No question (an iMessage poll or mini-app, a typed yes on WhatsApp); only the answer runs it.
 3. **Google Calendar connector** with OAuth. Then Gmail, Linear, GitHub, Spotify.
-4. **Memory.** What Conscious knows about you (people, preferences, routines), separate from the transcript.
+4. **Memory, better.** Today it is `memory/MEMORY.md` in the sandbox, written by the agent and read into every prompt. Next: search over older notes when the index outgrows the prompt.
 5. **Voice notes and photos** in, read with transcription and vision.
-6. **The sandbox:** a hosted browser for booking, forms and price checks.
+6. **A browser in the sandbox** for booking, forms and price checks, with internet scoped so reads and commits stay apart.
 7. **Tracing** with Langfuse, one trace per message, sub-agents as child agents.
