@@ -1,0 +1,17 @@
+# A vendor-hosted MCP server. Conscious connects to it from the host; nothing runs locally.
+manifest_version: 1
+
+name: trivago
+description: 'Hotel search on trivago: compare prices by city and dates.'
+
+transport:
+  type: http
+  url: https://mcp.trivago.com/mcp
+
+auth:
+  type: none
+
+enabled_by_default: true
+
+# Search only: booking and paying happen on the vendor's site, through the links it returns.
+default_effect: read

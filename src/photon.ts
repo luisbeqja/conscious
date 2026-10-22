@@ -4,6 +4,7 @@ import { whatsappBusiness } from "@spectrum-ts/whatsapp-business";
 import { PhotonChannel } from "./channels/photon.js";
 import { loadConfig, loadPhotonConfig, type PhotonPlatform } from "./config.js";
 import { createConscious } from "./create-conscious.js";
+import { connectServers } from "./mcp/servers.js";
 
 // With Spectrum Cloud credentials, both providers take their numbers and lines from the project.
 const PROVIDERS: Record<PhotonPlatform, () => PlatformProviderConfig> = {
@@ -13,11 +14,14 @@ const PROVIDERS: Record<PhotonPlatform, () => PlatformProviderConfig> = {
 
 const config = loadConfig();
 const photon = loadPhotonConfig();
+const mcp = await connectServers(config.mcpServers);
 
 // The channel needs the orchestrator and the orchestrator's notifications need the channel.
 let channel: PhotonChannel | undefined;
-const { orchestrator, scheduler, sandboxes } = createConscious(config, (userId, text) =>
-    channel ? channel.notify(userId, text) : Promise.resolve(),
+const { orchestrator, scheduler, sandboxes } = createConscious(
+    config,
+    (userId, text) => (channel ? channel.notify(userId, text) : Promise.resolve()),
+    mcp.capabilities,
 );
 channel = new PhotonChannel(orchestrator, photon.allowedUsers);
 
@@ -34,6 +38,7 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
     process.on(signal, async () => {
         scheduler.stopAll();
         await sandboxes?.shutdown();
+        await mcp.close();
         await spectrum.stop();
         process.exit(0);
     });

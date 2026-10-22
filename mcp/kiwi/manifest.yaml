@@ -1,0 +1,22 @@
+# A vendor-hosted MCP server. Conscious connects to it from the host; nothing runs locally.
+manifest_version: 1
+
+name: kiwi
+description: 'Flight search on Kiwi.com: itineraries with direct booking links.'
+
+transport:
+  type: http
+  url: https://mcp.kiwi.com
+
+auth:
+  type: none
+
+enabled_by_default: true
+
+# The server's second tool, feedback-to-devs, sends feedback to Kiwi; it stays off.
+tools:
+  default_enabled:
+    - search-flight
+
+# Search only: booking and paying happen on the vendor's site, through the links it returns.
+default_effect: read

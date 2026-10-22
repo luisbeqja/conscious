@@ -1,3 +1,4 @@
+import { type McpServerEntry, readCatalog, selectServers } from "./mcp/catalog.js";
 import type { E2BOptions } from "./sandbox/e2b.js";
 
 export interface Config {
@@ -6,6 +7,8 @@ export interface Config {
     budgets: Budgets;
     /** Unset means no computer: memory and the conversation live in this process only. */
     sandbox?: E2BOptions;
+    /** MCP servers from the repo's catalog that this install connects to. */
+    mcpServers: McpServerEntry[];
 }
 
 export type PhotonPlatform = "imessage" | "whatsapp";
@@ -33,6 +36,7 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): Config => ({
     },
     budgets: { maxTurnsPerRun: 20, maxToolCallsPerRun: 40, maxBackgroundAgents: 3 },
     sandbox: loadSandboxConfig(env),
+    mcpServers: selectServers(readCatalog(), env.CONSCIOUS_MCP_SERVERS),
 });
 
 const loadSandboxConfig = (env: NodeJS.ProcessEnv): E2BOptions | undefined => {

@@ -1,0 +1,20 @@
+# A vendor-hosted MCP server. Conscious connects to it from the host; nothing runs locally.
+manifest_version: 1
+
+name: alltrails
+description: 'AllTrails: find hikes and trails with reviews and ratings.'
+
+transport:
+  type: http
+  url: https://www.alltrails.com/mcp
+
+auth:
+  type: none
+
+enabled_by_default: false
+
+# Its five tools have very long schemas (about 24K tokens), sent with every message,
+# so it is off unless CONSCIOUS_MCP_SERVERS names it.
+
+# Read only: it finds trails and reviews.
+default_effect: read
