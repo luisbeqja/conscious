@@ -6,8 +6,8 @@ Many skills were written for other assistants. A path to the skill's own files (
 
 - A terminal, shell or code tool (`terminal`, `execute_code`) means `computer_run_command`.
 - `read_file`, `write_file`, `patch` and `search_files` mean `computer_read_file`, `computer_write_file`, and `grep` through `computer_run_command`.
-- A web tool (`web_search`, `web_extract`, `web_fetch`) means `curl` on your computer, or the `duckduckgo-search` skill to search.
-- A scheduled job (`cronjob`, cron) that only sends a message means `reminders_create_reminder`. You cannot yet run a check on a schedule, so tell the user and offer to check when they ask.
+- A web tool means yours: `web_search` is `web_search_pages`; `web_extract` and `web_fetch` are `web_read_page`. `curl` on your computer works too when it has internet.
+- A scheduled job (`cronjob`, cron) means `reminders_create_reminder` when it only sends a message, and `reminders_schedule_check` when it has to look something up first. A check runs with your computer, so it can keep its notes in `files/` between runs.
 
 A tool you do not have means you find another way, or tell the user you cannot.
 

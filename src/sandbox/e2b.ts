@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { CommandExitError, Sandbox as E2BSandbox, type EntryInfo, FileType } from "e2b";
+import { ALL_TRAFFIC, CommandExitError, Sandbox as E2BSandbox, type EntryInfo, FileType } from "e2b";
 import { type CommandResult, type FileEntry, resolvePath, type Sandbox, type SandboxProvider } from "./sandbox.js";
 
 export interface E2BOptions {
@@ -42,12 +42,20 @@ export const createE2BClient = (options: E2BOptions): E2BClient => {
                 // Nothing from the host's environment goes in: no API keys, no tokens.
                 envs: {},
             }),
-        connect: (sandboxId) => E2BSandbox.connect(sandboxId, { ...connection, timeoutMs: options.idleMs }),
+        connect: async (sandboxId) => {
+            const sandbox = await E2BSandbox.connect(sandboxId, { ...connection, timeoutMs: options.idleMs });
+            // Internet is set when a computer is created; setting it again here lets a change of
+            // CONSCIOUS_SANDBOX_INTERNET reach computers that already exist.
+            await sandbox
+                .updateNetwork(options.internet ? {} : { denyOut: [ALL_TRAFFIC] })
+                .catch((error: unknown) => console.warn(`[e2b] could not set internet access on ${sandboxId}`, error));
+            return sandbox;
+        },
     };
 };
 
 /** Users are phone numbers or emails; E2B only ever sees a hash of them. */
-const userKey = (userId: string): string => createHash("sha256").update(userId).digest("hex").slice(0, 32);
+export const userKey = (userId: string): string => createHash("sha256").update(userId).digest("hex").slice(0, 32);
 
 /**
  * One E2B sandbox per user, found again by metadata after a restart. It pauses itself when idle

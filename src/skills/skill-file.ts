@@ -4,6 +4,8 @@ import { parse } from "yaml";
 export interface SkillSidecar {
     /** The skill fetches from the web, so it is hidden on a computer without internet. */
     internet?: boolean;
+    /** The skill keeps files, so it is hidden on installs without a computer even when it has no scripts. */
+    computer?: boolean;
 }
 
 export interface SkillRequirements {

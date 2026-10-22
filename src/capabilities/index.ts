@@ -1,6 +1,7 @@
 import type { Connector } from "../plugins/connectors.js";
 import { type PluginDeps, userConnectors } from "../plugins/plugins.js";
 import type { SandboxProvider } from "../sandbox/sandbox.js";
+import { readHostSkills } from "../skills/host.js";
 import type { Vault } from "../vault/vault.js";
 import { backgroundCapability } from "./background/capability.js";
 import { createComputerCapability } from "./computer/capability.js";
@@ -9,6 +10,7 @@ import { reactionsCapability } from "./reactions/capability.js";
 import { CapabilityRegistry } from "./registry.js";
 import { remindersCapability } from "./reminders/capability.js";
 import { createSkillsCapability } from "./skills/capability.js";
+import { createHostSkillsCapability } from "./skills/host-capability.js";
 import type { Capability } from "./types.js";
 import { createVaultCapability } from "./vault/capability.js";
 
@@ -41,6 +43,6 @@ export const createRegistry = (
             )
             .register(createPluginsCapability(plugins.plugins));
     }
-    if (!sandboxes) return registry;
+    if (!sandboxes) return registry.register(createHostSkillsCapability(readHostSkills()));
     return registry.register(createComputerCapability(sandboxes)).register(createSkillsCapability(sandboxes));
 };

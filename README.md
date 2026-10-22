@@ -77,7 +77,9 @@ The sandbox pauses after 10 minutes without a message and resumes on the next on
 
 To keep data in Europe, ask E2B support for its EU cluster, or run E2B yourself: its runtime is open source ([e2b-dev/infra](https://github.com/e2b-dev/infra)) and needs a Linux host with KVM. Set `E2B_DOMAIN` to either.
 
-No secrets go in: the sandbox starts with an empty environment, and account tokens stay on the host. Internet is off unless you set `CONSCIOUS_SANDBOX_INTERNET=true`.
+No secrets go in: the sandbox starts with an empty environment, and account tokens stay on the host. Internet is off unless you set `CONSCIOUS_SANDBOX_INTERNET=true`; most skills need it, so turn it on unless you have a reason not to. The setting applies to existing computers too, the next time they wake.
+
+To check a setup before you text it, run `pnpm computer:check`. It starts a throwaway computer with your `.env`, checks that internet matches the setting, lists the programs skills rely on and the skills that show up, then deletes it.
 
 ## Skills
 
@@ -94,7 +96,9 @@ Skills are instructions for jobs that come up often, in the [AgentSkills](https:
 | Documents | `pdf`, `docx`, `xlsx`, `powerpoint`, `document-to-action-items` |
 | Agent | `skill-creator` |
 
-Skills that fetch from the web show up only with `CONSCIOUS_SANDBOX_INTERNET=true`. Watching skills check when the user asks; checks on a schedule come later. To copy another one at a pinned commit:
+Without a computer, the skills that need no scripts and no files still work, read straight from the repo and followed with Conscious's own tools (web search, page reading, reminders): `weather`, `product-price-monitor`, `weekly-review-planning`, `decision-questionnaire`, `one-three-one-rule`, `social-media-content-calendar`, `document-to-action-items`. The rest need a computer. A skill can opt out with `"computer": true` in its `conscious.json`.
+
+Skills that fetch from the web show up on a computer only with `CONSCIOUS_SANDBOX_INTERNET=true`. Watching skills can run on a schedule as checks (see Chat with it). To copy another one at a pinned commit:
 
 ```bash
 pnpm skills:import https://github.com/<owner>/<repo> skills/<name> --commit <sha> --internet
