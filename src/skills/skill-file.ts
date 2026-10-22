@@ -33,12 +33,13 @@ export const SKILL_NAME = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const strings = (value: unknown): string[] =>
     Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 
-// Listed as strings, or as objects with a name or path.
+// Listed as strings, or as objects with a name or path. An entry marked optional is not a requirement.
 const names = (value: unknown): string[] =>
     Array.isArray(value)
         ? value.flatMap((item) => {
               if (typeof item === "string") return [item];
               const entry = record(item);
+              if (entry.optional === true) return [];
               const name = entry.name ?? entry.path;
               return typeof name === "string" ? [name] : [];
           })
@@ -71,11 +72,15 @@ export const parseSkillFile = (text: string, folder: string): SkillInfo | undefi
         name,
         description,
         requires: {
-            bins: from((section) => record(section.requires).bins),
+            bins: [
+                ...from((section) => record(section.requires).bins),
+                ...from((section) => record(section.prerequisites).commands),
+            ],
             anyBins: from((section) => record(section.requires).anyBins),
             external: [
                 ...from((section) => record(section.requires).env),
                 ...from((section) => record(section.requires).config),
+                ...from((section) => record(section.prerequisites).env_vars),
                 ...names(front.required_environment_variables),
                 ...names(front.required_credential_files),
                 ...from((section) => section.requires_toolsets).filter((toolset) => toolset !== "terminal"),
