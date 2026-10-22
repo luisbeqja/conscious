@@ -39,6 +39,12 @@ export interface PhotonConfig {
     whatsappTemplate?: { name: string; languageCode: string };
 }
 
+export interface AppConfig {
+    port: number;
+    /** Who can use the phone app. Each gets an access code the first time they are listed. */
+    users: readonly string[];
+}
+
 export interface VaultConfig {
     port: number;
     /** What the user's phone opens. Behind a tunnel or proxy in production, so it is https. */
@@ -159,6 +165,13 @@ const loadVaultConfig = (env: NodeJS.ProcessEnv): VaultConfig => {
         publicUrl: env.CONSCIOUS_PUBLIC_URL || `http://localhost:${port}`,
         key: env.CONSCIOUS_VAULT_KEY ? Buffer.from(env.CONSCIOUS_VAULT_KEY, "base64") : undefined,
     };
+};
+
+/** The phone app's server. `fallbackUser` is who uses it when no users are listed; undefined leaves it off. */
+export const loadAppConfig = (env: NodeJS.ProcessEnv = process.env, fallbackUser?: string): AppConfig | undefined => {
+    const users = list(env.CONSCIOUS_APP_USERS);
+    if (!users.length && !fallbackUser) return undefined;
+    return { port: Number(env.CONSCIOUS_APP_PORT || 8788), users: users.length ? users : [fallbackUser as string] };
 };
 
 const PLATFORMS: readonly PhotonPlatform[] = ["imessage", "whatsapp"];
