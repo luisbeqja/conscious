@@ -1,5 +1,5 @@
 import type { Message, Space } from "@spectrum-ts/core";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ChatBook } from "../src/channels/chats.js";
 import { PhotonChannel, templateParam, userIdOf } from "../src/channels/photon.js";
 
@@ -50,6 +50,55 @@ describe("PhotonChannel", () => {
         expect(orchestrator.calls).toEqual([["+39333", "hi"]]);
         expect(sent).toEqual(["you said: hi"]);
         expect(respondingCalls()).toBe(1);
+    });
+
+    describe("WhatsApp typing", () => {
+        afterEach(() => vi.useRealTimers());
+
+        it("shows typing on WhatsApp while the answer is written, again every 20 seconds, then stops", async () => {
+            vi.useFakeTimers();
+            const shown: string[] = [];
+            let finish: (reply: string) => void = () => {};
+            const orchestrator = {
+                send: () =>
+                    new Promise<string>((resolve) => {
+                        finish = resolve;
+                    }),
+            };
+            const channel = new PhotonChannel(orchestrator, new Set(["+39333"]), {
+                showWhatsAppTyping: async (id) => {
+                    shown.push(id);
+                },
+            });
+            const { space, sent } = fakeSpace("39333");
+
+            const handled = channel.handle(space, inbound("wamid.1", "39333", "plan my weekend", "whatsapp_business"));
+            await vi.advanceTimersByTimeAsync(45_000);
+            expect(shown).toEqual(["wamid.1", "wamid.1", "wamid.1"]);
+
+            finish("Here's a plan.");
+            await handled;
+            await vi.advanceTimersByTimeAsync(60_000);
+            expect(shown).toHaveLength(3);
+            expect(sent).toEqual(["Here's a plan."]);
+        });
+
+        it("still answers when typing fails, and leaves iMessage to Spectrum", async () => {
+            const shown: string[] = [];
+            const channel = new PhotonChannel(echo(), new Set(["+39333"]), {
+                showWhatsAppTyping: async (id) => {
+                    shown.push(id);
+                    throw new Error("line is down");
+                },
+            });
+            const { space, sent } = fakeSpace("39333");
+
+            await channel.handle(space, inbound("wamid.2", "39333", "hi", "whatsapp_business"));
+            await channel.handle(space, inbound("m3", "+39333", "hi again"));
+
+            expect(shown).toEqual(["wamid.2"]);
+            expect(sent).toEqual(["you said: hi", "you said: hi again"]);
+        });
     });
 
     it("knows a WhatsApp number written as bare digits is the same person", async () => {

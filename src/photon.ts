@@ -5,6 +5,7 @@ import { whatsappBusiness } from "@spectrum-ts/whatsapp-business";
 import { type AppChannel, startAppChannel } from "./channels/app.js";
 import { ChatBook } from "./channels/chats.js";
 import { PhotonChannel, userIdOf } from "./channels/photon.js";
+import { WhatsAppTyping } from "./channels/whatsapp-typing.js";
 import { loadAppConfig, loadConfig, loadPhotonConfig, type PhotonPlatform } from "./config.js";
 import { createConscious } from "./create-conscious.js";
 import { modelSetupProblem } from "./engine/models.js";
@@ -48,10 +49,14 @@ const appServer = app && startAppChannel(orchestrator, app, config.dataDir);
 appChannel = appServer?.channel;
 // Spectrum is connected below; a chat is only reopened when a reminder fires, by which time it is.
 let spectrum: Awaited<ReturnType<typeof Spectrum>> | undefined;
+const whatsappTyping = photon.platforms.includes("whatsapp")
+    ? new WhatsAppTyping(photon.projectId, photon.projectSecret)
+    : undefined;
 channel = new PhotonChannel(orchestrator, photon.allowedUsers, {
     chats,
     template: photon.whatsappTemplate,
     transcriber: config.transcription && createTranscriber(config.transcription),
+    showWhatsAppTyping: whatsappTyping?.show,
     openSpace: async (platform, spaceId) => {
         if (!spectrum) throw new Error("Photon is not connected yet");
         const provider = platform === "imessage" ? imessage : whatsappBusiness;
@@ -84,6 +89,7 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
         appServer?.server.close();
         await sandboxes?.shutdown();
         await mcp.close();
+        await whatsappTyping?.close();
         await spectrum?.stop();
         process.exit(0);
     });

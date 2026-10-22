@@ -24,6 +24,8 @@ const MAX_INCOMING_BYTES = 20_000_000;
 /** WhatsApp lets a business line write freely for 24 hours after the user's last message. A margin keeps sends from racing the edge. */
 const WHATSAPP_WINDOW_MS = 23.5 * 60 * 60_000;
 const WHATSAPP = "whatsapp_business";
+/** WhatsApp hides the typing indicator after 25 seconds, so a long answer shows it again before then. */
+const TYPING_REFRESH_MS = 20_000;
 
 /** A message template approved in Meta's WhatsApp Manager, with one `{{1}}` body variable for the text. */
 export interface WhatsAppTemplate {
@@ -40,6 +42,8 @@ export interface PhotonChannelOptions {
     template?: WhatsAppTemplate;
     /** Turns voice notes into text. Without it, Conscious says it cannot listen yet. */
     transcriber?: Transcriber;
+    /** Shows "typing…" on WhatsApp for a message id. Spectrum's own indicator only reaches iMessage. */
+    showWhatsAppTyping?: (messageId: string) => Promise<void>;
     now?: () => Date;
 }
 
@@ -108,13 +112,22 @@ export class PhotonChannel {
         this.lastSpace.set(userId, space);
         this.chats.wrote(userId, { platform: message.platform, spaceId: space.id, lastInboundAt: this.now() });
 
+        const stopTyping = this.startWhatsAppTyping(message);
+        try {
+            await this.answer(userId, space, message);
+        } finally {
+            stopTyping();
+        }
+    }
+
+    private async answer(userId: string, space: Space, message: Message): Promise<void> {
         const incoming = await this.read(message);
         if (typeof incoming === "string") {
             if (incoming) await space.send(incoming);
             return;
         }
         const { text, files } = incoming;
-        // `responding` shows the typing indicator, so no "working on it" message is needed.
+        // `responding` shows the typing indicator on iMessage; WhatsApp's is kept up by `handle`.
         const react = async (emoji: string) => (await message.react(emoji)) !== undefined;
         const sendFile = async (file: OutgoingFile) => {
             await space.send(attachment(Buffer.from(file.data), { name: file.name, mimeType: file.mimeType }));
@@ -189,6 +202,19 @@ export class PhotonChannel {
             return { text: "", files: [{ name: content.name, mimeType: content.mimeType, data }] };
         }
         return "I can't open that kind of message yet. Text, voice notes, photos and files work.";
+    }
+
+    /** Keeps "typing…" up while a WhatsApp message is read and answered. A failure costs only the indicator. */
+    private startWhatsAppTyping(message: Message): () => void {
+        const show = this.options.showWhatsAppTyping;
+        if (!show || message.platform !== WHATSAPP || message.content.type === "reaction") return () => {};
+        const once = () =>
+            show(message.id).catch((error: unknown) => {
+                console.warn(`[photon] could not show typing for ${message.id}`, error);
+            });
+        void once();
+        const timer = setInterval(once, TYPING_REFRESH_MS);
+        return () => clearInterval(timer);
     }
 
     private markSeen(key: string): boolean {
