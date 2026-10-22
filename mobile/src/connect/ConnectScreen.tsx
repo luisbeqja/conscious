@@ -12,7 +12,7 @@ import {
 } from "react-native";
 import Animated, { FadeIn, FadeInDown } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Orb } from "../icons";
+import { Dot } from "../dot/Dot";
 import type { ClientMessage, ServerMessage } from "../protocol";
 import { type Connection, normalizeServer, socketUrl } from "../storage";
 import { fonts, type Palette, type, usePalette } from "../theme";
@@ -113,7 +113,7 @@ export const ConnectScreen = ({ onConnected }: { onConnected: (connection: Conne
                 keyboardShouldPersistTaps="handled"
             >
                 <Animated.View entering={FadeIn.duration(500)}>
-                    <Orb size={64} color={palette.accent} glow={palette.orbGlow} />
+                    <Dot size={72} mood={busy ? "thinking" : error ? "error" : "idle"} />
                 </Animated.View>
                 <Animated.View entering={FadeInDown.delay(80).duration(450)} style={styles.intro}>
                     <Text style={[type.display, { color: palette.text }]}>Conscious</Text>

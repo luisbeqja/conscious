@@ -1,4 +1,4 @@
-import Svg, { Circle, Defs, Path, RadialGradient, Stop } from "react-native-svg";
+import Svg, { Circle, Path } from "react-native-svg";
 
 interface IconProps {
     size?: number;
@@ -46,19 +46,5 @@ export const Document = ({ size = 22, color }: IconProps) => (
 export const ChevronDown = ({ size = 18, color }: IconProps) => (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
         <Path d="m6 9 6 6 6-6" stroke={color} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
-    </Svg>
-);
-
-/** Conscious's mark: a soft lit sphere, calm rather than robotic. */
-export const Orb = ({ size = 56, color, glow }: IconProps & { glow: string }) => (
-    <Svg width={size} height={size} viewBox="0 0 100 100">
-        <Defs>
-            <RadialGradient id="orb" cx="38%" cy="32%" r="70%">
-                <Stop offset="0" stopColor={glow} stopOpacity={1} />
-                <Stop offset="0.55" stopColor={color} stopOpacity={1} />
-                <Stop offset="1" stopColor={color} stopOpacity={1} />
-            </RadialGradient>
-        </Defs>
-        <Circle cx={50} cy={50} r={46} fill="url(#orb)" />
     </Svg>
 );

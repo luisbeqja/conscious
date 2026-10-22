@@ -1,5 +1,6 @@
 import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
+import { router } from "expo-router";
 import { useCallback, useMemo, useRef, useState } from "react";
 import {
     ActionSheetIOS,
@@ -22,7 +23,10 @@ import Animated, {
     useAnimatedStyle,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ChevronDown, More, Orb } from "../icons";
+import { Dot } from "../dot/Dot";
+import type { DotMood } from "../dot/motion";
+import { useDotMood } from "../dot/useDotMood";
+import { ChevronDown, More } from "../icons";
 import type { AppEntry } from "../protocol";
 import type { Connection } from "../storage";
 import { type Palette, type, usePalette } from "../theme";
@@ -99,12 +103,14 @@ const STATUS_TEXT: Record<Status, string> = {
 const Header = ({
     palette,
     status,
+    mood,
     onMore,
     topInset,
     raised,
 }: {
     palette: Palette;
     status: Status;
+    mood: DotMood;
     onMore: () => void;
     topInset: number;
     raised: boolean;
@@ -121,7 +127,9 @@ const Header = ({
         >
             <View style={styles.headerSide} />
             <View style={styles.headerCenter}>
-                <Orb size={28} color={palette.accent} glow={palette.orbGlow} />
+                <Pressable onLongPress={() => router.push("/dot")} accessibilityHint="Hold to see the mascot's moves">
+                    <Dot size={36} mood={mood} />
+                </Pressable>
                 <View>
                     <Text style={[type.title, { color: palette.text }]}>Conscious</Text>
                     <View style={styles.statusRow}>
@@ -154,7 +162,7 @@ const SUGGESTIONS = [
 
 const Welcome = ({ palette, onPick }: { palette: Palette; onPick: (text: string) => void }) => (
     <Animated.View entering={FadeIn.duration(400)} style={styles.welcome}>
-        <Orb size={72} color={palette.accent} glow={palette.orbGlow} />
+        <Dot size={88} />
         <Text style={[type.display, styles.welcomeTitle, { color: palette.text }]}>Hi, I'm Conscious.</Text>
         <Text style={[type.body, styles.welcomeText, { color: palette.muted }]}>
             I remember things, keep an eye on your day and look things up, so you don't have to.
@@ -200,6 +208,9 @@ export const ChatScreen = ({ connection, onDisconnect }: { connection: Connectio
         [chat.entries, chat.pending, answering],
     );
     const activity = chat.draft.tool && !chat.draft.text ? toolLabel(chat.draft.tool) : undefined;
+    const mood = useDotMood({ status: chat.status, answering, entries: chat.entries, error: chat.error });
+    // One character, one place: while the dot works inline next to the answer, the header one rests.
+    const headerMood = mood === "thinking" && !chat.draft.text ? "idle" : mood;
 
     const keyboard = useAnimatedKeyboard();
     const composerBottom = Math.max(insets.bottom, 10);
@@ -240,11 +251,14 @@ export const ChatScreen = ({ connection, onDisconnect }: { connection: Connectio
             ActionSheetIOS.showActionSheetWithOptions(
                 {
                     title: connection.server,
-                    options: ["Disconnect", "Cancel"],
-                    destructiveButtonIndex: 0,
-                    cancelButtonIndex: 1,
+                    options: ["The Dot", "Disconnect", "Cancel"],
+                    destructiveButtonIndex: 1,
+                    cancelButtonIndex: 2,
                 },
-                (index) => index === 0 && disconnect(),
+                (index) => {
+                    if (index === 0) router.push("/dot");
+                    if (index === 1) disconnect();
+                },
             );
         } else if (Platform.OS === "web") {
             onDisconnect();
@@ -311,6 +325,7 @@ export const ChatScreen = ({ connection, onDisconnect }: { connection: Connectio
             <Header
                 palette={palette}
                 status={chat.status}
+                mood={headerMood}
                 onMore={more}
                 topInset={insets.top}
                 raised={raised && !empty}
