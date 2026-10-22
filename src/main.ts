@@ -2,6 +2,7 @@ import { stdin, stdout } from "node:process";
 import { createInterface } from "node:readline/promises";
 import { loadConfig } from "./config.js";
 import { createConscious } from "./create-conscious.js";
+import { modelSetupProblem } from "./engine/models.js";
 import { connectServers } from "./mcp/servers.js";
 
 const USER = "me";
@@ -9,15 +10,16 @@ const dim = (text: string) => `\x1b[2m${text}\x1b[0m`;
 const bold = (text: string) => `\x1b[1m${text}\x1b[0m`;
 
 const config = loadConfig();
-if (config.model.provider === "anthropic" && !process.env.ANTHROPIC_API_KEY) {
-    console.error("Set ANTHROPIC_API_KEY in .env (copy .env.example) and run again.");
+const problem = await modelSetupProblem(config.model);
+if (problem) {
+    console.error(problem);
     process.exit(1);
 }
 const mcp = await connectServers(config.mcpServers);
 const terminal = createInterface({ input: stdin, output: stdout });
 
 // Reminders and finished background tasks arrive on their own, so they print above the prompt.
-const { orchestrator, scheduler, background, sandboxes } = createConscious(
+const { orchestrator, scheduler, background, sandboxes, startVault } = createConscious(
     config,
     async (_userId, text) => {
         stdout.write(`\r\x1b[K${bold("conscious")} ${text}\n`);
@@ -35,11 +37,13 @@ const COMMANDS: Record<string, () => Promise<void> | void> = {
     "/tasks": () => console.log(dim(JSON.stringify(background.list(USER), null, 2))),
 };
 
+const vaultServer = startVault();
 console.log(
     dim(
         `Conscious · ${config.model.provider}/${config.model.id} · ${config.timezone} · computer: ${config.sandbox ? "e2b" : "none"} · mcp: ${mcp.capabilities.map((capability) => capability.id).join(", ") || "none"}`,
     ),
 );
+console.log(dim(`Vault on ${config.vault.publicUrl}`));
 console.log(dim(`Commands: ${Object.keys(COMMANDS).join(" ")} /exit\n`));
 terminal.setPrompt("you ");
 
@@ -70,6 +74,7 @@ for await (const input of terminal) {
     terminal.prompt();
 }
 terminal.close();
+vaultServer.close();
 scheduler.stopAll();
 await sandboxes?.shutdown();
 await mcp.close();

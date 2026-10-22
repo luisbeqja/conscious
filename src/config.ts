@@ -1,9 +1,16 @@
+import { join } from "node:path";
+import type { ModelConfig } from "./engine/models.js";
 import { type McpServerEntry, readCatalog, selectServers } from "./mcp/catalog.js";
 import type { E2BOptions } from "./sandbox/e2b.js";
 
 export interface Config {
     timezone: string;
-    model: { provider: string; id: string };
+    /** The bundled plugins: one folder per plugin. */
+    pluginsDir: string;
+    /** Where Conscious keeps what must survive a restart: the Vault, plugins, installs. */
+    dataDir: string;
+    vault: VaultConfig;
+    model: ModelConfig;
     budgets: Budgets;
     /** Unset means no computer: memory and the conversation live in this process only. */
     sandbox?: E2BOptions;
@@ -21,6 +28,14 @@ export interface PhotonConfig {
     allowedUsers: ReadonlySet<string>;
 }
 
+export interface VaultConfig {
+    port: number;
+    /** What the user's phone opens. Behind a tunnel or proxy in production, so it is https. */
+    publicUrl: string;
+    /** 32 bytes, base64. Without it, a key is created once in the data folder. */
+    key?: Buffer;
+}
+
 export interface Budgets {
     maxTurnsPerRun: number;
     maxToolCallsPerRun: number;
@@ -30,9 +45,14 @@ export interface Budgets {
 
 export const loadConfig = (env: NodeJS.ProcessEnv = process.env): Config => ({
     timezone: env.CONSCIOUS_TIMEZONE ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
+    pluginsDir: env.CONSCIOUS_PLUGINS_DIR ?? join(process.cwd(), "plugins"),
+    dataDir: env.CONSCIOUS_DATA_DIR ?? join(process.cwd(), ".conscious"),
+    vault: loadVaultConfig(env),
     model: {
         provider: env.CONSCIOUS_MODEL_PROVIDER ?? "anthropic",
         id: env.CONSCIOUS_MODEL ?? "claude-sonnet-5",
+        baseUrl: env.CONSCIOUS_MODEL_BASE_URL,
+        apiKey: env.CONSCIOUS_MODEL_API_KEY,
     },
     budgets: { maxTurnsPerRun: 20, maxToolCallsPerRun: 40, maxBackgroundAgents: 3 },
     sandbox: loadSandboxConfig(env),
@@ -49,6 +69,15 @@ const loadSandboxConfig = (env: NodeJS.ProcessEnv): E2BOptions | undefined => {
         template: env.CONSCIOUS_SANDBOX_TEMPLATE || "base",
         idleMs: Number(env.CONSCIOUS_SANDBOX_IDLE_MINUTES || 10) * 60_000,
         internet: env.CONSCIOUS_SANDBOX_INTERNET === "true",
+    };
+};
+
+const loadVaultConfig = (env: NodeJS.ProcessEnv): VaultConfig => {
+    const port = Number(env.CONSCIOUS_VAULT_PORT ?? 8787);
+    return {
+        port,
+        publicUrl: env.CONSCIOUS_PUBLIC_URL ?? `http://localhost:${port}`,
+        key: env.CONSCIOUS_VAULT_KEY ? Buffer.from(env.CONSCIOUS_VAULT_KEY, "base64") : undefined,
     };
 };
 

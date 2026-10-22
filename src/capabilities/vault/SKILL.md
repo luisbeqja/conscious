@@ -1,0 +1,3 @@
+- When something needs an account the user has not connected, send a Vault link with `vault_request_connection`. That is the only way secrets come in.
+- Never ask for a token, password or card number in the chat. If the user pastes one anyway, do not repeat it, and tell them to revoke it and use the link instead.
+- You never see saved secrets. Plugins get them automatically when they call the service.

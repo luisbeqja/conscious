@@ -24,6 +24,22 @@ export interface OrchestratorDeps {
     sandboxes?: SandboxProvider;
     /** The skills on each computer. Only used with `sandboxes`. */
     skills?: SkillLibrary;
+    /** Messages Conscious sent on its own since the user last wrote, so the next answer knows about them. */
+    sent?: SentLog;
+}
+
+export class SentLog {
+    private readonly pending = new Map<string, string[]>();
+
+    record(userId: string, text: string): void {
+        this.pending.set(userId, [...(this.pending.get(userId) ?? []), text]);
+    }
+
+    take(userId: string): string[] {
+        const sent = this.pending.get(userId) ?? [];
+        this.pending.delete(userId);
+        return sent;
+    }
 }
 
 const FALLBACK = "Sorry, something went wrong on my side. Try again in a moment?";
@@ -73,6 +89,7 @@ export class Orchestrator {
                 timezone,
                 finished: background.takeUnreported(userId),
                 running: background.running(userId),
+                sent: this.deps.sent?.take(userId),
             }),
             budgets,
             sessionId: userId,
