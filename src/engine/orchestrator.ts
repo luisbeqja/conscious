@@ -3,10 +3,17 @@ import type { CapabilityRegistry } from "../capabilities/registry.js";
 import type { Capability, ToolContext } from "../capabilities/types.js";
 import type { Budgets } from "../config.js";
 import type { ConversationStore } from "../conversations/store.js";
-import { buildBackgroundPrompt, buildSystemPrompt, buildUserTurn, type ComputerContext } from "../prompts/prompts.js";
+import {
+    buildBackgroundPrompt,
+    buildCheckBrief,
+    buildSystemPrompt,
+    buildUserTurn,
+    type ComputerContext,
+    isNothing,
+} from "../prompts/prompts.js";
 import { loadMemory } from "../sandbox/memory.js";
 import type { SandboxProvider } from "../sandbox/sandbox.js";
-import type { Scheduler } from "../scheduler/scheduler.js";
+import type { Reminder, Scheduler } from "../scheduler/scheduler.js";
 import type { SkillLibrary } from "../skills/library.js";
 import type { ModelRuntime } from "./models.js";
 import { type RunProgress, runAgent } from "./run-agent.js";
@@ -122,27 +129,43 @@ export class Orchestrator {
     }
 
     /** What a background agent runs: its own loop, the same capabilities minus starting more background work. */
-    runBackgroundTask = async (task: BackgroundTask, signal: AbortSignal): Promise<string> => {
+    runBackgroundTask = async (task: BackgroundTask, signal: AbortSignal): Promise<string> =>
+        this.runAlone(task.userId, `background-${task.id}`, task.brief, signal);
+
+    /**
+     * A scheduled check firing: an agent does the job on its own. Returns what to send the user,
+     * or an empty string when it found nothing worth a message.
+     */
+    runCheck = async (reminder: Reminder): Promise<string> => {
+        const text = await this.runAlone(
+            reminder.userId,
+            `check-${reminder.id}-${Date.now()}`,
+            buildCheckBrief(reminder.text, reminder.check ?? reminder.text),
+        );
+        return isNothing(text) ? "" : text;
+    };
+
+    private async runAlone(userId: string, sessionId: string, brief: string, signal?: AbortSignal): Promise<string> {
         const { registry, runtime, budgets, timezone, scheduler } = this.deps;
-        const capabilities = (await registry.available(task.userId)).filter(
-            // Its job came from a brief, not a message, so there is nothing to react to.
+        // Its job came from a brief, not a message, so there is nothing to react to.
+        const capabilities = (await registry.available(userId)).filter(
             (capability) => capability.id !== "background" && capability.id !== "reactions",
         );
-        const { tools, effects } = toolsFor(capabilities, { userId: task.userId, timezone, scheduler });
+        const { tools, effects } = toolsFor(capabilities, { userId, timezone, scheduler });
         const result = await runAgent({
             runtime,
-            systemPrompt: buildBackgroundPrompt(registry.renderIndex(capabilities), await this.computer(task.userId)),
+            systemPrompt: buildBackgroundPrompt(registry.renderIndex(capabilities), await this.computer(userId)),
             tools,
             effects,
             history: [],
-            prompt: buildUserTurn(task.brief, { now: new Date(), timezone, finished: [], running: [] }),
+            prompt: buildUserTurn(brief, { now: new Date(), timezone, finished: [], running: [] }),
             budgets,
-            sessionId: `background-${task.id}`,
+            sessionId,
             signal,
         });
         if (result.status === "failed" || !result.text) throw new Error("the sub-agent did not finish");
         return result.text;
-    };
+    }
 
     /** A computer that cannot be reached costs the user their memory and skills for one message, not the answer. */
     private async computer(userId: string): Promise<ComputerContext | undefined> {

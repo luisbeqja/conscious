@@ -29,6 +29,18 @@ export const buildSystemPrompt = (capabilities: string, computer?: ComputerConte
 export const buildBackgroundPrompt = (capabilities: string, computer?: ComputerContext): string =>
     fill(BACKGROUND, capabilities, computer);
 
+/** What a scheduled check's agent answers when there is nothing to tell the user. */
+const NOTHING = "NOTHING";
+
+export const isNothing = (text: string): boolean => text.trim().replace(/[.*_]/g, "").toUpperCase() === NOTHING;
+
+export const buildCheckBrief = (title: string, job: string): string =>
+    `This is a scheduled check the user set up: "${title}". It runs on its own, so the user is not waiting for it.
+
+${job}
+
+If there is something the user should hear, your final answer is that message. If there is nothing new or worth a message, answer exactly ${NOTHING} and nothing else: the user then gets no message.`;
+
 const formatNow = (now: Date, timezone: string): string =>
     `${new Intl.DateTimeFormat("en-GB", { dateStyle: "full", timeStyle: "short", timeZone: timezone }).format(now)} (${timezone})`;
 

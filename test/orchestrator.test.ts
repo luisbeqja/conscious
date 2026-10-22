@@ -123,3 +123,45 @@ describe("Orchestrator", () => {
         expect(turns[1]).not.toContain("GitHub is connected");
     });
 });
+
+describe("Scheduled checks", () => {
+    const scheduler = new Scheduler(async () => {});
+    afterEach(() => scheduler.stopAll());
+
+    const orchestratorWith = (runtime: ModelRuntime) =>
+        new Orchestrator({
+            registry: createRegistry(),
+            store: new InMemoryConversationStore(),
+            runtime,
+            budgets: { maxTurnsPerRun: 10, maxToolCallsPerRun: 10, maxBackgroundAgents: 1 },
+            timezone: "Europe/Rome",
+            scheduler,
+            background: new BackgroundAgents(
+                async () => "",
+                async () => {},
+                1,
+            ),
+        });
+
+    const reminder = {
+        id: "c1",
+        userId: "me",
+        text: "Lisbon flight price",
+        check: "Tell me only if MXP-LIS on 3 Nov is under 120 EUR.",
+        cron: "0 9 * * *",
+        timezone: "Europe/Rome",
+        createdAt: new Date(),
+    };
+
+    it("sends what the check found", async () => {
+        const { faux, runtime } = scriptedModel();
+        faux.setResponses([fauxAssistantMessage(fauxText("Lisbon is down to 98 EUR on 3 Nov ✈️"))]);
+        expect(await orchestratorWith(runtime).runCheck(reminder)).toBe("Lisbon is down to 98 EUR on 3 Nov ✈️");
+    });
+
+    it("stays quiet when the check found nothing", async () => {
+        const { faux, runtime } = scriptedModel();
+        faux.setResponses([fauxAssistantMessage(fauxText("NOTHING."))]);
+        expect(await orchestratorWith(runtime).runCheck(reminder)).toBe("");
+    });
+});

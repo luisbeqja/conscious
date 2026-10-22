@@ -29,6 +29,8 @@ export interface PhotonConfig {
     platforms: readonly PhotonPlatform[];
     /** Conscious is personal: senders not on this list are ignored. */
     allowedUsers: ReadonlySet<string>;
+    /** The approved template that carries messages outside WhatsApp's 24-hour window. */
+    whatsappTemplate?: { name: string; languageCode: string };
 }
 
 export interface VaultConfig {
@@ -139,5 +141,11 @@ export const loadPhotonConfig = (env: NodeJS.ProcessEnv = process.env): PhotonCo
         projectSecret: required(env, "PHOTON_PROJECT_SECRET", "SPECTRUM_PROJECT_SECRET"),
         platforms: platforms as PhotonPlatform[],
         allowedUsers,
+        whatsappTemplate: env.CONSCIOUS_WHATSAPP_TEMPLATE
+            ? {
+                  name: env.CONSCIOUS_WHATSAPP_TEMPLATE,
+                  languageCode: env.CONSCIOUS_WHATSAPP_TEMPLATE_LANGUAGE || "en",
+              }
+            : undefined,
     };
 };

@@ -4,8 +4,8 @@ import { createRegistry } from "./capabilities/index.js";
 import type { Capability } from "./capabilities/types.js";
 import { createWebCapability } from "./capabilities/web/capability.js";
 import type { Config } from "./config.js";
+import { FileConversationStore } from "./conversations/file-store.js";
 import { SandboxConversationStore } from "./conversations/sandbox-store.js";
-import { InMemoryConversationStore } from "./conversations/store.js";
 import { createModelRuntime } from "./engine/models.js";
 import { Orchestrator, SentLog } from "./engine/orchestrator.js";
 import { fetchTransport } from "./plugins/broker.js";
@@ -35,7 +35,18 @@ export const createConscious = (config: Config, notify: Notify, extra: readonly 
         sent.record(userId, text);
         return notify(userId, text);
     };
-    const scheduler = new Scheduler((reminder) => say(reminder.userId, reminder.text));
+    // The fire callback runs only after `start`, once `orchestrator` exists.
+    const scheduler: Scheduler = new Scheduler(
+        async (reminder, late) => {
+            if (!reminder.check) {
+                const text = late ? `${reminder.text}\n\n(Late: I was offline when this was due.)` : reminder.text;
+                return say(reminder.userId, text);
+            }
+            const text = await orchestrator.runCheck(reminder);
+            if (text) await say(reminder.userId, text);
+        },
+        { file: join(config.dataDir, "reminders.json") },
+    );
     // The runner is only called after startup, once `orchestrator` exists.
     const background: BackgroundAgents = new BackgroundAgents(
         (task, signal): Promise<string> => orchestrator.runBackgroundTask(task, signal),
@@ -68,7 +79,9 @@ export const createConscious = (config: Config, notify: Notify, extra: readonly 
     }
     const orchestrator = new Orchestrator({
         registry,
-        store: sandboxes ? new SandboxConversationStore(sandboxes) : new InMemoryConversationStore(),
+        store: sandboxes
+            ? new SandboxConversationStore(sandboxes)
+            : new FileConversationStore(join(config.dataDir, "conversations")),
         runtime: createModelRuntime(config.model),
         budgets: config.budgets,
         timezone: config.timezone,

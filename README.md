@@ -21,7 +21,11 @@ you remind me to call mum tomorrow at 9
 conscious [reminders_create_reminder] Done: tomorrow at 9:00 I'll nudge you to call mum 📞
 ```
 
-Reminders and finished background tasks print on their own, above the prompt. Commands: `/reminders`, `/tasks`, `/reset` (forget the conversation), `/exit`. Without a computer (below) everything lives in memory, so quitting forgets it all.
+Reminders and finished background tasks print on their own, above the prompt. Commands: `/reminders`, `/tasks`, `/reset` (forget the conversation), `/exit`.
+
+Reminders, scheduled checks and the conversation are saved in `.conscious/`, so a restart keeps them. A one-off reminder that came due while Conscious was off is sent, marked late, when it starts again (up to 12 hours late).
+
+A **scheduled check** is a reminder with a job: at the time, an agent does the work with all of Conscious's tools and messages you only if it finds something. "Every morning at 8, tell me if it will rain", "check the Lisbon flight daily and tell me if it drops under 120 EUR".
 
 ## Choose your model
 
@@ -49,7 +53,15 @@ Text the project's number. Conscious answers only the senders on the list, and o
 
 On WhatsApp, Conscious has a number of its own: a WhatsApp Business line in your Photon project. You text it from your usual WhatsApp, so your own number goes in `CONSCIOUS_ALLOWED_USERS`, not in Photon. A number that becomes a business line can no longer be used in the WhatsApp app. Set `PHOTON_PLATFORMS=whatsapp` if you only enabled WhatsApp.
 
-Messages reach Conscious over an outgoing connection to Photon, so it runs on a laptop with no public address. A sender who is not on the list is logged, so a typo in the list is easy to find. WhatsApp lets a business line write freely only within 24 hours of your last message, so a reminder set further out than that can fail to arrive.
+Messages reach Conscious over an outgoing connection to Photon, so it runs on a laptop with no public address. A sender who is not on the list is logged, so a typo in the list is easy to find. Conscious remembers which chat each user writes from, so reminders still arrive after a restart.
+
+WhatsApp lets a business line write freely only within 24 hours of your last message. Past that, Meta accepts only an approved message template. So reminders and checks arrive on any day, create one template in WhatsApp Manager (Message templates, category Utility) with one variable, for example:
+
+```
+Message from Conscious: {{1}} Reply to keep chatting.
+```
+
+Meta refuses a body that starts or ends with the variable. Once it is approved, set `CONSCIOUS_WHATSAPP_TEMPLATE` to its name (and `CONSCIOUS_WHATSAPP_TEMPLATE_LANGUAGE` if it is not `en`). Conscious then sends anything past the window inside it, on one line.
 
 ## Give it a computer
 
