@@ -29,7 +29,7 @@ Conscious is open source and self-hosted. Whoever runs it picks the model and ke
 
 ## A message, end to end
 
-1. The terminal, or Photon (iMessage and WhatsApp), hands the orchestrator your text. It waits behind any message still being answered for you.
+1. The terminal, the phone app, or Photon (iMessage and WhatsApp), hands the orchestrator your text. It waits behind any message still being answered for you.
 2. The orchestrator loads the conversation, builds the turn (the time in your timezone, background tasks that finished or are still running, your text), and runs the loop with the packs available to you.
 3. The answer streams back as it is written, tool calls shown as they start, and the conversation is saved.
 4. Reminders and finished background tasks reach you through `notify`, the one way Conscious speaks first.
@@ -40,6 +40,7 @@ Conscious reaches people through [Photon Spectrum](https://photon.codes/spectrum
 
 - **A user is their sender id** (phone number or Apple ID), so the same person on iMessage and WhatsApp is one conversation. Only ids on `CONSCIOUS_ALLOWED_USERS` are answered.
 - **Replies and notifications go to the chat the user last wrote from.** Nobody is messaged before they write first, which also keeps the numbers looking like normal chats to Apple's and Meta's spam checks.
+- **The phone app** (`mobile/`, Expo) is a channel of its own, `src/channels/app.ts`: a WebSocket to the host, signed in with an access code per user. It streams the answer as it is written and shows tool use and reactions live. It keeps its own transcript of the bubbles and files in `.conscious/app/`, so a phone that was closed sees what it missed. With Photon running too, the app user with the same id is the same conversation, and Conscious speaks first wherever the user last wrote.
 - **Spectrum Cloud owns the numbers and lines.** WhatsApp goes through the WhatsApp Business API, so Meta's rule against general-purpose assistants applies; it is allowed in the EU while the Commission's interim order stands.
 
 ## Skills

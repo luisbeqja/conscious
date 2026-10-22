@@ -1,6 +1,6 @@
 # Conscious
 
-A personal assistant for your life, not your job: reminders, plans, errands, things to look up. It keeps talking while longer jobs run in the background, and tells you when they are done. You text it on iMessage or WhatsApp through [Photon](https://photon.codes), or chat with it in the terminal.
+A personal assistant for your life, not your job: reminders, plans, errands, things to look up. It keeps talking while longer jobs run in the background, and tells you when they are done. You text it on iMessage or WhatsApp through [Photon](https://photon.codes), chat with it in its own phone app, or in the terminal.
 
 Conscious is open source and built in Europe. You run it yourself, on your own machine or server, with the model you choose: a hosted one such as Mistral, Claude or GPT, or a local one through Ollama. Your accounts and plugins stay on your install. With a computer (below), memory and conversations live in an E2B sandbox that you can also run yourself.
 
@@ -68,6 +68,25 @@ Meta refuses a body that starts or ends with the variable. Once it is approved, 
 Send a voice note and Conscious answers what you said. It needs a transcription service: Mistral's Voxtral with `MISTRAL_API_KEY` (picked first, hosted in the EU), OpenAI with `OPENAI_API_KEY`, or your own Whisper server (whisper.cpp, Speaches) with `CONSCIOUS_TRANSCRIBE_URL`. Without one, it asks you to write instead. `CONSCIOUS_TRANSCRIBE` and `CONSCIOUS_TRANSCRIBE_MODEL` choose explicitly.
 
 Photos go to the model when it can see them. Every file you send is saved on its computer in `files/inbox/`, where the PDF, Word and Excel skills open it, and it can send files back: a plan as a PDF, a converted spreadsheet. Without a computer, it reads small text files (CSV, plain text) and photos, and says it cannot open the rest.
+
+## Use the phone app
+
+`mobile/` is Conscious's own app for iPhone and Android: one chat, answers written out as they come, what it is doing while it works ("Searching the web…"), its reactions, photos both ways, and reminders that arrive while you are away. No messaging account or Meta approval is involved: the app talks straight to your Conscious.
+
+```bash
+pnpm app
+```
+
+```
+Phone app on http://192.168.1.20:8788
+  New access code for me: k7qd-m2xa-9wfe-c4tn
+```
+
+Then run the app (see [`mobile/README.md`](mobile/README.md)) and enter that address and code. `pnpm app` talks as `me`, the same user as `pnpm chat`.
+
+To have the app next to WhatsApp and iMessage, set `CONSCIOUS_APP_USERS` to your own number and run `pnpm photon`: the app and your messaging chat are then one conversation. Reminders go to whichever you wrote from last. Each user listed gets an access code the first time; codes are kept in `.conscious/app-codes.json`, and deleting a line there and restarting gives that user a new one.
+
+The app server runs on `CONSCIOUS_APP_PORT` (8788). On your home network the phone reaches it directly. Away from home, use a private network such as [Tailscale](https://tailscale.com), or an https tunnel; the code is the only lock, so do not put the port on the open internet without https.
 
 ## Give it a computer
 
@@ -156,7 +175,9 @@ pnpm build
 src/
 ├─ main.ts               the terminal chat
 ├─ photon.ts             iMessage and WhatsApp through Photon Spectrum
+├─ app.ts                the phone app on its own
 ├─ channels/photon.ts    Spectrum messages → orchestrator, replies and notifications back
+├─ channels/app.ts       the phone app's WebSocket: streamed replies, reactions, files
 ├─ create-conscious.ts   composition root: which implementation sits behind each seam
 ├─ config.ts             environment → typed config
 ├─ engine/
@@ -185,6 +206,7 @@ skills/                  bundled skills, copied into every computer
 mcp/                     MCP server manifests, one folder per server
 test/                    vitest
 plugins/                 the bundled plugins, one folder per plugin
+mobile/                  the phone app (Expo, React Native)
 ```
 
 ## Add a capability
