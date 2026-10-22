@@ -84,6 +84,18 @@ describe("SKILL.md", () => {
         expect(info?.requires.external).toEqual(["google_token.json"]);
     });
 
+    it("reads prerequisites, and skips a secret marked optional", () => {
+        const info = parseSkillFile(
+            skill(
+                "airtable",
+                "required_environment_variables:\n  - name: USDA_API_KEY\n    optional: true\nmetadata:\n  other-agent:\n    prerequisites:\n      env_vars: [AIRTABLE_API_KEY]\n      commands: [curl]\n",
+            ),
+            "airtable",
+        );
+        expect(info?.requires.bins).toEqual(["curl"]);
+        expect(info?.requires.external).toEqual(["AIRTABLE_API_KEY"]);
+    });
+
     it("rejects a file with no frontmatter, no description or a bad name", () => {
         expect(parseSkillFile("# Just text", "x")).toBeUndefined();
         expect(parseSkillFile("---\nname: x\n---\n", "x")).toBeUndefined();
