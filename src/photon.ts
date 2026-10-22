@@ -8,6 +8,7 @@ import { loadConfig, loadPhotonConfig, type PhotonPlatform } from "./config.js";
 import { createConscious } from "./create-conscious.js";
 import { modelSetupProblem } from "./engine/models.js";
 import { connectServers } from "./mcp/servers.js";
+import { createTranscriber } from "./media/transcribe.js";
 
 // With Spectrum Cloud credentials, both providers take their numbers and lines from the project.
 const PROVIDERS: Record<PhotonPlatform, () => PlatformProviderConfig> = {
@@ -36,6 +37,7 @@ let spectrum: Awaited<ReturnType<typeof Spectrum>> | undefined;
 channel = new PhotonChannel(orchestrator, photon.allowedUsers, {
     chats: new ChatBook(join(config.dataDir, "chats.json")),
     template: photon.whatsappTemplate,
+    transcriber: config.transcription && createTranscriber(config.transcription),
     openSpace: async (platform, spaceId) => {
         if (!spectrum) throw new Error("Photon is not connected yet");
         const provider = platform === "imessage" ? imessage : whatsappBusiness;
@@ -57,7 +59,9 @@ spectrum = await Spectrum({
     telemetry: false,
 });
 scheduler.start();
-console.log(`Conscious on Photon · ${photon.platforms.join(", ")} · ${config.model.provider}/${config.model.id}`);
+console.log(
+    `Conscious on Photon · ${photon.platforms.join(", ")} · ${config.model.provider}/${config.model.id} · voice notes: ${config.transcription?.provider ?? "off"}`,
+);
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
     process.on(signal, async () => {

@@ -3,6 +3,7 @@ import type { CapabilityRegistry } from "../capabilities/registry.js";
 import type { Capability, ToolContext } from "../capabilities/types.js";
 import type { Budgets } from "../config.js";
 import type { ConversationStore } from "../conversations/store.js";
+import { type IncomingFile, type OutgoingFile, prepareFiles, withoutImages } from "../media/incoming.js";
 import {
     buildBackgroundPrompt,
     buildCheckBrief,
@@ -55,6 +56,10 @@ export interface SendOptions {
     onProgress?: (progress: RunProgress) => void;
     /** Reacts to the message being answered. Without it the agent cannot react. */
     react?: (emoji: string) => Promise<boolean>;
+    /** Files that came with the message. */
+    files?: readonly IncomingFile[];
+    /** Sends a file into the chat. Without it the agent cannot send files. */
+    sendFile?: (file: OutgoingFile) => Promise<void>;
 }
 
 const FALLBACK = "Sorry, something went wrong on my side. Try again in a moment?";
@@ -105,7 +110,20 @@ export class Orchestrator {
                   return done === true;
               }
             : undefined;
-        const { tools, effects } = toolsFor(capabilities, { userId, timezone, scheduler, background, react });
+        const { tools, effects } = toolsFor(capabilities, {
+            userId,
+            timezone,
+            scheduler,
+            background,
+            react,
+            sendFile: options.sendFile,
+        });
+        const files = options.files?.length
+            ? await prepareFiles(options.files, {
+                  seesImages: runtime.model.input.includes("image"),
+                  sandbox: await this.deps.sandboxes?.forUser(userId).catch(() => undefined),
+              })
+            : { notes: [], images: [] };
         const result = await runAgent({
             runtime,
             systemPrompt: buildSystemPrompt(registry.renderIndex(capabilities), await this.computer(userId)),
@@ -118,12 +136,14 @@ export class Orchestrator {
                 finished: background.takeUnreported(userId),
                 running: background.running(userId),
                 sent: this.deps.sent?.take(userId),
+                files: files.notes,
             }),
+            images: files.images,
             budgets,
             sessionId: userId,
             onProgress: options.onProgress,
         });
-        await store.save(userId, result.messages);
+        await store.save(userId, withoutImages(result.messages));
         if (!result.text && reacted && result.status === "completed") return "";
         return result.text || FALLBACK;
     }

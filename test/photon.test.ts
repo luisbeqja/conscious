@@ -128,18 +128,86 @@ describe("PhotonChannel", () => {
         expect(imessageChat.sent).not.toContain("Call mum 📞");
     });
 
-    it("tells the user it can only read text", async () => {
+    it("writes out a voice note and hands the agent the text", async () => {
+        const orchestrator = echo();
+        const heard: string[] = [];
+        const channel = new PhotonChannel(orchestrator, new Set(["+39333"]), {
+            transcriber: {
+                name: "fake",
+                transcribe: async (_audio, mimeType) => {
+                    heard.push(mimeType);
+                    return "remind me to buy milk";
+                },
+            },
+        });
+        const { space, sent } = fakeSpace("chat-1");
+        await channel.handle(space, {
+            ...inbound("m1", "+39333", ""),
+            content: { type: "voice", mimeType: "audio/ogg; codecs=opus", read: async () => Buffer.from("ogg") },
+        } as unknown as Message);
+
+        expect(heard).toEqual(["audio/ogg; codecs=opus"]);
+        expect(orchestrator.calls).toEqual([["+39333", "(voice note) remind me to buy milk"]]);
+        expect(sent).toEqual(["you said: (voice note) remind me to buy milk"]);
+    });
+
+    it("says so when it cannot listen, without bothering the agent", async () => {
         const orchestrator = echo();
         const channel = new PhotonChannel(orchestrator, new Set(["+39333"]));
         const { space, sent } = fakeSpace("chat-1");
-
         await channel.handle(space, {
             ...inbound("m1", "+39333", ""),
-            content: { type: "attachment" },
+            content: { type: "voice", mimeType: "audio/ogg", read: async () => Buffer.from("") },
         } as unknown as Message);
 
         expect(orchestrator.calls).toEqual([]);
-        expect(sent).toEqual(["I can only read text for now."]);
+        expect(sent[0]).toMatch(/voice notes/);
+    });
+
+    it("passes files to the agent and lets it send files back", async () => {
+        const got: { files?: { name: string; data: Uint8Array }[] }[] = [];
+        const orchestrator = {
+            send: async (
+                _userId: string,
+                _text: string,
+                options: {
+                    files?: { name: string; mimeType: string; data: Uint8Array }[];
+                    sendFile?: (file: { name: string; mimeType: string; data: Uint8Array }) => Promise<void>;
+                },
+            ) => {
+                got.push(options);
+                await options.sendFile?.({ name: "plan.pdf", mimeType: "application/pdf", data: new Uint8Array([1]) });
+                return "Here's your plan.";
+            },
+        };
+        const channel = new PhotonChannel(orchestrator as never, new Set(["+39333"]));
+        const { space, sent } = fakeSpace("chat-1");
+        await channel.handle(space, {
+            ...inbound("m1", "+39333", ""),
+            content: {
+                type: "attachment",
+                name: "ticket.pdf",
+                mimeType: "application/pdf",
+                size: 3,
+                read: async () => Buffer.from("pdf"),
+            },
+        } as unknown as Message);
+
+        expect(got[0]?.files?.map((file) => file.name)).toEqual(["ticket.pdf"]);
+        expect(sent).toHaveLength(2);
+        expect(sent[1]).toBe("Here's your plan.");
+    });
+
+    it("ignores reactions instead of answering them", async () => {
+        const orchestrator = echo();
+        const channel = new PhotonChannel(orchestrator, new Set(["+39333"]));
+        const { space, sent } = fakeSpace("chat-1");
+        await channel.handle(space, {
+            ...inbound("m1", "+39333", ""),
+            content: { type: "reaction" },
+        } as unknown as Message);
+        expect(orchestrator.calls).toEqual([]);
+        expect(sent).toEqual([]);
     });
 });
 

@@ -1,4 +1,5 @@
 import { Agent, type AgentMessage, type AgentTool } from "@earendil-works/pi-agent-core";
+import type { ImageContent } from "@earendil-works/pi-ai";
 import type { Effect } from "../capabilities/types.js";
 import type { Budgets } from "../config.js";
 import type { ModelRuntime } from "./models.js";
@@ -10,6 +11,8 @@ export interface AgentRun {
     effects: ReadonlyMap<string, Effect>;
     history: AgentMessage[];
     prompt: string;
+    /** Photos sent with the prompt. */
+    images?: ImageContent[];
     budgets: Budgets;
     sessionId: string;
     signal?: AbortSignal;
@@ -92,7 +95,7 @@ export const runAgent = async (run: AgentRun): Promise<AgentRunResult> => {
     const onAbort = () => agent.abort();
     run.signal?.addEventListener("abort", onAbort, { once: true });
     try {
-        await agent.prompt(run.prompt);
+        await agent.prompt(run.prompt, run.images?.length ? run.images : undefined);
     } catch (error) {
         console.error(`[agent ${run.sessionId}] run failed`, error);
         status = "failed";

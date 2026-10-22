@@ -54,6 +54,8 @@ export const buildUserTurn = (
         running: readonly BackgroundTask[];
         /** What Conscious said on its own since the last message: reminders, accounts connected. */
         sent?: readonly string[];
+        /** What came with the message: photos, documents, and where they were saved. */
+        files?: readonly string[];
     },
 ): string => {
     const lines = [`Now: ${formatNow(context.now, context.timezone)}`];
@@ -62,5 +64,6 @@ export const buildUserTurn = (
         lines.push(`Background task "${task.title}" ${task.status}; the user was sent: ${task.result ?? "(nothing)"}`);
     }
     for (const task of context.running) lines.push(`Still running in the background: "${task.title}" (${task.id})`);
+    lines.push(...(context.files ?? []));
     return `<context>\n${lines.join("\n")}\n</context>\n\n${text}`;
 };

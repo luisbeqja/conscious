@@ -96,7 +96,6 @@ Secrets never pass through the chat. When a plugin needs an account you have not
 3. **More sign-in on the Vault page.** OAuth 2.1 with dynamic registration for MCP servers (Todoist, Notion, Strava, Dropbox), and Spotify with the install's own client, like Google.
 4. **An egress proxy for the computer**, so skills can reach only the hosts the user approved, with the Vault adding tokens on the way out instead of the computer holding them.
 5. **Memory, better.** Today it is `memory/MEMORY.md` in the sandbox, written by the agent and read into every prompt. Next: search over older notes when the index outgrows the prompt.
-6. **Voice notes and photos** in, read with transcription and vision.
-7. **A browser in the sandbox** for booking, forms and price checks, with internet scoped so reads and commits stay apart.
-8. **Tracing** with Langfuse, one trace per message, sub-agents as child agents.
-9. **A stronger plugin sandbox:** run plugin calls in a container or microVM with no network, for installs with many users.
+6. **A browser in the sandbox** for booking, forms and price checks, with internet scoped so reads and commits stay apart.
+7. **Tracing** with Langfuse, one trace per message, sub-agents as child agents.
+8. **A stronger plugin sandbox:** run plugin calls in a container or microVM with no network, for installs with many users.

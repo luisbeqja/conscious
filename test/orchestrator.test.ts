@@ -165,3 +165,37 @@ describe("Scheduled checks", () => {
         expect(await orchestratorWith(runtime).runCheck(reminder)).toBe("");
     });
 });
+
+describe("Messages with files", () => {
+    const scheduler = new Scheduler(async () => {});
+
+    it("tells the agent what came in, and saves the conversation without the photo", async () => {
+        const { faux, runtime } = scriptedModel();
+        faux.setResponses([fauxAssistantMessage(fauxText("Milk and eggs, got it."))]);
+        const store = new InMemoryConversationStore();
+        const orchestrator = new Orchestrator({
+            registry: createRegistry(),
+            store,
+            runtime: { ...runtime, model: { ...runtime.model, input: ["text", "image"] } },
+            budgets: { maxTurnsPerRun: 10, maxToolCallsPerRun: 10, maxBackgroundAgents: 1 },
+            timezone: "Europe/Rome",
+            scheduler,
+            background: new BackgroundAgents(
+                async () => "",
+                async () => {},
+                1,
+            ),
+        });
+        await orchestrator.send("me", "", {
+            files: [
+                { name: "list.csv", mimeType: "text/csv", data: new TextEncoder().encode("milk,eggs") },
+                { name: "fridge.png", mimeType: "image/png", data: new Uint8Array([137, 80, 78, 71]) },
+            ],
+        });
+        const saved = JSON.stringify(await store.load("me"));
+        expect(saved).toContain("milk,eggs");
+        expect(saved).toContain("fridge.png (image/png");
+        expect(saved).toContain("[a photo the user sent]");
+        expect(saved).not.toContain("iVBORw");
+    });
+});

@@ -132,8 +132,18 @@ class E2BUserSandbox implements Sandbox {
         return this.instance.files.read(absolute);
     }
 
-    async writeFile(path: string, content: string): Promise<void> {
-        await this.instance.files.write(resolvePath(this.home, path), content);
+    async readBytes(path: string): Promise<Uint8Array | undefined> {
+        const absolute = resolvePath(this.home, path);
+        if (!(await this.instance.files.exists(absolute))) return undefined;
+        return this.instance.files.read(absolute, { format: "bytes" });
+    }
+
+    async writeFile(path: string, content: string | Uint8Array): Promise<void> {
+        const data =
+            typeof content === "string"
+                ? content
+                : (content.buffer.slice(content.byteOffset, content.byteOffset + content.byteLength) as ArrayBuffer);
+        await this.instance.files.write(resolvePath(this.home, path), data);
     }
 
     async listFiles(path: string): Promise<FileEntry[]> {

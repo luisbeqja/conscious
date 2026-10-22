@@ -63,6 +63,12 @@ Message from Conscious: {{1}} Reply to keep chatting.
 
 Meta refuses a body that starts or ends with the variable. Once it is approved, set `CONSCIOUS_WHATSAPP_TEMPLATE` to its name (and `CONSCIOUS_WHATSAPP_TEMPLATE_LANGUAGE` if it is not `en`). Conscious then sends anything past the window inside it, on one line.
 
+### Voice notes, photos and files
+
+Send a voice note and Conscious answers what you said. It needs a transcription service: Mistral's Voxtral with `MISTRAL_API_KEY` (picked first, hosted in the EU), OpenAI with `OPENAI_API_KEY`, or your own Whisper server (whisper.cpp, Speaches) with `CONSCIOUS_TRANSCRIBE_URL`. Without one, it asks you to write instead. `CONSCIOUS_TRANSCRIBE` and `CONSCIOUS_TRANSCRIBE_MODEL` choose explicitly.
+
+Photos go to the model when it can see them. Every file you send is saved on its computer in `files/inbox/`, where the PDF, Word and Excel skills open it, and it can send files back: a plan as a PDF, a converted spreadsheet. Without a computer, it reads small text files (CSV, plain text) and photos, and says it cannot open the rest.
+
 ## Give it a computer
 
 Conscious can have a computer of its own: one [E2B](https://e2b.dev) sandbox per user. Everything it knows about you lives there: its memory (`memory/MEMORY.md`, read into every conversation), the files it keeps for you (`files/`), and the conversation itself (`.conscious/conversation.json`). It also gets a shell and file tools that run there, never on your machine.

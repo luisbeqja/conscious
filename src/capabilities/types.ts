@@ -1,5 +1,6 @@
 import type { Static, TSchema } from "typebox";
 import type { BackgroundAgents } from "../agents/background-agents.js";
+import type { OutgoingFile } from "../media/incoming.js";
 import type { Scheduler } from "../scheduler/scheduler.js";
 
 /**
@@ -16,6 +17,8 @@ export interface ToolContext {
     background?: BackgroundAgents;
     /** Reacts to the message being answered; false when the chat cannot show it. Absent where there is none. */
     react?: (emoji: string) => Promise<boolean>;
+    /** Sends a file into the user's chat. Only while answering a message on a channel that can. */
+    sendFile?: (file: OutgoingFile) => Promise<void>;
     signal?: AbortSignal;
 }
 
