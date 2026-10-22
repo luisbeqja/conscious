@@ -81,7 +81,7 @@ describe("AppChannel", () => {
         const socket = new WebSocket(url);
         await new Promise((resolve) => socket.once("open", resolve));
         socket.send(JSON.stringify({ type: "auth", code: "nope" }));
-        const [code] = (await new Promise((resolve) => socket.once("close", (...args) => resolve(args)))) as [number];
+        const code = await new Promise<number>((resolve) => socket.once("close", (closeCode) => resolve(closeCode)));
         expect(code).toBe(4003);
     });
 
