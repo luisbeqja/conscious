@@ -28,4 +28,10 @@ describe("loadConfig", () => {
         expect(photon.projectId).toBe("project");
         expect(photon.projectSecret).toBe("secret");
     });
+
+    it("stops at start on a key copied with masking dots", () => {
+        expect(() => loadConfig({ ANTHROPIC_API_KEY: "sk-ant-u••••", CONSCIOUS_MCP_SERVERS: "none" })).toThrow(
+            'ANTHROPIC_API_KEY has a "•" at position 9',
+        );
+    });
 });
