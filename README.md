@@ -112,7 +112,7 @@ To check a setup before you text it, run `pnpm computer:check`. It starts a thro
 
 Skills are instructions for jobs that come up often, in the [AgentSkills](https://agentskills.io) format. They live on the user's computer, in `skills/`: the repo's [`skills/`](skills/) folder is copied in when a computer starts, next to the skills the agent wrote for that user. The system prompt lists the ones that can run there, and the agent reads a skill's `SKILL.md` before it uses it.
 
-22 ship today:
+23 ship today:
 
 | Area | Skills |
 | --- | --- |
@@ -120,10 +120,11 @@ Skills are instructions for jobs that come up often, in the [AgentSkills](https:
 | Watching | `product-price-monitor`, `watchers`, `stocks` |
 | Daily life | `weather`, `maps`, `fitness-nutrition` |
 | Planning | `weekly-review-planning`, `decision-questionnaire`, `one-three-one-rule`, `social-media-content-calendar`, `llm-wiki` |
+| Mail | `email-inbox-triage` (with Gmail or any IMAP mailbox) |
 | Documents | `pdf`, `docx`, `xlsx`, `powerpoint`, `document-to-action-items` |
 | Agent | `skill-creator` |
 
-Without a computer, the skills that need no scripts and no files still work, read straight from the repo and followed with Conscious's own tools (web search, page reading, reminders): `weather`, `product-price-monitor`, `weekly-review-planning`, `decision-questionnaire`, `one-three-one-rule`, `social-media-content-calendar`, `document-to-action-items`. The rest need a computer. A skill can opt out with `"computer": true` in its `conscious.json`.
+Without a computer, the skills that need no scripts and no files still work, read straight from the repo and followed with Conscious's own tools (web search, page reading, reminders): `weather`, `product-price-monitor`, `weekly-review-planning`, `decision-questionnaire`, `one-three-one-rule`, `social-media-content-calendar`, `document-to-action-items`, `email-inbox-triage`. The rest need a computer. A skill can opt out with `"computer": true` in its `conscious.json`.
 
 Skills that fetch from the web show up on a computer only with `CONSCIOUS_SANDBOX_INTERNET=true`. Watching skills can run on a schedule as checks (see Chat with it). To copy another one at a pinned commit:
 
@@ -133,13 +134,15 @@ pnpm skills:import https://github.com/<owner>/<repo> skills/<name> --commit <sha
 
 The agent also saves its own skills after work worth repeating (`skills_save_skill`), and keeps every earlier version so a change can be undone.
 
-## Google Calendar and Gmail
+## Google: Calendar, Gmail, Drive, Contacts and Tasks
 
-Ask "what's on this week?" and Conscious sends a Vault link with a **Sign in with Google** button. After that it can check and add calendar events, and search, read and draft email. It never sends email, deletes, or invites anyone: drafts wait in Gmail for you.
+Ask "what's on this week?" and Conscious sends a Vault link with a **Sign in with Google** button. After that it can check and add calendar events; search, read and draft email; find and read files in Drive (Docs and Slides as text, Sheets as CSV); look people up in Contacts (numbers, birthdays, addresses); and list, add and tick off Google Tasks. It never sends email, deletes, or invites anyone: drafts wait in Gmail for you.
+
+Someone who signed in before Drive, Contacts and Tasks were added is asked to sign in once more the first time Conscious needs them.
 
 Conscious is self-hosted, so each install brings its own Google sign-in client. Once:
 
-1. In [Google Cloud](https://console.cloud.google.com/), create a project and enable the **Google Calendar API** and **Gmail API**.
+1. In [Google Cloud](https://console.cloud.google.com/), create a project and enable the **Google Calendar API**, **Gmail API**, **Google Drive API**, **People API** and **Google Tasks API**.
 2. Under Google Auth Platform, set up the consent screen as **External**, and add your own Google address as a test user.
 3. Create an OAuth client of type **Web application**, with this redirect URI: your `CONSCIOUS_PUBLIC_URL` followed by `/vault/oauth/google` (for example `https://conscious.example.com/vault/oauth/google`, or `http://localhost:8787/vault/oauth/google` in the terminal).
 4. Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in `.env`.
@@ -148,7 +151,30 @@ While the app is in Testing, Google ends the sign-in after 7 days, and Conscious
 
 
 
-Conscious connects to vendor-hosted MCP servers listed in [`mcp/`](mcp/), from the host, and offers their tools like any capability. By default that is Kiwi.com flights and trivago hotels, which need no account; set `CONSCIOUS_MCP_SERVERS` to choose (`alltrails`, or `none`). A tool that is not marked read-only waits for your yes. Servers that need a sign-in come with OAuth on the Vault page.
+## Any other mailbox
+
+For mail outside Gmail (iCloud, GMX, WEB.DE, Libero, Posteo, Yahoo, Fastmail, a work or own domain), ask "anything from the landlord?" and Conscious sends a Vault link that asks for your address and an app password. It signs in to the mail server over IMAPS to check them before saving. After that it searches and reads mail, without marking anything read, and saves replies in your Drafts folder for you to send. It never sends, moves or deletes. Common providers' servers are known; for others the page has a box for the IMAP server. Outlook.com and Hotmail no longer accept passwords over IMAP, so they do not work this way.
+
+## Spotify
+
+Ask "what am I listening to?" or "put on something for cooking" and Conscious sends a Vault link with a **Sign in with Spotify** button. After that it sees what plays and on which device, searches, reads your history and top artists, lists your playlists and makes private ones. Playing, pausing, skipping and queueing need Spotify Premium and an open Spotify app.
+
+Like Google, each install brings its own Spotify app. Once:
+
+1. At [developer.spotify.com](https://developer.spotify.com/dashboard), create an app and tick **Web API**.
+2. Add the redirect URI: your `CONSCIOUS_PUBLIC_URL` followed by `/vault/oauth/spotify`. Spotify refuses `localhost`, so in the terminal it is `http://127.0.0.1:8787/vault/oauth/spotify`; Conscious sends that form on its own.
+3. Under User Management, add the Spotify accounts that will use it.
+4. Set `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET` in `.env`.
+
+Spotify lets an app in development mode serve only a few listed users, and its owner needs Premium. That fits one household; more people need Spotify's review.
+
+## Notion, Todoist, Strava and Dropbox
+
+Conscious connects to vendor-hosted MCP servers listed in [`mcp/`](mcp/), from the host, and offers their tools like any capability. Kiwi.com flights and trivago hotels need no account and are on from the start.
+
+Notion, Todoist, Strava and Dropbox need your account. Ask "what's on my Todoist today?" and Conscious sends a Vault link with a **Sign in with Todoist** button. You sign in on Todoist's own page, and from then on Conscious calls Todoist as you. There is nothing to set up first: Conscious registers itself with each service the first time someone signs in. The redirect goes to your `CONSCIOUS_PUBLIC_URL`, so it works on the same machine with `http://localhost:8787`, and from a phone through an https address.
+
+Set `CONSCIOUS_MCP_SERVERS` to choose (for example `kiwi,notion,todoist`, or `none`). Reading is free; adding and changing pages or tasks is allowed; deleting, and any tool a manifest does not mark, waits for your yes.
 
 ## Plugins
 

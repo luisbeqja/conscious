@@ -1,0 +1,19 @@
+# A vendor-hosted MCP server. Conscious connects to it from the host, as each user, after they sign
+# in on the Vault page (OAuth 2.1 with dynamic client registration). Nothing runs locally.
+manifest_version: 1
+
+name: strava
+title: Strava
+description: "The user's Strava: activities, fitness trends and training load. Needs a Strava subscription."
+
+transport:
+  type: http
+  url: https://mcp.strava.com/mcp
+
+auth:
+  type: oauth
+
+enabled_by_default: true
+
+# The server only reads.
+default_effect: read

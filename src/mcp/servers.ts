@@ -128,11 +128,15 @@ export const connectServer = async (
     };
 };
 
-/** Connects to every chosen server. One that does not answer is left out and logged, never fatal. */
+/**
+ * Connects to every chosen server that needs no sign-in; the others connect per user. One that
+ * does not answer is left out and logged, never fatal.
+ */
 export const connectServers = async (
-    entries: readonly McpServerEntry[],
+    chosen: readonly McpServerEntry[],
     transport?: TransportFactory,
 ): Promise<{ capabilities: Capability[]; close: () => Promise<void> }> => {
+    const entries = chosen.filter((entry) => entry.auth === "none");
     const settled = await Promise.allSettled(entries.map((entry) => connectServer(entry, transport)));
     const connected = settled.flatMap((result, index) => {
         if (result.status === "fulfilled") return [result.value];

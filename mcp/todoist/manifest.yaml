@@ -1,0 +1,49 @@
+# A vendor-hosted MCP server. Conscious connects to it from the host, as each user, after they sign
+# in on the Vault page (OAuth 2.1 with dynamic client registration). Nothing runs locally.
+manifest_version: 1
+
+name: todoist
+title: Todoist
+description: "The user's Todoist: find, add, change and complete tasks and projects."
+
+transport:
+  type: http
+  url: https://ai.todoist.net/mcp
+
+auth:
+  type: oauth
+
+enabled_by_default: true
+
+# search and fetch repeat the find-* tools; project templates are rarely wanted.
+tools:
+  default_excluded:
+    - search
+    - fetch
+    - export-project-template
+    - import-project-template
+
+# Tasks in the user's own list can be changed back. Deleting, and anything not listed, waits for a yes.
+default_effect: commit
+effects:
+  get-overview: read
+  user-info: read
+  find-tasks: read
+  find-tasks-by-date: read
+  find-completed-tasks: read
+  find-projects: read
+  find-sections: read
+  find-comments: read
+  find-activity: read
+  find-project-collaborators: read
+  list-workspaces: read
+  add-tasks: draft
+  add-projects: draft
+  add-sections: draft
+  add-comments: draft
+  update-tasks: draft
+  update-projects: draft
+  update-sections: draft
+  update-comments: draft
+  complete-tasks: draft
+  uncomplete-tasks: draft

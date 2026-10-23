@@ -60,7 +60,8 @@ A skill is a folder with a `SKILL.md` in the [AgentSkills](https://agentskills.i
 - At startup Conscious connects to the chosen servers (`CONSCIOUS_MCP_SERVERS`, or the catalog's defaults) and turns each into a capability with tools named `<server>_<tool>`. A server that does not answer is left out and logged.
 - Calls run on the host, never on the user's computer, so a future token for the server never enters the sandbox.
 - A tool's effect is the manifest's, then `read` if the server marks it read-only, then the manifest's `default_effect`, and `commit` when nothing says otherwise.
-- Today: Kiwi.com flights and trivago hotels (on by default), AllTrails (off: its schemas cost about 24K tokens a message). Servers that need a sign-in (Todoist, Notion, Strava) wait for OAuth 2.1 on the Vault page.
+- Servers with `auth: none` connect once at start. Servers with `auth: oauth` connect per user, only after that user signs in on the Vault page: Conscious finds the server's authorization server (RFC 9728), registers itself as a client once per run (dynamic registration), sends the user there with PKCE, and keeps the tokens in the Vault under `mcp-<name>`, an id no plugin can use. Every request carries that user's token; a refused one is refreshed once, and a sign-in that can no longer be refreshed is dropped so the agent offers a new link.
+- Today: Kiwi.com flights and trivago hotels (no account), Notion, Todoist, Strava and Dropbox (sign-in), AllTrails (off: its schemas cost about 24K tokens a message).
 
 ## Plugins
 
@@ -88,13 +89,13 @@ Secrets never pass through the chat. When a plugin needs an account you have not
 - Each connector says where to get its token, which hosts it goes to, which header carries it, and how to check it.
 - **The agent can define a connector itself.** Built-in connectors live in `src/plugins/connectors.ts` (GitHub today). For any other service with an API key or personal token, the agent reads the service's docs and defines the connector inside its plugin's `auth`: name, hosts, how-to link and steps, a verify URL on one of the hosts, and the header. Review checks it: public hosts only, https, the verify URL on the connector's hosts, no reserved header, and a built-in id cannot be redefined.
 - **The hosts you see are what you approve.** The Vault page lists the hosts the token will go to, and warns you when Conscious wrote the connection itself. The Vault stores those hosts with the sealed token. At every call the plugin's hosts must all be approved hosts; if not, the agent is told to get a fresh link. So a second plugin that reuses a connector id with an extra host cannot carry your token there.
-- **Sign-in by redirect.** Google uses the install's own OAuth client: the Vault page sends the user to Google with the link's code as `state`, and the callback keeps the refresh token. The `google` capability runs on the host, refreshes access tokens itself, and a plugin can never use that connector. Open banking and OAuth MCP servers come next on the same page.
+- **Sign-in by redirect.** The Vault page sends the user to the provider with the link's code as `state`, and the callback at `/vault/oauth/<connector>` keeps what the provider gives back. Google uses the install's own OAuth client; MCP servers register Conscious themselves. The capabilities that use them run on the host and refresh tokens themselves, and a plugin can never use these connectors.
 
 ## Next, in order
 
 1. **Durable storage.** With a computer, the conversation and memory survive restarts in the user's sandbox; without one, the conversation is saved in `.conscious/conversations/`. The Vault, plugins, installs, reminders and the chat each user writes from are saved in `.conscious/` on the host. Background tasks still live in memory; a restart forgets them.
 2. **Approvals in the chat.** A `commit` becomes a Yes / No question (an iMessage poll or mini-app, a typed yes on WhatsApp); only the answer runs it.
-3. **More sign-in on the Vault page.** OAuth 2.1 with dynamic registration for MCP servers (Todoist, Notion, Strava, Dropbox), and Spotify with the install's own client, like Google.
+3. **More sign-in on the Vault page.** Open banking (EU PSD2 aggregators).
 4. **An egress proxy for the computer**, so skills can reach only the hosts the user approved, with the Vault adding tokens on the way out instead of the computer holding them.
 5. **Memory, better.** Today it is `memory/MEMORY.md` in the sandbox, written by the agent and read into every prompt. Next: search over older notes when the index outgrows the prompt.
 6. **A browser in the sandbox** for booking, forms and price checks, with internet scoped so reads and commits stay apart.

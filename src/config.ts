@@ -4,6 +4,7 @@ import type { GoogleClient } from "./google/oauth.js";
 import { type McpServerEntry, readCatalog, selectServers } from "./mcp/catalog.js";
 import type { TranscriptionConfig } from "./media/transcribe.js";
 import type { E2BOptions } from "./sandbox/e2b.js";
+import type { SpotifyClient } from "./spotify/oauth.js";
 import type { SearchConfig } from "./web/search.js";
 
 export interface Config {
@@ -21,8 +22,10 @@ export interface Config {
     mcpServers: McpServerEntry[];
     /** Where web searches go. */
     search: SearchConfig;
-    /** This install's Google OAuth client. Without it, Google Calendar and Gmail are not offered. */
+    /** This install's Google OAuth client. Without it, the Google account is not offered. */
     google?: GoogleClient;
+    /** This install's Spotify app. Without it, Spotify is not offered. */
+    spotify?: SpotifyClient;
     /** Where voice notes are turned into text. Without it, Conscious says it cannot listen yet. */
     transcription?: TranscriptionConfig;
 }
@@ -95,6 +98,10 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): Config => {
         google:
             env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET
                 ? { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET }
+                : undefined,
+        spotify:
+            env.SPOTIFY_CLIENT_ID && env.SPOTIFY_CLIENT_SECRET
+                ? { clientId: env.SPOTIFY_CLIENT_ID, clientSecret: env.SPOTIFY_CLIENT_SECRET }
                 : undefined,
         transcription: loadTranscriptionConfig(env),
     };

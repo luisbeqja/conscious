@@ -5,7 +5,10 @@ export interface GoogleClient {
     clientSecret: string;
 }
 
-/** Calendar events and the calendar list; Gmail read and drafts. Nothing that deletes. */
+/**
+ * Calendar events and the calendar list; Gmail read and drafts; Drive and Contacts read; Tasks.
+ * Nothing that sends mail or deletes files.
+ */
 export const GOOGLE_SCOPES = [
     "openid",
     "email",
@@ -13,23 +16,32 @@ export const GOOGLE_SCOPES = [
     "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
     "https://www.googleapis.com/auth/gmail.readonly",
     "https://www.googleapis.com/auth/gmail.compose",
+    "https://www.googleapis.com/auth/drive.readonly",
+    "https://www.googleapis.com/auth/contacts.readonly",
+    "https://www.googleapis.com/auth/tasks",
 ];
 
 /** Signed in by redirect, so the Vault keeps a refresh token, never a pasted secret. */
 export const GOOGLE_CONNECTOR: Connector = {
     id: "google",
-    name: "Google (Calendar and Gmail)",
-    hosts: ["oauth2.googleapis.com", "www.googleapis.com", "gmail.googleapis.com"],
+    name: "Google (Calendar, Gmail, Drive, Contacts, Tasks)",
+    hosts: [
+        "oauth2.googleapis.com",
+        "www.googleapis.com",
+        "gmail.googleapis.com",
+        "people.googleapis.com",
+        "tasks.googleapis.com",
+    ],
     howTo: {
         url: "https://myaccount.google.com/connections",
         steps: [
             "Press Sign in with Google and pick your account.",
-            "Allow Calendar and Gmail. Conscious can read mail and write drafts, never send or delete.",
+            "Tick every box. Conscious can read mail and write drafts, read Drive and Contacts, and keep your tasks. It never sends mail or deletes files.",
             "You can remove access any time at myaccount.google.com/connections.",
         ],
     },
     verifyUrl: "https://www.googleapis.com/oauth2/v3/userinfo",
-    signIn: "google",
+    signIn: "Google",
 };
 
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
@@ -74,7 +86,7 @@ export class GoogleOAuth {
         const granted = new Set((body.scope ?? "").split(" "));
         const missing = GOOGLE_SCOPES.filter((scope) => scope.startsWith("https://") && !granted.has(scope));
         if (missing.length)
-            throw new Error("Tick every box on Google's page, so Conscious can see your calendar and mail");
+            throw new Error("Tick every box on Google's page, so Conscious can see your calendar, mail and files");
         return body.refresh_token;
     }
 

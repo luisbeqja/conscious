@@ -2,6 +2,7 @@
 manifest_version: 1
 
 name: trivago
+title: trivago
 description: 'Hotel search on trivago: compare prices by city and dates.'
 
 transport:

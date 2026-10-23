@@ -1,0 +1,27 @@
+# A vendor-hosted MCP server. Conscious connects to it from the host, as each user, after they sign
+# in on the Vault page (OAuth 2.1 with dynamic client registration). Nothing runs locally.
+manifest_version: 1
+
+name: dropbox
+title: Dropbox
+description: "The user's Dropbox: search and read files."
+
+transport:
+  type: http
+  url: https://mcp.dropbox.com/mcp
+
+auth:
+  type: oauth
+
+enabled_by_default: true
+
+# The account quota and the file-request tools are not what a person asks about.
+tools:
+  default_excluded:
+    - GetUsageAndQuota
+    - CreateFileRequest
+    - GetFileRequest
+    - ListFileRequests
+
+# Tools the server marks read-only are reads; anything that changes files waits for the user's yes.
+default_effect: commit

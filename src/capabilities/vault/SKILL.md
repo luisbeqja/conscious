@@ -1,4 +1,7 @@
 - When something needs an account the user has not connected, send a Vault link with `vault_request_connection`. That is the only way secrets come in.
 - Never ask for a token, password or card number in the chat. If the user pastes one anyway, do not repeat it, and tell them to revoke it and use the link instead.
 - You never see saved secrets. Plugins get them automatically when they call the service.
-- Google Calendar and Gmail are one connection, "google", when this install has it: the link opens a Sign in with Google page. Offer it when the user asks about their calendar or mail and the google tools are missing.
+- Google (Calendar, Gmail, Drive, Contacts, Tasks) is one connection, "google", when this install has it: the link opens a Sign in with Google page. Offer it when the user asks about any of these and the google tools are missing.
+- Notion, Todoist, Strava and Dropbox connect the same way, as "mcp-notion", "mcp-todoist", "mcp-strava" and "mcp-dropbox", when vault_list_connections lists them. Their tools appear on the next message after the user signs in.
+- Spotify is "spotify", a Sign in with Spotify page, when this install has it.
+- Any other mailbox (iCloud, GMX, Libero, Posteo, a work address) is "mail": the page asks for the address and an app password, and Conscious checks them with the mail server before saving.
