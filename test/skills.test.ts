@@ -147,6 +147,24 @@ describe("SkillLibrary", () => {
         expect(sandbox.files.has("/home/user/skills/weather/.bundled")).toBe(false);
     });
 
+    it("removes copies of skills the repo stopped shipping, never the user's own", async () => {
+        const sandbox = computer();
+        const twoSkills = bundledDir({ "weather/SKILL.md": JSON_STYLE, "maps/SKILL.md": skill("maps", "", "Maps.") });
+        await new SkillLibrary({ bundledDir: twoSkills, internet: true }).sync("me", sandbox);
+        sandbox.files.set("/home/user/skills/receipts/SKILL.md", skill("receipts", "", "Mine."));
+        const removed: string[] = [];
+        sandbox.run = async (command) => {
+            removed.push(command);
+            return { exitCode: 0, stdout: "", stderr: "" };
+        };
+
+        await new SkillLibrary({ bundledDir: bundledDir({ "weather/SKILL.md": JSON_STYLE }), internet: true }).sync(
+            "me",
+            sandbox,
+        );
+        expect(removed).toEqual(["rm -rf 'skills/maps'"]);
+    });
+
     it("lists only the skills that can run on this computer", async () => {
         const library = new SkillLibrary({
             bundledDir: bundledDir({

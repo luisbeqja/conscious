@@ -80,7 +80,10 @@ export class SkillLibrary {
         this.bundled = readBundledSkills(options.bundledDir ?? DEFAULT_BUNDLED_DIR);
     }
 
-    /** Copies the repo's skills in, leaving alone any skill the user owns or that is already current. */
+    /**
+     * Copies the repo's skills in, leaving alone any skill the user owns or that is already current,
+     * and removes copies of skills the repo no longer ships.
+     */
     async sync(userId: string, sandbox: Sandbox): Promise<void> {
         if (this.synced.has(userId)) return;
         await Promise.all(
@@ -96,6 +99,18 @@ export class SkillLibrary {
                 // Written last, so a copy cut short is copied again next time.
                 await sandbox.writeFile(`${folder}/${BUNDLED_MARKER}`, skill.hash);
             }),
+        );
+        const shipped = new Set(this.bundled.map((skill) => skill.name));
+        const folders = await sandbox.listFiles(SKILLS_DIR).catch(() => []);
+        await Promise.all(
+            folders
+                .filter((entry) => entry.type === "dir" && SKILL_NAME.test(entry.name) && !shipped.has(entry.name))
+                .map(async ({ name }) => {
+                    const folder = `${SKILLS_DIR}/${name}`;
+                    // Without the marker the user owns it: they wrote it, or saved over a bundled one.
+                    if ((await sandbox.readFile(`${folder}/${BUNDLED_MARKER}`)) === undefined) return;
+                    await sandbox.run(`rm -rf ${quote(folder)}`);
+                }),
         );
         this.synced.add(userId);
     }
