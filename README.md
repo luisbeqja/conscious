@@ -27,6 +27,15 @@ Reminders, scheduled checks and the conversation are saved in `.conscious/`, so 
 
 A **scheduled check** is a reminder with a job: at the time, an agent does the work with all of Conscious's tools and messages you only if it finds something. "Every morning at 8, tell me if it will rain", "check the Lisbon flight daily and tell me if it drops under 120 EUR".
 
+## Long jobs in the background
+
+Ask for something that takes a while ("find me a ticket to Lisbon") and Conscious hands it to a sub-agent and answers you at once. You keep chatting about anything else while it works.
+
+- **A sub-agent made for the job.** Conscious writes its method (compare the total price with bags, prefer direct flights), picks the tools it needs, gives it 10, 30 or 60 minutes, and can split the job into up to five parts that run at the same time (each airport, each date). A last agent compares the parts and writes the answer.
+- **It keeps you posted.** It can text you a first good find before it is done, and the result comes as a normal message. Ask "how is it going?" and Conscious knows how far it got. The phone app shows each running job under the header.
+- **Change of plan.** "Only morning flights" while it runs is passed on to the job, no need to start over.
+- **Restarts.** Jobs are saved in `.conscious/background.json`; one a restart or a deploy cut off starts over once.
+
 ## A friend, not a coworker
 
 - **It remembers you.** What you tell it about yourself and the people in your life (who they are, their birthday, what is going on with them) is kept with the memory tools and read into every conversation, with or without a computer. Ask "what do you know about me?" to see it, and "forget that" to delete a line. Without a computer it is saved in `.conscious/memory/`, on a computer in `memory/memory.json`.

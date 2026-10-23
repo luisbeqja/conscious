@@ -7,7 +7,9 @@ export const toolLabel = (name: string): string | undefined => {
     if (name.includes("mail")) return "Looking at your mail";
     if (name.startsWith("google_")) return "Checking your calendar";
     if (name.startsWith("reminders_")) return "Setting things up";
-    if (name.startsWith("background_")) return "Starting a task in the background";
+    if (name === "background_start_task") return "Starting a task in the background";
+    if (name.startsWith("background_")) return "Checking on a task";
+    if (name === "task_tell_user") return "Texting you an update";
     if (name === "computer_send_file") return "Sending a file";
     if (name.startsWith("computer_")) return "Using its computer";
     if (name.startsWith("skills_")) return "Reading its notes";

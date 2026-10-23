@@ -1,4 +1,4 @@
-import { startAppChannel } from "./channels/app.js";
+import { startAppChannel, toAppTasks } from "./channels/app.js";
 import { loadAppConfig, loadConfig } from "./config.js";
 import { createConscious } from "./create-conscious.js";
 import { modelSetupProblem } from "./engine/models.js";
@@ -16,7 +16,7 @@ const mcp = await connectServers(config.mcpServers);
 
 // The channel needs the orchestrator and the orchestrator's notifications need the channel.
 let notify: (userId: string, text: string) => Promise<void> = async () => {};
-const { orchestrator, scheduler, sandboxes, vaultPage, startVault } = createConscious(
+const { orchestrator, scheduler, background, sandboxes, vaultPage, startVault } = createConscious(
     config,
     (userId, text) => notify(userId, text),
     mcp.capabilities,
@@ -27,6 +27,8 @@ const { channel, server } = startAppChannel(orchestrator, app, config.dataDir, o
 notify = channel.notify;
 const vaultServer = onePort ? undefined : startVault();
 scheduler.start();
+background.onChange((userId) => channel.showTasks(userId, toAppTasks(background.list(userId))));
+background.resume();
 console.log(`Conscious in the app · ${config.model.provider}/${config.model.id} · ${config.timezone}`);
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {

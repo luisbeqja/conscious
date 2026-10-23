@@ -16,6 +16,14 @@ export interface AppEntry {
     reaction?: string;
 }
 
+export interface AppTask {
+    id: string;
+    title: string;
+    startedAt: string;
+    lastStep?: string;
+    parts?: { done: number; total: number };
+}
+
 export type ClientMessage =
     | { type: "auth"; code: string }
     | {
@@ -34,4 +42,5 @@ export type ServerMessage =
     | { type: "delta"; text: string }
     | { type: "tool"; name: string }
     | { type: "reaction"; entryId: string; emoji: string }
+    | { type: "tasks"; tasks: AppTask[] }
     | { type: "error"; message: string };

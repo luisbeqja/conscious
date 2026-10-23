@@ -34,6 +34,7 @@ import { toolLabel } from "../tools";
 import { Composer } from "./Composer";
 import { Markdown } from "./Markdown";
 import { EntryMessage, PendingMessage } from "./Message";
+import { Tasks } from "./Tasks";
 import { Thinking } from "./Thinking";
 import { type Pending, type Status, useConscious } from "./useConscious";
 
@@ -349,6 +350,7 @@ export const ChatScreen = ({ connection, onDisconnect }: { connection: Connectio
                 topInset={insets.top}
                 raised={raised && !empty}
             />
+            <Tasks tasks={chat.tasks} palette={palette} />
             <Animated.View style={[styles.flex, keyboardStyle]}>
                 {empty ? (
                     <Welcome palette={palette} onPick={(text) => send(text)} />

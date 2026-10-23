@@ -15,6 +15,10 @@ export interface ToolContext {
     scheduler: Scheduler;
     /** Absent inside a background agent: sub-agents do not spawn sub-agents. */
     background?: BackgroundAgents;
+    /** The background task this agent is working on. Only inside one. */
+    task?: { id: string; tellUser(text: string): Promise<void> };
+    /** The last messages of the chat, handed to a background task so it knows what led to it. */
+    recentChat?: string;
     /** Reacts to the message being answered; false when the chat cannot show it. Absent where there is none. */
     react?: (emoji: string) => Promise<boolean>;
     /** Sends a file into the user's chat. Only while answering a message on a channel that can. */

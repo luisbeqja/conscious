@@ -4,6 +4,7 @@ import { createServer, type IncomingMessage, type RequestListener, type Server, 
 import { networkInterfaces } from "node:os";
 import { dirname, join } from "node:path";
 import { type WebSocket, WebSocketServer } from "ws";
+import type { BackgroundTask } from "../agents/background-agents.js";
 import type { AppConfig } from "../config.js";
 import type { SendOptions } from "../engine/orchestrator.js";
 import type { IncomingFile, OutgoingFile } from "../media/incoming.js";
@@ -28,6 +29,35 @@ export type ClientMessage =
     /** Start over: Conscious forgets this user and the chat is emptied on every open phone. */
     | { type: "reset" };
 
+/** A background task as the phone shows it, above the chat while it runs. */
+export interface AppTask {
+    id: string;
+    title: string;
+    startedAt: string;
+    /** The tool it called last. */
+    lastStep?: string;
+    parts?: { done: number; total: number };
+}
+
+export const toAppTasks = (tasks: readonly BackgroundTask[]): AppTask[] =>
+    tasks
+        .filter((task) => task.status === "running")
+        .map((task) => {
+            const lanes = task.harness.lanes ?? [];
+            return {
+                id: task.id,
+                title: task.title,
+                startedAt: task.startedAt.toISOString(),
+                lastStep: task.lastStep,
+                parts: lanes.length
+                    ? {
+                          done: lanes.filter((lane) => lane.status === "done" || lane.status === "failed").length,
+                          total: lanes.length,
+                      }
+                    : undefined,
+            };
+        });
+
 /** What the phone receives. The app keeps a copy of these types in `mobile/src/protocol.ts`. */
 export type ServerMessage =
     | { type: "ready"; history: AppEntry[] }
@@ -37,6 +67,7 @@ export type ServerMessage =
     | { type: "delta"; text: string }
     | { type: "tool"; name: string }
     | { type: "reaction"; entryId: string; emoji: string }
+    | { type: "tasks"; tasks: AppTask[] }
     | { type: "error"; message: string };
 
 const HISTORY = 200;
@@ -82,6 +113,7 @@ export const loadOrCreateAppCodes = (
 export class AppChannel {
     private readonly sockets = new Map<string, Set<WebSocket>>();
     private readonly running = new Map<string, number>();
+    private readonly tasks = new Map<string, AppTask[]>();
     private readonly codes: { userId: string; digest: Buffer }[];
 
     constructor(
@@ -139,6 +171,12 @@ export class AppChannel {
     notify = async (userId: string, text: string): Promise<void> => {
         this.broadcast(userId, { type: "entry", entry: this.log.add(userId, { role: "assistant", text }) });
     };
+
+    /** The user's running background tasks, shown on any open phone now and on the next one to connect. */
+    showTasks(userId: string, tasks: AppTask[]): void {
+        this.tasks.set(userId, tasks);
+        this.broadcast(userId, { type: "tasks", tasks });
+    }
 
     userFor(code: string): string | undefined {
         const given = digest(code.trim().toLowerCase());
@@ -219,6 +257,8 @@ export class AppChannel {
         this.sockets.set(userId, sockets);
         this.send(socket, { type: "ready", history: this.log.entries(userId).slice(-HISTORY) });
         if (this.running.get(userId)) this.send(socket, { type: "typing", active: true });
+        const tasks = this.tasks.get(userId);
+        if (tasks?.length) this.send(socket, { type: "tasks", tasks });
     }
 
     private async handle(

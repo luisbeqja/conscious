@@ -16,6 +16,10 @@ export interface AgentRun {
     budgets: Budgets;
     sessionId: string;
     signal?: AbortSignal;
+    /** Epoch ms after which no tool runs and the agent answers with what it has. */
+    deadline?: number;
+    /** New instructions that arrived during the run, read after each turn. */
+    steering?: () => string[];
     /** Live progress, for a terminal or a typing indicator. Never stored. */
     onProgress?: (progress: RunProgress) => void;
 }
@@ -70,6 +74,13 @@ export const runAgent = async (run: AgentRun): Promise<AgentRunResult> => {
                     reason: "This acts on the user's behalf and needs their explicit yes, which is not built yet. Tell them what you would do instead.",
                 };
             }
+            if (run.deadline && Date.now() > run.deadline) {
+                status = "budget_exhausted";
+                return {
+                    block: true,
+                    reason: "Time is up for this job. Stop using tools and write your final answer with what you have.",
+                };
+            }
             if (++toolCalls > run.budgets.maxToolCallsPerRun) {
                 status = "budget_exhausted";
                 return {
@@ -87,10 +98,13 @@ export const runAgent = async (run: AgentRun): Promise<AgentRunResult> => {
             run.onProgress?.({ type: "text", delta: event.assistantMessageEvent.delta });
         }
         if (event.type === "tool_execution_start") run.onProgress?.({ type: "tool", name: event.toolName });
-        if (event.type === "turn_end" && ++turns >= run.budgets.maxTurnsPerRun) {
+        if (event.type !== "turn_end") return;
+        if (++turns >= run.budgets.maxTurnsPerRun) {
             status = "budget_exhausted";
             agent.abort();
+            return;
         }
+        for (const text of run.steering?.() ?? []) agent.steer({ role: "user", content: text, timestamp: Date.now() });
     });
     const onAbort = () => agent.abort();
     run.signal?.addEventListener("abort", onAbort, { once: true });

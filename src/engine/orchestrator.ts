@@ -1,4 +1,11 @@
-import type { BackgroundAgents, BackgroundTask } from "../agents/background-agents.js";
+import {
+    type BackgroundAgents,
+    type BackgroundTask,
+    deadlineOf,
+    EFFORT,
+    type Harness,
+} from "../agents/background-agents.js";
+import { taskCapability } from "../capabilities/background/capability.js";
 import type { CapabilityRegistry } from "../capabilities/registry.js";
 import type { Capability, ToolContext } from "../capabilities/types.js";
 import type { Budgets } from "../config.js";
@@ -8,10 +15,14 @@ import { emptyMemory, isEmpty, type MemoryStore, renderMemory, SandboxMemoryStor
 import {
     buildBackgroundPrompt,
     buildCheckBrief,
+    buildLaneBrief,
+    buildSteeringMessage,
     buildSystemPrompt,
+    buildTaskBrief,
     buildUserTurn,
     isNothing,
     type PromptContext,
+    renderRecentChat,
 } from "../prompts/prompts.js";
 import { loadOlderNotes, OLDER_NOTES } from "../sandbox/memory.js";
 import type { SandboxProvider } from "../sandbox/sandbox.js";
@@ -37,6 +48,17 @@ export interface OrchestratorDeps {
     skills?: SkillLibrary;
     /** Messages Conscious sent on its own since the user last wrote, so the next answer knows about them. */
     sent?: SentLog;
+}
+
+/** How one background run is set up and limited. */
+interface RunOptions {
+    signal?: AbortSignal;
+    deadline?: number;
+    budgets?: Budgets;
+    harness?: Harness;
+    task?: ToolContext["task"];
+    onProgress?: (progress: RunProgress) => void;
+    steering?: () => string[];
 }
 
 export class SentLog {
@@ -138,11 +160,13 @@ export class Orchestrator {
                   return done === true;
               }
             : undefined;
+        const history = await store.load(userId);
         const { tools, effects } = toolsFor(capabilities, {
             userId,
             timezone,
             scheduler,
             background,
+            recentChat: renderRecentChat(history, text),
             react,
             sendFile: options.sendFile,
         });
@@ -157,7 +181,7 @@ export class Orchestrator {
             systemPrompt: buildSystemPrompt(registry.renderIndex(capabilities), await this.context(userId)),
             tools,
             effects,
-            history: await store.load(userId),
+            history,
             prompt: buildUserTurn(text, {
                 now: new Date(),
                 timezone,
@@ -176,9 +200,59 @@ export class Orchestrator {
         return result.text || FALLBACK;
     }
 
-    /** What a background agent runs: its own loop, the same capabilities minus starting more background work. */
-    runBackgroundTask = async (task: BackgroundTask, signal: AbortSignal): Promise<string> =>
-        this.runAlone(task.userId, `background-${task.id}`, task.brief, signal);
+    /**
+     * What a background agent runs: its own loop with the capabilities and method the orchestrator
+     * chose for the job, never more background work. A job split into parts runs each part in a
+     * sub-agent of its own at the same time, then one more puts their findings together.
+     */
+    runBackgroundTask = async (task: BackgroundTask, signal: AbortSignal): Promise<string> => {
+        const { background } = this.deps;
+        const effort = EFFORT[task.effort];
+        const deadline = deadlineOf(task);
+        const options = (): RunOptions => {
+            let read = task.messages.length;
+            return {
+                signal,
+                harness: task.harness,
+                task: { id: task.id, tellUser: (text) => background.tellUser(task.id, text) },
+                onProgress: (progress) => {
+                    if (progress.type === "tool") background.progress(task.id, progress.name);
+                },
+                steering: () => {
+                    const fresh = task.messages.slice(read);
+                    read = task.messages.length;
+                    return fresh.map(buildSteeringMessage);
+                },
+                deadline,
+                budgets: {
+                    ...this.deps.budgets,
+                    maxTurnsPerRun: effort.maxTurns,
+                    maxToolCallsPerRun: effort.maxToolCalls,
+                },
+            };
+        };
+        const lanes = task.harness.lanes ?? [];
+        // The parts stop early enough to leave time for putting them together.
+        const lanesDeadline = task.startedAt.getTime() + (deadline - task.startedAt.getTime()) * 0.75;
+        await Promise.all(
+            lanes.map(async (lane, index) => {
+                lane.status = "running";
+                try {
+                    lane.result = await this.runAlone(
+                        task.userId,
+                        `background-${task.id}-${index + 1}`,
+                        buildLaneBrief(task, lane),
+                        { ...options(), deadline: lanesDeadline },
+                    );
+                    lane.status = "done";
+                } catch (error) {
+                    lane.status = "failed";
+                    lane.result = error instanceof Error ? error.message : String(error);
+                }
+            }),
+        );
+        return this.runAlone(task.userId, `background-${task.id}`, buildTaskBrief(task), options());
+    };
 
     /**
      * A scheduled check firing: an agent does the job on its own. Returns what to send the user,
@@ -193,23 +267,38 @@ export class Orchestrator {
         return isNothing(text) ? "" : text;
     };
 
-    private async runAlone(userId: string, sessionId: string, brief: string, signal?: AbortSignal): Promise<string> {
-        const { registry, runtime, budgets, timezone, scheduler } = this.deps;
+    private async runAlone(userId: string, sessionId: string, brief: string, limits: RunOptions = {}): Promise<string> {
+        const { registry, runtime, timezone, scheduler } = this.deps;
+        const chosen = new Set(limits.harness?.capabilities ?? []);
         // Its job came from a brief, not a message, so there is nothing to react to.
-        const capabilities = (await registry.available(userId)).filter(
-            (capability) => capability.id !== "background" && capability.id !== "reactions",
-        );
-        const { tools, effects } = toolsFor(capabilities, { userId, timezone, scheduler });
+        const capabilities = [
+            ...(await registry.available(userId)).filter(
+                (capability) =>
+                    capability.id !== "background" &&
+                    capability.id !== "reactions" &&
+                    // Memory stays: the sub-agent is still Conscious, and knows the user.
+                    (!chosen.size || chosen.has(capability.id) || capability.id === "memory"),
+            ),
+            ...(limits.task ? [taskCapability] : []),
+        ];
+        const { tools, effects } = toolsFor(capabilities, { userId, timezone, scheduler, task: limits.task });
         const result = await runAgent({
             runtime,
-            systemPrompt: buildBackgroundPrompt(registry.renderIndex(capabilities), await this.context(userId)),
+            systemPrompt: buildBackgroundPrompt(
+                registry.renderIndex(capabilities),
+                await this.context(userId),
+                limits.harness?.instructions,
+            ),
             tools,
             effects,
             history: [],
             prompt: buildUserTurn(brief, { now: new Date(), timezone, finished: [], running: [] }),
-            budgets,
+            budgets: limits.budgets ?? this.deps.budgets,
             sessionId,
-            signal,
+            signal: limits.signal,
+            deadline: limits.deadline,
+            onProgress: limits.onProgress,
+            steering: limits.steering,
         });
         if (result.status === "failed" || !result.text) throw new Error("the sub-agent did not finish");
         return result.text;

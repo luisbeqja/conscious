@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { type PlatformProviderConfig, Spectrum } from "@spectrum-ts/core";
 import { imessage } from "@spectrum-ts/imessage";
 import { whatsappBusiness } from "@spectrum-ts/whatsapp-business";
-import { type AppChannel, startAppChannel } from "./channels/app.js";
+import { type AppChannel, startAppChannel, toAppTasks } from "./channels/app.js";
 import { ChatBook } from "./channels/chats.js";
 import { PhotonChannel, userIdOf } from "./channels/photon.js";
 import { WhatsAppTyping } from "./channels/whatsapp-typing.js";
@@ -34,7 +34,7 @@ const mcp = await connectServers(config.mcpServers);
 let channel: PhotonChannel | undefined;
 let appChannel: AppChannel | undefined;
 const chats = new ChatBook(join(config.dataDir, "chats.json"));
-const { orchestrator, scheduler, sandboxes, vaultPage, startVault } = createConscious(
+const { orchestrator, scheduler, background, sandboxes, vaultPage, startVault } = createConscious(
     config,
     // Conscious speaks first where the user last wrote: the app or their messaging chat.
     (userId, text) => {
@@ -80,6 +80,8 @@ spectrum = await Spectrum({
     telemetry: false,
 });
 scheduler.start();
+background.onChange((userId) => appChannel?.showTasks(userId, toAppTasks(background.list(userId))));
+background.resume();
 console.log(
     `Conscious on Photon · ${photon.platforms.join(", ")} · ${config.model.provider}/${config.model.id} · voice notes: ${config.transcription?.provider ?? "off"}`,
 );

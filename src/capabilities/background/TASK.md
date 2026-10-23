@@ -1,0 +1,2 @@
+- Send an update only when it changes something for the user: a first good option, or the job will take much longer than they expect. Never to say you started or that you are still working.
+- Your final answer is sent to them anyway, so do not repeat an update in it word for word.

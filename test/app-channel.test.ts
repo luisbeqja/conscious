@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { WebSocket } from "ws";
-import { AppChannel, loadOrCreateAppCodes, type ServerMessage } from "../src/channels/app.js";
+import { AppChannel, loadOrCreateAppCodes, type ServerMessage, toAppTasks } from "../src/channels/app.js";
 import { AppLog } from "../src/channels/app-log.js";
 import type { SendOptions } from "../src/engine/orchestrator.js";
 
@@ -55,6 +55,64 @@ const phone = async (url: string, code: string) => {
 };
 
 describe("AppChannel", () => {
+    it("shows running background tasks on open phones and on the next one to connect", async () => {
+        const { channel, url } = await start(async () => "");
+        const first = await phone(url, "abcd-efgh");
+        await first.waitFor("ready");
+        const task = {
+            id: "t1",
+            title: "Find a ticket to Lisbon",
+            startedAt: new Date().toISOString(),
+            parts: { done: 1, total: 2 },
+        };
+        channel.showTasks("me", [task]);
+        expect((await first.waitFor("tasks")).tasks).toEqual([task]);
+
+        const second = await phone(url, "abcd-efgh");
+        expect((await second.waitFor("tasks")).tasks).toEqual([task]);
+        first.socket.close();
+        second.socket.close();
+    });
+
+    it("lists only running tasks for the phone, with how many parts are done", () => {
+        const base = {
+            userId: "me",
+            brief: "b",
+            effort: "long" as const,
+            startedAt: new Date("2026-10-23T10:00:00Z"),
+            steps: 3,
+            messages: [],
+            updates: [],
+            restarts: 0,
+            reported: false,
+        };
+        const tasks = toAppTasks([
+            {
+                ...base,
+                id: "a",
+                title: "Lisbon",
+                status: "running",
+                lastStep: "web_search_pages",
+                harness: {
+                    lanes: [
+                        { title: "x", brief: "y", status: "done" },
+                        { title: "z", brief: "w" },
+                    ],
+                },
+            },
+            { ...base, id: "b", title: "Done one", status: "done", harness: {} },
+        ]);
+        expect(tasks).toEqual([
+            {
+                id: "a",
+                title: "Lisbon",
+                startedAt: "2026-10-23T10:00:00.000Z",
+                lastStep: "web_search_pages",
+                parts: { done: 1, total: 2 },
+            },
+        ]);
+    });
+
     it("streams the answer, then saves both sides of the chat", async () => {
         const { url, log } = await start(async (text, options) => {
             options.onProgress?.({ type: "tool", name: "web_search" });

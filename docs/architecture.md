@@ -5,7 +5,7 @@ Conscious is a personal assistant for daily life, not work, and it should feel l
 ## The idea
 
 1. **One orchestrator per user, many capability packs.** The orchestrator is the agent you chat with. Each area of life (reminders, calendar, email, travel, music) is a pack: tools plus a short `SKILL.md` on how to use them.
-2. **Long work goes to background agents.** The orchestrator hands a sub-agent a written brief and answers you at once. The sub-agent runs its own loop with its own tools and messages you when it is done. The next time you write, the orchestrator is told what finished. Depth is one: a sub-agent cannot start another.
+2. **Long work goes to background agents.** The orchestrator designs a sub-agent for the job (a method, the packs it needs, how long it may take, and parts that run side by side) and answers you at once. You keep chatting: the orchestrator sees each task's progress and can pass it a change of plan. The sub-agent may text you a first find, then messages you its result. Tasks are saved in `.conscious/background.json`; a restart starts an interrupted one over, once. Depth is one: a sub-agent cannot start another.
 3. **Reminders are cron jobs.** One-off or recurring, read in your timezone, sent to you as a normal message. A scheduled check is a reminder with a job: when it fires, an agent does the job and messages you only if it found something. Both are saved in `.conscious/reminders.json` and re-armed at start.
 4. **Connectors bring in your life.** A connector is a link to one of your accounts. A pack that needs one is invisible until you connect it. Tokens never reach the model.
 5. **A computer for what no API covers.** A disposable sandbox with a browser. Not built yet.
@@ -20,7 +20,7 @@ Conscious is a personal assistant for daily life, not work, and it should feel l
 | The loop | `pi-agent-core`, behind `engine/run-agent.ts`. One loop, used by the orchestrator and every sub-agent. |
 | Capability packs | Tools named `<id>_<verb>_<noun>` plus a `SKILL.md` on how to use them. |
 | Effects | Every tool is `read`, `draft` or `commit`. A commit will become a yes/no the user answers. |
-| Background agents | Sub-agents with a written brief. They outlive the turn and report to the user directly. |
+| Background agents | Sub-agents with a written brief and a harness designed for the job (instructions, packs, effort, parallel parts). They outlive the turn, can text an update, take a change of plan, and report to the user directly. |
 | Budgets | Turns and tool calls are capped per message. |
 | Conversations | One conversation per user, no threads. |
 | Connectors | The user's own accounts, linked one by one. |
@@ -110,7 +110,7 @@ Secrets never pass through the chat. When a plugin needs an account you have not
 
 ## Next, in order
 
-1. **Durable storage.** With a computer, the conversation and memory survive restarts in the user's sandbox; without one, the conversation is saved in `.conscious/conversations/`. The Vault, plugins, installs, reminders and the chat each user writes from are saved in `.conscious/` on the host. Background tasks still live in memory; a restart forgets them.
+1. **Durable storage.** With a computer, the conversation and memory survive restarts in the user's sandbox; without one, the conversation is saved in `.conscious/conversations/`. The Vault, plugins, installs, reminders and the chat each user writes from are saved in `.conscious/` on the host. Background tasks are saved in `.conscious/background.json`, and one a restart interrupted starts over once.
 2. **Approvals in the chat.** A `commit` becomes a Yes / No question (an iMessage poll or mini-app, a typed yes on WhatsApp); only the answer runs it.
 3. **More sign-in on the Vault page.** Open banking (EU PSD2 aggregators).
 4. **An egress proxy for the computer**, so skills can reach only the hosts the user approved, with the Vault adding tokens on the way out instead of the computer holding them.

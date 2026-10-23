@@ -87,6 +87,7 @@ export const createConscious = (config: Config, notify: Notify, extra: readonly 
         (task, signal): Promise<string> => orchestrator.runBackgroundTask(task, signal),
         notify,
         config.budgets.maxBackgroundAgents,
+        join(config.dataDir, "background.json"),
     );
     const vault = new Vault({
         key: loadOrCreateVaultKey(config.dataDir, config.vault.key),

@@ -1,7 +1,7 @@
 import * as Crypto from "expo-crypto";
 import { useCallback, useEffect, useReducer, useRef } from "react";
 import { AppState } from "react-native";
-import type { AppEntry, ClientMessage, ServerMessage } from "../protocol";
+import type { AppEntry, AppTask, ClientMessage, ServerMessage } from "../protocol";
 import { type Connection, socketUrl } from "../storage";
 
 export type Status = "connecting" | "online" | "offline" | "unauthorized";
@@ -36,6 +36,8 @@ interface State {
     pending: Pending[];
     typing: boolean;
     draft: Draft;
+    /** Jobs running in the background while the chat goes on. */
+    tasks: AppTask[];
     error?: string;
     /** History arrived at least once, so an empty list means an empty chat. */
     loaded: boolean;
@@ -89,8 +91,11 @@ const reduce = (state: State, action: Action): State => {
 
 const receive = (state: State, message: ServerMessage): State => {
     switch (message.type) {
+        // The server sends the running tasks right after, if there are any.
         case "ready":
-            return { ...state, entries: message.history, loaded: true };
+            return { ...state, entries: message.history, tasks: [], loaded: true };
+        case "tasks":
+            return { ...state, tasks: message.tasks };
         case "ack":
             return {
                 ...state,
@@ -128,6 +133,7 @@ const INITIAL: State = {
     pending: [],
     typing: false,
     draft: EMPTY_DRAFT,
+    tasks: [],
     loaded: false,
 };
 
