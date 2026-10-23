@@ -10,7 +10,13 @@ export class GoogleApi {
     async request<T>(
         userId: string,
         url: string,
-        init: { method?: string; query?: Record<string, string | number | boolean | undefined>; body?: unknown } = {},
+        init: {
+            method?: string;
+            query?: Record<string, string | number | boolean | undefined>;
+            body?: unknown;
+            /** The body as text, for file downloads and exports. */
+            text?: boolean;
+        } = {},
         signal?: AbortSignal,
     ): Promise<T> {
         const target = new URL(url);
@@ -34,11 +40,16 @@ export class GoogleApi {
                 continue;
             }
             const text = await response.text();
-            const body = text ? JSON.parse(text) : {};
             if (response.status === 401) throw new GoogleSignInExpired("Google no longer accepts the sign-in");
+            if (response.ok && init.text) return text as T;
+            const body = text ? JSON.parse(text) : {};
             if (!response.ok) {
-                const message = (body as { error?: { message?: string } }).error?.message ?? `HTTP ${response.status}`;
-                throw new Error(`Google: ${message}`);
+                const error = (body as { error?: { message?: string; details?: { reason?: string }[] } }).error;
+                // A sign-in from before Conscious asked for this permission: a new one grants it.
+                if (error?.details?.some((detail) => detail.reason === "ACCESS_TOKEN_SCOPE_INSUFFICIENT")) {
+                    throw new GoogleSignInExpired("The Google sign-in is missing a permission added since");
+                }
+                throw new Error(`Google: ${error?.message ?? `HTTP ${response.status}`}`);
             }
             return body as T;
         }

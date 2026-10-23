@@ -21,7 +21,7 @@ export interface Config {
     mcpServers: McpServerEntry[];
     /** Where web searches go. */
     search: SearchConfig;
-    /** This install's Google OAuth client. Without it, Google Calendar and Gmail are not offered. */
+    /** This install's Google OAuth client. Without it, the Google account is not offered. */
     google?: GoogleClient;
     /** Where voice notes are turned into text. Without it, Conscious says it cannot listen yet. */
     transcription?: TranscriptionConfig;

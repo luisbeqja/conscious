@@ -133,13 +133,15 @@ pnpm skills:import https://github.com/<owner>/<repo> skills/<name> --commit <sha
 
 The agent also saves its own skills after work worth repeating (`skills_save_skill`), and keeps every earlier version so a change can be undone.
 
-## Google Calendar and Gmail
+## Google: Calendar, Gmail, Drive, Contacts and Tasks
 
-Ask "what's on this week?" and Conscious sends a Vault link with a **Sign in with Google** button. After that it can check and add calendar events, and search, read and draft email. It never sends email, deletes, or invites anyone: drafts wait in Gmail for you.
+Ask "what's on this week?" and Conscious sends a Vault link with a **Sign in with Google** button. After that it can check and add calendar events; search, read and draft email; find and read files in Drive (Docs and Slides as text, Sheets as CSV); look people up in Contacts (numbers, birthdays, addresses); and list, add and tick off Google Tasks. It never sends email, deletes, or invites anyone: drafts wait in Gmail for you.
+
+Someone who signed in before Drive, Contacts and Tasks were added is asked to sign in once more the first time Conscious needs them.
 
 Conscious is self-hosted, so each install brings its own Google sign-in client. Once:
 
-1. In [Google Cloud](https://console.cloud.google.com/), create a project and enable the **Google Calendar API** and **Gmail API**.
+1. In [Google Cloud](https://console.cloud.google.com/), create a project and enable the **Google Calendar API**, **Gmail API**, **Google Drive API**, **People API** and **Google Tasks API**.
 2. Under Google Auth Platform, set up the consent screen as **External**, and add your own Google address as a test user.
 3. Create an OAuth client of type **Web application**, with this redirect URI: your `CONSCIOUS_PUBLIC_URL` followed by `/vault/oauth/google` (for example `https://conscious.example.com/vault/oauth/google`, or `http://localhost:8787/vault/oauth/google` in the terminal).
 4. Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in `.env`.

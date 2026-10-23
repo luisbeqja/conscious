@@ -5,6 +5,7 @@ import { GOOGLE_CONNECTOR, GoogleSignInExpired } from "../../google/oauth.js";
 import type { Credentials } from "../../plugins/connectors.js";
 import { promptFile } from "../../prompts/prompt-file.js";
 import { type Capability, defineTool, type RegisteredTool, type ToolOutput } from "../types.js";
+import { workspaceTools } from "./workspace.js";
 
 const CALENDAR = "https://www.googleapis.com/calendar/v3";
 const GMAIL = "https://gmail.googleapis.com/gmail/v1/users/me";
@@ -318,9 +319,10 @@ export const createGoogleCapability = (api: GoogleApi, credentials: Credentials)
 
     return {
         id: "google",
-        summary: "The user's Google Calendar (check, add, move events) and Gmail (search, read, write drafts).",
+        summary:
+            "The user's Google account: Calendar (check, add, move events), Gmail (search, read, write drafts), Drive (find and read files), Contacts (look people up) and Tasks (list, add, tick off).",
         skill: promptFile(import.meta.url, "SKILL.md"),
-        tools: [calendars, events, create, move, search, read, draft].map(guarded),
+        tools: [calendars, events, create, move, search, read, draft, ...workspaceTools(api)].map(guarded),
         available: async (userId) => Boolean(await credentials.credential(userId, GOOGLE_CONNECTOR.id)),
     };
 };

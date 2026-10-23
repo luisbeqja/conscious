@@ -251,6 +251,112 @@ describe("Google capability", () => {
     });
 });
 
+describe("Google Drive, Contacts and Tasks", () => {
+    const capabilityWith = (...routes: Route[]) => {
+        const vault = connected();
+        const fake = fakeGoogle(...routes);
+        const api = new GoogleApi(new GoogleOAuth(client, "x", vault, fake.doFetch), fake.doFetch);
+        return { ...fake, capability: createGoogleCapability(api, vault) };
+    };
+
+    it("exports a Google Doc as text and gives only the link for a PDF", async () => {
+        const { capability, calls } = capabilityWith(
+            (url) =>
+                url.pathname.endsWith("/files/doc1")
+                    ? Response.json({
+                          id: "doc1",
+                          name: "Packing list",
+                          mimeType: "application/vnd.google-apps.document",
+                      })
+                    : undefined,
+            (url) => (url.pathname.endsWith("/files/doc1/export") ? new Response("Passport\nCharger") : undefined),
+            (url) =>
+                url.pathname.endsWith("/files/pdf1")
+                    ? Response.json({
+                          id: "pdf1",
+                          name: "Lease.pdf",
+                          mimeType: "application/pdf",
+                          webViewLink: "https://drive/x",
+                      })
+                    : undefined,
+        );
+        const read = toolOf(capability, "google_read_file");
+        const doc = await read.execute({ id: "doc1" }, context);
+        expect(doc.data).toMatchObject({ name: "Packing list", text: "Passport\nCharger", truncated: false });
+        expect(calls.find((call) => call.url.pathname.endsWith("/export"))?.url.searchParams.get("mimeType")).toBe(
+            "text/plain",
+        );
+        const pdf = await read.execute({ id: "pdf1" }, context);
+        expect(pdf.data).toMatchObject({ text: null, link: "https://drive/x" });
+    });
+
+    it("searches Drive with quotes escaped", async () => {
+        const { capability, calls } = capabilityWith((url) =>
+            url.pathname.endsWith("/drive/v3/files") ? Response.json({ files: [] }) : undefined,
+        );
+        await toolOf(capability, "google_search_drive").execute({ query: "nonna's recipes" }, context);
+        const q = calls.find((call) => call.url.pathname.endsWith("/files"))?.url.searchParams.get("q");
+        expect(q).toBe("trashed = false and fullText contains 'nonna\\'s recipes'");
+    });
+
+    it("warms Google's contact cache when the first search comes back empty", async () => {
+        let searches = 0;
+        const { capability } = capabilityWith((url) => {
+            if (!url.pathname.endsWith("people:searchContacts")) return undefined;
+            searches++;
+            if (searches < 3) return Response.json({});
+            return Response.json({
+                results: [
+                    {
+                        person: {
+                            resourceName: "people/1",
+                            names: [{ displayName: "Ada Rossi" }],
+                            phoneNumbers: [{ value: "+39 333 1234567", type: "mobile" }],
+                            birthdays: [{ date: { month: 3, day: 9 } }],
+                        },
+                    },
+                ],
+            });
+        });
+        const output = await toolOf(capability, "google_search_contacts").execute({ query: "Ada" }, context);
+        expect(output.data).toEqual([
+            expect.objectContaining({ name: "Ada Rossi", phones: ["+39 333 1234567 (mobile)"], birthday: "03-09" }),
+        ]);
+    });
+
+    it("adds a task due on a day and reopens one by clearing its completion", async () => {
+        const bodies: unknown[] = [];
+        const { capability } = capabilityWith((url, init) => {
+            if (!url.pathname.includes("/lists/%40default/tasks")) return undefined;
+            bodies.push(JSON.parse(init?.body as string));
+            return Response.json({ id: "t1", title: "Buy milk", status: "needsAction" });
+        });
+        await toolOf(capability, "google_add_task").execute({ title: "Buy milk", due: "2026-10-24" }, context);
+        await toolOf(capability, "google_complete_task").execute({ id: "t1", done: false }, context);
+        expect(bodies).toEqual([
+            { title: "Buy milk", due: "2026-10-24T00:00:00.000Z" },
+            { status: "needsAction", completed: null },
+        ]);
+    });
+
+    it("asks for a new sign-in when an older one lacks a permission", async () => {
+        const { capability } = capabilityWith(() =>
+            Response.json(
+                {
+                    error: {
+                        code: 403,
+                        message: "Insufficient scopes",
+                        details: [{ reason: "ACCESS_TOKEN_SCOPE_INSUFFICIENT" }],
+                    },
+                },
+                { status: 403 },
+            ),
+        );
+        const output = await toolOf(capability, "google_list_tasks").execute({}, context);
+        expect(output.guidance).toMatch(/vault_request_connection/);
+    });
+});
+
 describe("Gmail messages", () => {
     it("prefers the plain-text part and falls back to the HTML one", () => {
         const b64 = (text: string) => Buffer.from(text).toString("base64url");
