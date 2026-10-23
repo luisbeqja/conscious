@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { BackgroundAgents, type Notify } from "./agents/background-agents.js";
 import { createGoogleCapability } from "./capabilities/google/capability.js";
 import { createRegistry } from "./capabilities/index.js";
+import { createSpotifyCapability } from "./capabilities/spotify/capability.js";
 import type { Capability } from "./capabilities/types.js";
 import { createWebCapability } from "./capabilities/web/capability.js";
 import type { Config } from "./config.js";
@@ -21,6 +22,7 @@ import { persistPlugins } from "./plugins/state-file.js";
 import { createE2BClient, E2BSandboxes } from "./sandbox/e2b.js";
 import { Scheduler } from "./scheduler/scheduler.js";
 import { SkillLibrary } from "./skills/library.js";
+import { SPOTIFY_CONNECTOR, SpotifyOAuth } from "./spotify/oauth.js";
 import { createVaultServer, type SignInProvider, signInCallbackPath, verifyWithService } from "./vault/server.js";
 import { loadOrCreateVaultKey, Vault } from "./vault/vault.js";
 import { createSearchProvider } from "./web/search.js";
@@ -77,12 +79,24 @@ export const createConscious = (config: Config, notify: Notify, extra: readonly 
         .map((entry) => new McpSignIn(entry, callback(`mcp-${entry.name}`), vault));
     const mcpUsers = new McpUserServers(mcpSignIns, vault);
     const signIns = new Map<string, SignInProvider>(mcpSignIns.map((signIn) => [signIn.connector.id, signIn]));
+    const spotify = config.spotify
+        ? new SpotifyOAuth(config.spotify, callback(SPOTIFY_CONNECTOR.id), vault)
+        : undefined;
     if (google) signIns.set(GOOGLE_CONNECTOR.id, google);
-    const builtIn = google ? [web, createGoogleCapability(new GoogleApi(google), vault)] : [web];
+    if (spotify) signIns.set(SPOTIFY_CONNECTOR.id, spotify);
+    const builtIn = [
+        web,
+        ...(google ? [createGoogleCapability(new GoogleApi(google), vault)] : []),
+        ...(spotify ? [createSpotifyCapability(spotify, vault)] : []),
+    ];
     const registry = createRegistry(sandboxes, [...builtIn, ...extra], {
         plugins,
         vault: { vault, publicUrl: config.vault.publicUrl },
-        signInConnectors: [...(google ? [GOOGLE_CONNECTOR] : []), ...mcpSignIns.map((signIn) => signIn.connector)],
+        signInConnectors: [
+            ...(google ? [GOOGLE_CONNECTOR] : []),
+            ...(spotify ? [SPOTIFY_CONNECTOR] : []),
+            ...mcpSignIns.map((signIn) => signIn.connector),
+        ],
     })
         .addSource(mcpUsers.capabilities)
         .addSource(pluginCapabilities(plugins));

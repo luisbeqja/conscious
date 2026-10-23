@@ -99,7 +99,7 @@ export interface ConnectorSpec {
  * (a refresh token, a mailbox password) is never handed to a plugin. Sign-in MCP servers are
  * `mcp-<name>`, which a plugin's connector id cannot spell.
  */
-const HOST_ONLY_IDS = new Set(["google"]);
+const HOST_ONLY_IDS = new Set(["google", "spotify"]);
 
 /** The connector a plugin uses: a built-in one by id, or the one it defines itself. */
 export const resolveConnector = (spec: ConnectorSpec): { connector?: Connector; problems: string[] } => {

@@ -150,6 +150,19 @@ While the app is in Testing, Google ends the sign-in after 7 days, and Conscious
 
 
 
+## Spotify
+
+Ask "what am I listening to?" or "put on something for cooking" and Conscious sends a Vault link with a **Sign in with Spotify** button. After that it sees what plays and on which device, searches, reads your history and top artists, lists your playlists and makes private ones. Playing, pausing, skipping and queueing need Spotify Premium and an open Spotify app.
+
+Like Google, each install brings its own Spotify app. Once:
+
+1. At [developer.spotify.com](https://developer.spotify.com/dashboard), create an app and tick **Web API**.
+2. Add the redirect URI: your `CONSCIOUS_PUBLIC_URL` followed by `/vault/oauth/spotify`. Spotify refuses `localhost`, so in the terminal it is `http://127.0.0.1:8787/vault/oauth/spotify`; Conscious sends that form on its own.
+3. Under User Management, add the Spotify accounts that will use it.
+4. Set `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET` in `.env`.
+
+Spotify lets an app in development mode serve only a few listed users, and its owner needs Premium. That fits one household; more people need Spotify's review.
+
 ## Notion, Todoist, Strava and Dropbox
 
 Conscious connects to vendor-hosted MCP servers listed in [`mcp/`](mcp/), from the host, and offers their tools like any capability. Kiwi.com flights and trivago hotels need no account and are on from the start.
