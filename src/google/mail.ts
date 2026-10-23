@@ -1,4 +1,7 @@
+import { type DraftInput, rfc822 } from "../mail/rfc822.js";
 import { htmlToText } from "../web/html-text.js";
+
+export type { DraftInput };
 
 interface Part {
     mimeType?: string;
@@ -43,34 +46,5 @@ export const attachmentNames = (message: GmailMessage): string[] =>
         .filter((part) => part.filename)
         .map((part) => part.filename as string);
 
-/** A header value with non-ASCII text, encoded so every mail server reads it. */
-const encodeHeader = (value: string) =>
-    /^[\x20-\x7e]*$/.test(value) ? value : `=?UTF-8?B?${Buffer.from(value, "utf8").toString("base64")}?=`;
-
-const oneLine = (value: string) => value.replace(/[\r\n]+/g, " ").trim();
-
-export interface DraftInput {
-    to: string;
-    subject: string;
-    body: string;
-    cc?: string;
-    inReplyTo?: string;
-}
-
-/** An RFC 2822 message, base64url as the Gmail API wants it. Header values cannot carry new lines. */
-export const rawMessage = (draft: DraftInput): string => {
-    const lines = [
-        `To: ${oneLine(draft.to)}`,
-        ...(draft.cc ? [`Cc: ${oneLine(draft.cc)}`] : []),
-        `Subject: ${encodeHeader(oneLine(draft.subject))}`,
-        ...(draft.inReplyTo
-            ? [`In-Reply-To: ${oneLine(draft.inReplyTo)}`, `References: ${oneLine(draft.inReplyTo)}`]
-            : []),
-        "MIME-Version: 1.0",
-        'Content-Type: text/plain; charset="UTF-8"',
-        "Content-Transfer-Encoding: 8bit",
-        "",
-        draft.body.replace(/\r?\n/g, "\r\n"),
-    ];
-    return Buffer.from(lines.join("\r\n"), "utf8").toString("base64url");
-};
+/** An RFC 2822 message, base64url as the Gmail API wants it. */
+export const rawMessage = (draft: DraftInput): string => Buffer.from(rfc822(draft), "utf8").toString("base64url");

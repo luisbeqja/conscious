@@ -150,6 +150,10 @@ While the app is in Testing, Google ends the sign-in after 7 days, and Conscious
 
 
 
+## Any other mailbox
+
+For mail outside Gmail (iCloud, GMX, WEB.DE, Libero, Posteo, Yahoo, Fastmail, a work or own domain), ask "anything from the landlord?" and Conscious sends a Vault link that asks for your address and an app password. It signs in to the mail server over IMAPS to check them before saving. After that it searches and reads mail, without marking anything read, and saves replies in your Drafts folder for you to send. It never sends, moves or deletes. Common providers' servers are known; for others the page has a box for the IMAP server. Outlook.com and Hotmail no longer accept passwords over IMAP, so they do not work this way.
+
 ## Spotify
 
 Ask "what am I listening to?" or "put on something for cooking" and Conscious sends a Vault link with a **Sign in with Spotify** button. After that it sees what plays and on which device, searches, reads your history and top artists, lists your playlists and makes private ones. Playing, pausing, skipping and queueing need Spotify Premium and an open Spotify app.

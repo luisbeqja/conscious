@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { GoogleSignInExpired } from "../google/oauth.js";
-import { authHeader, type Connector } from "../plugins/connectors.js";
+import { authHeader, type Connector, type ConnectorField } from "../plugins/connectors.js";
 import type { Vault } from "./vault.js";
 
 /** Whether a secret works, asked of the service itself before the Vault keeps it. */
@@ -34,6 +34,17 @@ export interface SignInProvider {
 export const signInCallbackPath = (connectorId: string) => `/vault/oauth/${connectorId}`;
 
 const MAX_BODY_BYTES = 8_192;
+
+/** The form's values as one JSON secret, or undefined when a required one is missing. */
+const fieldsSecret = (fields: readonly ConnectorField[], body: URLSearchParams): string | undefined => {
+    const values: Record<string, string> = {};
+    for (const field of fields) {
+        const value = body.get(field.name)?.trim();
+        if (value) values[field.name] = value;
+        else if (!field.optional) return undefined;
+    }
+    return JSON.stringify(values);
+};
 
 const HEADERS = {
     "content-type": "text/html; charset=utf-8",
@@ -87,9 +98,19 @@ ${
 <ol>${connector.howTo.steps.map((step) => `<li>${escapeHtml(step)}</li>`).join("")}</ol>
 <p><a href="${escapeHtml(connector.howTo.url)}" target="_blank" rel="noopener noreferrer">Open ${escapeHtml(connector.name)}</a></p>
 <form method="post" autocomplete="off">
-<p class="hosts">Your token will only be sent to: ${connector.hosts.map((host) => `<b>${escapeHtml(host)}</b>`).join(", ")}</p>
+${
+    connector.fields
+        ? connector.fields
+              .map(
+                  (field) => `<label for="${escapeHtml(field.name)}">${escapeHtml(field.label)}</label>
+<input id="${escapeHtml(field.name)}" name="${escapeHtml(field.name)}" type="${field.type}"${field.optional ? "" : " required"} autocomplete="off" spellcheck="false">
+${field.hint ? `<p class="note">${escapeHtml(field.hint)}</p>` : ""}`,
+              )
+              .join("\n")
+        : `<p class="hosts">Your token will only be sent to: ${connector.hosts.map((host) => `<b>${escapeHtml(host)}</b>`).join(", ")}</p>
 <label for="secret">Token</label>
-<input id="secret" name="secret" type="password" required autocomplete="off" spellcheck="false">
+<input id="secret" name="secret" type="password" required autocomplete="off" spellcheck="false">`
+}
 ${error ? `<p class="bad">${escapeHtml(error)}</p>` : ""}
 <button type="submit">Save to the Vault</button>
 </form>
@@ -158,9 +179,10 @@ export const createVaultServer = (options: VaultServerOptions): Server =>
         if (request.method === "GET") return send(200, form(connector));
         if (request.method !== "POST") return send(405, gone());
 
-        const body = await readBody(request);
-        const secret = new URLSearchParams(body ?? "").get("secret")?.trim();
-        if (!secret) return send(400, form(connector, "Paste the token first."));
+        const body = new URLSearchParams((await readBody(request)) ?? "");
+        const secret = connector.fields ? fieldsSecret(connector.fields, body) : body.get("secret")?.trim();
+        if (!secret)
+            return send(400, form(connector, connector.fields ? "Fill in every box." : "Paste the token first."));
         let works = false;
         try {
             works = await options.verify(connector, secret);

@@ -20,6 +20,16 @@ export interface Connector {
     agentDefined?: boolean;
     /** Connected by signing in on this provider's own page instead of pasting a token, e.g. "Google". */
     signIn?: string;
+    /** Several values instead of one token, saved together as JSON. Only Conscious's own connectors. */
+    fields?: readonly ConnectorField[];
+}
+
+export interface ConnectorField {
+    name: string;
+    label: string;
+    type: "text" | "email" | "password";
+    optional?: boolean;
+    hint?: string;
 }
 
 export const CONNECTORS: ReadonlyMap<string, Connector> = new Map(
@@ -99,7 +109,7 @@ export interface ConnectorSpec {
  * (a refresh token, a mailbox password) is never handed to a plugin. Sign-in MCP servers are
  * `mcp-<name>`, which a plugin's connector id cannot spell.
  */
-const HOST_ONLY_IDS = new Set(["google", "spotify"]);
+const HOST_ONLY_IDS = new Set(["google", "spotify", "mail"]);
 
 /** The connector a plugin uses: a built-in one by id, or the one it defines itself. */
 export const resolveConnector = (spec: ConnectorSpec): { connector?: Connector; problems: string[] } => {

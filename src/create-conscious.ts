@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { BackgroundAgents, type Notify } from "./agents/background-agents.js";
 import { createGoogleCapability } from "./capabilities/google/capability.js";
 import { createRegistry } from "./capabilities/index.js";
+import { createMailCapability, verifyMailbox } from "./capabilities/mail/capability.js";
 import { createSpotifyCapability } from "./capabilities/spotify/capability.js";
 import type { Capability } from "./capabilities/types.js";
 import { createWebCapability } from "./capabilities/web/capability.js";
@@ -12,6 +13,8 @@ import { createModelRuntime } from "./engine/models.js";
 import { Orchestrator, SentLog } from "./engine/orchestrator.js";
 import { GoogleApi } from "./google/api.js";
 import { GOOGLE_CONNECTOR, GoogleOAuth } from "./google/oauth.js";
+import { MAIL_CONNECTOR } from "./mail/account.js";
+import { openImap } from "./mail/imap.js";
 import { McpSignIn, McpUserServers } from "./mcp/sign-in.js";
 import { fetchTransport } from "./plugins/broker.js";
 import { manifestProblems } from "./plugins/manifest.js";
@@ -86,6 +89,7 @@ export const createConscious = (config: Config, notify: Notify, extra: readonly 
     if (spotify) signIns.set(SPOTIFY_CONNECTOR.id, spotify);
     const builtIn = [
         web,
+        createMailCapability(openImap, vault),
         ...(google ? [createGoogleCapability(new GoogleApi(google), vault)] : []),
         ...(spotify ? [createSpotifyCapability(spotify, vault)] : []),
     ];
@@ -93,6 +97,7 @@ export const createConscious = (config: Config, notify: Notify, extra: readonly 
         plugins,
         vault: { vault, publicUrl: config.vault.publicUrl },
         signInConnectors: [
+            MAIL_CONNECTOR,
             ...(google ? [GOOGLE_CONNECTOR] : []),
             ...(spotify ? [SPOTIFY_CONNECTOR] : []),
             ...mcpSignIns.map((signIn) => signIn.connector),
@@ -126,7 +131,10 @@ export const createConscious = (config: Config, notify: Notify, extra: readonly 
     const startVault = () => {
         const server = createVaultServer({
             vault,
-            verify: verifyWithService,
+            verify: (connector, secret) =>
+                connector.id === MAIL_CONNECTOR.id
+                    ? verifyMailbox(openImap, secret)
+                    : verifyWithService(connector, secret),
             signIns,
             onConnected: (userId, connector) =>
                 say(userId, `${connector.name} is connected ✅ You can ask me about it now.`),
