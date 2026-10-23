@@ -16,14 +16,16 @@ const mcp = await connectServers(config.mcpServers);
 
 // The channel needs the orchestrator and the orchestrator's notifications need the channel.
 let notify: (userId: string, text: string) => Promise<void> = async () => {};
-const { orchestrator, scheduler, sandboxes, startVault } = createConscious(
+const { orchestrator, scheduler, sandboxes, vaultPage, startVault } = createConscious(
     config,
     (userId, text) => notify(userId, text),
     mcp.capabilities,
 );
-const { channel, server } = startAppChannel(orchestrator, app, config.dataDir);
+// On one port (a host that gives the service a single address), the app's server serves the Vault too.
+const onePort = app.port === config.vault.port;
+const { channel, server } = startAppChannel(orchestrator, app, config.dataDir, onePort ? vaultPage : undefined);
 notify = channel.notify;
-const vaultServer = startVault();
+const vaultServer = onePort ? undefined : startVault();
 scheduler.start();
 console.log(`Conscious in the app · ${config.model.provider}/${config.model.id} · ${config.timezone}`);
 
@@ -31,7 +33,7 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
     process.on(signal, async () => {
         scheduler.stopAll();
         server.close();
-        vaultServer.close();
+        vaultServer?.close();
         await sandboxes?.shutdown();
         await mcp.close();
         process.exit(0);

@@ -34,7 +34,7 @@ const mcp = await connectServers(config.mcpServers);
 let channel: PhotonChannel | undefined;
 let appChannel: AppChannel | undefined;
 const chats = new ChatBook(join(config.dataDir, "chats.json"));
-const { orchestrator, scheduler, sandboxes, startVault } = createConscious(
+const { orchestrator, scheduler, sandboxes, vaultPage, startVault } = createConscious(
     config,
     // Conscious speaks first where the user last wrote: the app or their messaging chat.
     (userId, text) => {
@@ -45,7 +45,9 @@ const { orchestrator, scheduler, sandboxes, startVault } = createConscious(
     },
     mcp.capabilities,
 );
-const appServer = app && startAppChannel(orchestrator, app, config.dataDir);
+// On one port (a host that gives the service a single address), the app's server serves the Vault too.
+const onePort = app?.port === config.vault.port;
+const appServer = app && startAppChannel(orchestrator, app, config.dataDir, onePort ? vaultPage : undefined);
 appChannel = appServer?.channel;
 // Spectrum is connected below; a chat is only reopened when a reminder fires, by which time it is.
 let spectrum: Awaited<ReturnType<typeof Spectrum>> | undefined;
@@ -63,7 +65,7 @@ channel = new PhotonChannel(orchestrator, photon.allowedUsers, {
         return (provider as typeof whatsappBusiness)(spectrum as never).space.get(spaceId);
     },
 });
-const vaultServer = startVault();
+const vaultServer = onePort ? undefined : startVault();
 if (!config.vault.publicUrl.startsWith("https://")) {
     console.warn(
         `Vault links point to ${config.vault.publicUrl}; set CONSCIOUS_PUBLIC_URL to an https address phones can open.`,
@@ -85,7 +87,7 @@ console.log(
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
     process.on(signal, async () => {
         scheduler.stopAll();
-        vaultServer.close();
+        vaultServer?.close();
         appServer?.server.close();
         await sandboxes?.shutdown();
         await mcp.close();

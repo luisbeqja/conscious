@@ -1,4 +1,4 @@
-import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { createServer, type IncomingMessage, type RequestListener, type Server, type ServerResponse } from "node:http";
 import { GoogleSignInExpired } from "../google/oauth.js";
 import { authHeader, type Connector, type ConnectorField } from "../plugins/connectors.js";
 import type { Vault } from "./vault.js";
@@ -147,8 +147,9 @@ const readBody = (request: IncomingMessage): Promise<string | undefined> =>
  * The Vault page: `GET /vault/<code>` shows a form for one secret, `POST` saves it. The code in
  * the link, sent to the user in their own chat, is the only thing that grants access.
  */
-export const createVaultServer = (options: VaultServerOptions): Server =>
-    createServer(async (request: IncomingMessage, response: ServerResponse) => {
+export const vaultHandler =
+    (options: VaultServerOptions): RequestListener =>
+    async (request: IncomingMessage, response: ServerResponse) => {
         const send = (status: number, html: string) => response.writeHead(status, HEADERS).end(html);
         const url = new URL(request.url ?? "/", "http://vault");
         const callback = /^\/vault\/oauth\/([a-z0-9-]{2,40})$/.exec(url.pathname)?.[1];
@@ -194,7 +195,10 @@ export const createVaultServer = (options: VaultServerOptions): Server =>
             return send(400, form(connector, `${connector.name} did not accept that token. Check it and try again.`));
         }
         await save(options, link.userId, connector, secret, code, send);
-    });
+    };
+
+/** The Vault page on a server of its own. */
+export const createVaultServer = (options: VaultServerOptions): Server => createServer(vaultHandler(options));
 
 const save = async (
     options: VaultServerOptions,

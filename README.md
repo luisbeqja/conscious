@@ -188,6 +188,19 @@ The Vault page runs on `CONSCIOUS_VAULT_PORT` (8787). In the terminal, `http://l
 
 Connected accounts, plugins (including ones the agent wrote) and installs are saved in `.conscious/` on the host and survive a restart.
 
+## Run it online
+
+Conscious is one Node process that keeps running, so any host that keeps a process up and gives it a disk works. Nothing has to reach it from outside except your phone: Photon is an outgoing connection, and E2B is already in the cloud.
+
+A host such as Railway, Render or Fly.io gives a service one address. Set `CONSCIOUS_APP_PORT` and `CONSCIOUS_VAULT_PORT` to the same port, and that one https address serves both: the app under `/app/`, the Vault under `/vault/`. It goes in `CONSCIOUS_PUBLIC_URL` and in the phone app.
+
+- Build with `pnpm build`, start with `node dist/photon.js` (`node dist/app.js` for the app alone). On Railway, set the start command in the service settings or as `RAILPACK_START_CMD`.
+- Variables: your `.env`, plus `CONSCIOUS_APP_PORT=8080`, `CONSCIOUS_VAULT_PORT=8080`, `CONSCIOUS_DATA_DIR=/data` and a `CONSCIOUS_VAULT_KEY` of its own (`openssl rand -base64 32`).
+- A volume at `/data`, so the Vault, access codes and reminders survive a deploy.
+- One copy only. Two would both answer, and both send every reminder; stop the one on your laptop.
+
+The phone app's access code is in the first deploy's logs. Each user's computer is found again by the same `E2B_API_KEY`, so memory and conversations carry over.
+
 ## Check it
 
 ```bash

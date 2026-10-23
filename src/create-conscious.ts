@@ -1,3 +1,4 @@
+import { createServer } from "node:http";
 import { join } from "node:path";
 import { BackgroundAgents, type Notify } from "./agents/background-agents.js";
 import { createGoogleCapability } from "./capabilities/google/capability.js";
@@ -26,7 +27,7 @@ import { createE2BClient, E2BSandboxes } from "./sandbox/e2b.js";
 import { Scheduler } from "./scheduler/scheduler.js";
 import { SkillLibrary } from "./skills/library.js";
 import { SPOTIFY_CONNECTOR, SpotifyOAuth } from "./spotify/oauth.js";
-import { createVaultServer, type SignInProvider, signInCallbackPath, verifyWithService } from "./vault/server.js";
+import { type SignInProvider, signInCallbackPath, vaultHandler, verifyWithService } from "./vault/server.js";
 import { loadOrCreateVaultKey, Vault } from "./vault/vault.js";
 import { createSearchProvider } from "./web/search.js";
 
@@ -127,20 +128,16 @@ export const createConscious = (config: Config, notify: Notify, extra: readonly 
         skills: config.sandbox ? new SkillLibrary({ internet: config.sandbox.internet }) : undefined,
         sent,
     });
-    /** Serves the Vault page. When a secret is saved, the user hears it in the chat. */
-    const startVault = () => {
-        const server = createVaultServer({
-            vault,
-            verify: (connector, secret) =>
-                connector.id === MAIL_CONNECTOR.id
-                    ? verifyMailbox(openImap, secret)
-                    : verifyWithService(connector, secret),
-            signIns,
-            onConnected: (userId, connector) =>
-                say(userId, `${connector.name} is connected ✅ You can ask me about it now.`),
-        });
-        server.listen(config.vault.port);
-        return server;
-    };
-    return { orchestrator, scheduler, background, sandboxes, plugins, vault, mcpUsers, startVault };
+    /** The Vault page. When a secret is saved, the user hears it in the chat. */
+    const vaultPage = vaultHandler({
+        vault,
+        verify: (connector, secret) =>
+            connector.id === MAIL_CONNECTOR.id ? verifyMailbox(openImap, secret) : verifyWithService(connector, secret),
+        signIns,
+        onConnected: (userId, connector) =>
+            say(userId, `${connector.name} is connected ✅ You can ask me about it now.`),
+    });
+    /** Serves the Vault page on a port of its own. */
+    const startVault = () => createServer(vaultPage).listen(config.vault.port);
+    return { orchestrator, scheduler, background, sandboxes, plugins, vault, mcpUsers, vaultPage, startVault };
 };

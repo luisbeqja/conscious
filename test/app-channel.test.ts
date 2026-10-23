@@ -1,4 +1,5 @@
 import { mkdtempSync } from "node:fs";
+import type { RequestListener } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -13,7 +14,7 @@ afterEach(() => {
     for (const server of servers.splice(0)) server.close();
 });
 
-const start = async (answer: (text: string, options: SendOptions) => Promise<string>) => {
+const start = async (answer: (text: string, options: SendOptions) => Promise<string>, others?: RequestListener) => {
     const dir = mkdtempSync(join(tmpdir(), "conscious-app-"));
     const log = new AppLog(join(dir, "app"));
     const channel = new AppChannel(
@@ -21,7 +22,7 @@ const start = async (answer: (text: string, options: SendOptions) => Promise<str
         new Map([["me", "abcd-efgh"]]),
         log,
     );
-    const server = channel.createServer();
+    const server = channel.createServer(others);
     await new Promise<void>((resolve) => server.listen(0, resolve));
     servers.push(server);
     const port = (server.address() as AddressInfo).port;
@@ -103,6 +104,19 @@ describe("AppChannel", () => {
         expect([...new Uint8Array(await owner.arrayBuffer())]).toEqual([1, 2, 3]);
         const stranger = await fetch(`http://localhost:${port}/app/files/${file.id}`);
         expect(stranger.status).toBe(404);
+    });
+
+    it("shares its port: paths outside /app/ go to the other handler, the app keeps its own", async () => {
+        const { port, url } = await start(
+            async () => "",
+            (request, response) => response.writeHead(200).end(`vault ${request.url}`),
+        );
+        expect(await (await fetch(`http://localhost:${port}/vault/abc`)).text()).toBe("vault /vault/abc");
+        expect(await (await fetch(`http://localhost:${port}/app/health`)).json()).toEqual({ ok: true });
+
+        const app = await phone(url, "abcd-efgh");
+        expect((await app.waitFor("ready")).history).toEqual([]);
+        app.socket.close();
     });
 
     it("creates a code once per user and keeps it", () => {

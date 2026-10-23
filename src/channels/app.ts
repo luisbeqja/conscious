@@ -1,6 +1,6 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { createServer, type IncomingMessage, type RequestListener, type Server, type ServerResponse } from "node:http";
 import { networkInterfaces } from "node:os";
 import { dirname, join } from "node:path";
 import { type WebSocket, WebSocketServer } from "ws";
@@ -88,9 +88,14 @@ export class AppChannel {
         this.codes = [...codes].map(([userId, code]) => ({ userId, digest: digest(code) }));
     }
 
-    /** The app's HTTP server: the socket at `/app/socket`, files at `/app/files/<id>`. */
-    createServer(): Server {
-        const server = createServer((request, response) => this.serveHttp(request, response));
+    /**
+     * The app's HTTP server: the socket at `/app/socket`, files at `/app/files/<id>`. Other paths
+     * go to `others`, when the app shares its port (the Vault, on a host with one address).
+     */
+    createServer(others?: RequestListener): Server {
+        const server = createServer((request, response) =>
+            others && !request.url?.startsWith("/app/") ? others(request, response) : this.serveHttp(request, response),
+        );
         const sockets = new WebSocketServer({ server, path: "/app/socket", maxPayload: MAX_PAYLOAD_BYTES });
         sockets.on("connection", (socket) => this.accept(socket));
         const alive = new WeakSet<WebSocket>();
@@ -279,12 +284,17 @@ const localAddresses = (port: number): string[] =>
         .filter((address) => address && address.family === "IPv4" && !address.internal)
         .map((address) => `http://${address?.address}:${port}`);
 
-/** Starts the app server and says how to pair a phone with it. */
-export const startAppChannel = (orchestrator: AppAnswerer, app: AppConfig, dataDir: string) => {
+/** Starts the app server and says how to pair a phone with it. `others` serves the paths outside `/app/`. */
+export const startAppChannel = (
+    orchestrator: AppAnswerer,
+    app: AppConfig,
+    dataDir: string,
+    others?: RequestListener,
+) => {
     const codesFile = join(dataDir, "app-codes.json");
     const { codes, created } = loadOrCreateAppCodes(codesFile, app.users);
     const channel = new AppChannel(orchestrator, codes, new AppLog(join(dataDir, "app")));
-    const server = channel.createServer();
+    const server = channel.createServer(others);
     server.listen(app.port);
     const addresses = localAddresses(app.port);
     console.log(`Phone app on ${addresses[0] ?? `http://localhost:${app.port}`}`);
