@@ -1,0 +1,77 @@
+name: Phone app update
+
+# Every merge to main that touches the phone app publishes it to EAS Update.
+# Expo Go, signed in to the same Expo account, loads the newest one on launch.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "mobile/**"
+      - ".github/workflows/mobile-update.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: mobile-update
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check for EXPO_TOKEN
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "::error::Add an EXPO_TOKEN repository secret (expo.dev > Account settings > Access tokens). See mobile/README.md."
+            exit 1
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - run: npm ci
+
+      # Links app.json to the Expo project named after the slug, creating it on
+      # the first run, so nothing has to be committed by hand.
+      - name: Link the Expo project
+        run: |
+          if ! grep -q '"projectId"' app.json; then
+            eas init --non-interactive --force
+          fi
+
+      - name: Publish the update
+        env:
+          EAS_NO_VCS: "1"
+          MESSAGE: ${{ github.event.head_commit.message || 'Manual publish' }}
+        run: |
+          eas update --channel main --environment preview --non-interactive --json \
+            --message "$(printf '%s' "$MESSAGE" | head -n 1)" > update.json
+          cat update.json
+
+      - name: Write the open link
+        run: |
+          project_id=$(node -p "require('./app.json').expo.extra.eas.projectId")
+          group=$(node -p "require('./update.json')[0].group")
+          {
+            echo "### Phone app published"
+            echo
+            echo "Open Expo Go, signed in to your Expo account, and pick **conscious** under Projects. Or open:"
+            echo
+            echo "\`exp://u.expo.dev/${project_id}?channel-name=main\`"
+            echo
+            echo "Update group: \`${group}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

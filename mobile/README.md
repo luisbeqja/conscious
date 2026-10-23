@@ -27,6 +27,24 @@ Everything the app uses ships in Expo Go, so no Xcode or Android Studio is neede
 
 `npx expo start --web` opens it in a browser too, which is handy for working on the layout.
 
+## Always up to date, without a dev server
+
+Every merge to `main` that changes `mobile/` publishes the app with EAS Update (`.github/workflows/mobile-update.yml`). Expo Go, signed in to the same Expo account, opens the newest version, so you do not need `npx expo start` running.
+
+One-time setup:
+
+1. Make a free account at [expo.dev](https://expo.dev/signup).
+2. In expo.dev, open Account settings, then Access tokens, and create a token.
+3. In GitHub, open the repository's Settings, then Secrets and variables, then Actions, and add it as `EXPO_TOKEN`.
+4. In GitHub, open Actions, pick "Phone app update" and press "Run workflow" once. The first run creates the Expo project.
+5. On the phone, sign in to Expo Go with the same account. Conscious is under Projects. Open it, then its `main` channel.
+
+After that, close and open the app to get the newest version. Expo Go checks for an update when the app starts; if the download takes more than a moment, the update shows the next time you open it.
+
+The app still talks to the Conscious on your computer, so the phone needs to reach that computer: the same Wi-Fi, or a VPN such as Tailscale. Enter the address and access code once in this copy of the app; it does not share storage with the dev-server copy.
+
+A change that adds a library with native code does not fit in Expo Go. That needs a build of its own (`npx eas-cli@latest build --profile preview`), which follows the same `main` channel.
+
 ## How it is built
 
 - Expo SDK 58, React Native, Expo Router (`src/app/`), Reanimated for motion, `react-native-svg` for the icons.

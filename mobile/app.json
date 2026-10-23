@@ -7,6 +7,9 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
+    "runtimeVersion": {
+      "policy": "sdkVersion"
+    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "app.conscious.mobile",
