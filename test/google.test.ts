@@ -8,7 +8,7 @@ import { messageText, rawMessage } from "../src/google/mail.js";
 import { GOOGLE_CONNECTOR, GOOGLE_SCOPES, GoogleOAuth } from "../src/google/oauth.js";
 import { resolveConnector } from "../src/plugins/connectors.js";
 import { Scheduler } from "../src/scheduler/scheduler.js";
-import { createVaultServer } from "../src/vault/server.js";
+import { createVaultServer, type SignInProvider } from "../src/vault/server.js";
 import { Vault } from "../src/vault/vault.js";
 
 const context: ToolContext = { userId: "me", timezone: "Europe/Rome", scheduler: new Scheduler(async () => {}) };
@@ -69,11 +69,7 @@ describe("Google sign-in on the Vault page", () => {
             onConnected: async (userId, connector) => {
                 told.push(`${userId}:${connector.id}`);
             },
-            signIn: {
-                callbackPath: "/vault/oauth/google",
-                authUrl: (state) => oauth.authUrl(state),
-                exchange: (code) => oauth.exchange(code),
-            },
+            signIns: new Map([["google", oauth]]),
         }).listen(0);
         const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
         const { code } = vault.createLink("me", GOOGLE_CONNECTOR);
@@ -92,6 +88,24 @@ describe("Google sign-in on the Vault page", () => {
         expect((await vault.credential("me", "google"))?.token).toBe("1//refresh");
         expect(told).toEqual(["me:google"]);
         expect((await fetch(`${base}/vault/oauth/google?state=${code}&code=4/abc`)).status).toBe(410);
+    });
+
+    it("never lets one provider's callback save another's sign-in", async () => {
+        const vault = new Vault();
+        const other = { authUrl: () => "https://other.example/auth", exchange: async () => "other-token" };
+        server = createVaultServer({
+            vault,
+            verify: async () => false,
+            onConnected: async () => {},
+            signIns: new Map<string, SignInProvider>([
+                ["google", new GoogleOAuth(client, "https://me.example/cb", vault, fakeGoogle().doFetch)],
+                ["other", other],
+            ]),
+        }).listen(0);
+        const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+        const { code } = vault.createLink("me", GOOGLE_CONNECTOR);
+        expect((await fetch(`${base}/vault/oauth/other?state=${code}&code=x`)).status).toBe(410);
+        expect(await vault.credential("me", "google")).toBeUndefined();
     });
 
     it("refuses a sign-in where boxes were left unticked", async () => {

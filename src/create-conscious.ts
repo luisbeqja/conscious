@@ -20,11 +20,9 @@ import { persistPlugins } from "./plugins/state-file.js";
 import { createE2BClient, E2BSandboxes } from "./sandbox/e2b.js";
 import { Scheduler } from "./scheduler/scheduler.js";
 import { SkillLibrary } from "./skills/library.js";
-import { createVaultServer, verifyWithService } from "./vault/server.js";
+import { createVaultServer, signInCallbackPath, verifyWithService } from "./vault/server.js";
 import { loadOrCreateVaultKey, Vault } from "./vault/vault.js";
 import { createSearchProvider } from "./web/search.js";
-
-const GOOGLE_CALLBACK = "/vault/oauth/google";
 
 /**
  * Composition root: which implementation sits behind each seam. `notify` is how Conscious
@@ -71,7 +69,11 @@ export const createConscious = (config: Config, notify: Notify, extra: readonly 
     };
     const web = createWebCapability({ search: createSearchProvider(config.search) });
     const google = config.google
-        ? new GoogleOAuth(config.google, `${config.vault.publicUrl.replace(/\/$/, "")}${GOOGLE_CALLBACK}`, vault)
+        ? new GoogleOAuth(
+              config.google,
+              `${config.vault.publicUrl.replace(/\/$/, "")}${signInCallbackPath(GOOGLE_CONNECTOR.id)}`,
+              vault,
+          )
         : undefined;
     const builtIn = google ? [web, createGoogleCapability(new GoogleApi(google), vault)] : [web];
     const registry = createRegistry(sandboxes, [...builtIn, ...extra], {
@@ -106,11 +108,7 @@ export const createConscious = (config: Config, notify: Notify, extra: readonly 
         const server = createVaultServer({
             vault,
             verify: verifyWithService,
-            signIn: google && {
-                callbackPath: GOOGLE_CALLBACK,
-                authUrl: (state) => google.authUrl(state),
-                exchange: (code) => google.exchange(code),
-            },
+            signIns: new Map(google ? [[GOOGLE_CONNECTOR.id, google]] : []),
             onConnected: (userId, connector) =>
                 say(userId, `${connector.name} is connected ✅ You can ask me about it now.`),
         });

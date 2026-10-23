@@ -19,17 +19,19 @@ export interface VaultServerOptions {
     verify: VerifySecret;
     /** Called once a secret is saved, to tell the user in the chat. */
     onConnected: (userId: string, connector: Connector) => Promise<void>;
-    /** Sign-in by redirect, for connectors that have it. */
-    signIn?: SignInProvider;
+    /** Sign-in by redirect, by connector id. Each comes back to `/vault/oauth/<connector id>`. */
+    signIns?: ReadonlyMap<string, SignInProvider>;
 }
 
-/** A provider the user signs in to on its own page. It comes back to `callbackPath` with a code. */
+/** A provider the user signs in to on its own page. It comes back to the callback with a code. */
 export interface SignInProvider {
-    callbackPath: string;
-    authUrl(state: string): string;
-    /** The refresh token the Vault keeps. */
-    exchange(code: string): Promise<string>;
+    /** Where to send the user. `state` is the Vault link's code. */
+    authUrl(state: string, userId: string): string | Promise<string>;
+    /** What the Vault keeps: a refresh token, or whatever the provider needs to act again. */
+    exchange(code: string, state: string, userId: string): Promise<string>;
 }
+
+export const signInCallbackPath = (connectorId: string) => `/vault/oauth/${connectorId}`;
 
 const MAX_BODY_BYTES = 8_192;
 
@@ -65,10 +67,10 @@ const signInPage = (connector: Connector, code: string, error?: string) =>
     page(
         `Connect ${connector.name}`,
         `<h1>Connect ${escapeHtml(connector.name)}</h1>
-<p>You sign in on Google's own page. Conscious never sees your password; it keeps an encrypted sign-in that you can remove at any time.</p>
+<p>You sign in on ${escapeHtml(connector.signIn ?? connector.name)}'s own page. Conscious never sees your password; it keeps an encrypted sign-in that you can remove at any time.</p>
 <ol>${connector.howTo.steps.map((step) => `<li>${escapeHtml(step)}</li>`).join("")}</ol>
 ${error ? `<p class="bad">${escapeHtml(error)}</p>` : ""}
-<p><a class="button" href="/vault/${escapeHtml(code)}/start">Sign in with Google</a></p>
+<p><a class="button" href="/vault/${escapeHtml(code)}/start">Sign in with ${escapeHtml(connector.signIn ?? connector.name)}</a></p>
 <p class="note">This link works once and expires in 15 minutes.</p>`,
     );
 
@@ -128,9 +130,9 @@ export const createVaultServer = (options: VaultServerOptions): Server =>
     createServer(async (request: IncomingMessage, response: ServerResponse) => {
         const send = (status: number, html: string) => response.writeHead(status, HEADERS).end(html);
         const url = new URL(request.url ?? "/", "http://vault");
-        if (options.signIn && url.pathname === options.signIn.callbackPath) {
-            return signInCallback(options, options.signIn, url, send);
-        }
+        const callback = /^\/vault\/oauth\/([a-z0-9-]{2,40})$/.exec(url.pathname)?.[1];
+        const callbackProvider = callback ? options.signIns?.get(callback) : undefined;
+        if (callback && callbackProvider) return signInCallback(options, callback, callbackProvider, url, send);
         const match = /^\/vault\/([A-Za-z0-9_-]{16,64})(\/start)?$/.exec(url.pathname);
         if (!match?.[1]) return send(404, gone());
         const code = match[1];
@@ -139,10 +141,18 @@ export const createVaultServer = (options: VaultServerOptions): Server =>
         const { connector } = link;
 
         if (connector.signIn) {
-            if (!options.signIn || request.method !== "GET") return send(404, gone());
+            const provider = options.signIns?.get(connector.id);
+            if (!provider || request.method !== "GET") return send(404, gone());
             if (!match[2]) return send(200, signInPage(connector, code));
-            // The link's code travels as OAuth state, so the callback knows whose sign-in it is.
-            return response.writeHead(302, { ...HEADERS, location: options.signIn.authUrl(code) }).end();
+            let location: string;
+            try {
+                // The link's code travels as OAuth state, so the callback knows whose sign-in it is.
+                location = await provider.authUrl(code, link.userId);
+            } catch (error) {
+                console.error(`[vault] could not start the ${connector.name} sign-in`, error);
+                return send(502, signInPage(connector, code, `Could not reach ${connector.name}. Try again.`));
+            }
+            return response.writeHead(302, { ...HEADERS, location }).end();
         }
         if (match[2]) return send(404, gone());
         if (request.method === "GET") return send(200, form(connector));
@@ -183,25 +193,28 @@ const save = async (
 /** Where the provider sends the user back. `state` is the Vault link's code, so it is single-use too. */
 const signInCallback = async (
     options: VaultServerOptions,
+    connectorId: string,
     signIn: SignInProvider,
     url: URL,
     send: (status: number, html: string) => void,
 ) => {
     const state = url.searchParams.get("state") ?? "";
     const link = /^[A-Za-z0-9_-]{16,64}$/.test(state) ? options.vault.findLink(state) : undefined;
-    if (!link?.connector.signIn) return send(410, gone());
+    // A code meant for one provider never lands in another's slot.
+    if (!link?.connector.signIn || link.connector.id !== connectorId) return send(410, gone());
+    const provider = link.connector.signIn;
     const code = url.searchParams.get("code");
     if (!code) {
         options.vault.failAttempt(state);
-        return send(400, signInPage(link.connector, state, "Google did not sign you in. Try again."));
+        return send(400, signInPage(link.connector, state, `${provider} did not sign you in. Try again.`));
     }
-    let refreshToken: string;
+    let secret: string;
     try {
-        refreshToken = await signIn.exchange(code);
+        secret = await signIn.exchange(code, state, link.userId);
     } catch (error) {
         options.vault.failAttempt(state);
         const message = error instanceof GoogleSignInExpired ? "That sign-in expired." : (error as Error).message;
         return send(400, signInPage(link.connector, state, `${message} Try again.`));
     }
-    await save(options, link.userId, link.connector, refreshToken, state, send);
+    await save(options, link.userId, link.connector, secret, state, send);
 };

@@ -29,7 +29,7 @@ export const GOOGLE_CONNECTOR: Connector = {
         ],
     },
     verifyUrl: "https://www.googleapis.com/oauth2/v3/userinfo",
-    signIn: "google",
+    signIn: "Google",
 };
 
 const TOKEN_URL = "https://oauth2.googleapis.com/token";

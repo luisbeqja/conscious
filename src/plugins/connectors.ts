@@ -18,8 +18,8 @@ export interface Connector {
     header?: string;
     /** Written in a plugin, not shipped with Conscious: nobody but the user checked it. */
     agentDefined?: boolean;
-    /** Connected by signing in on the provider's page instead of pasting a token. */
-    signIn?: "google";
+    /** Connected by signing in on this provider's own page instead of pasting a token, e.g. "Google". */
+    signIn?: string;
 }
 
 export const CONNECTORS: ReadonlyMap<string, Connector> = new Map(
@@ -94,12 +94,16 @@ export interface ConnectorSpec {
     header?: string;
 }
 
-/** The connector a plugin uses: a built-in one by id, or the one it defines itself. */
-/** Connectors signed in to by redirect. Their saved token is a refresh token that no plugin may hold. */
-const SIGN_IN_IDS = new Set(["google"]);
+/**
+ * Accounts Conscious connects itself, by sign-in or its own form. What the Vault keeps for them
+ * (a refresh token, a mailbox password) is never handed to a plugin. Sign-in MCP servers are
+ * `mcp-<name>`, which a plugin's connector id cannot spell.
+ */
+const HOST_ONLY_IDS = new Set(["google"]);
 
+/** The connector a plugin uses: a built-in one by id, or the one it defines itself. */
 export const resolveConnector = (spec: ConnectorSpec): { connector?: Connector; problems: string[] } => {
-    if (SIGN_IN_IDS.has(spec.connector)) {
+    if (HOST_ONLY_IDS.has(spec.connector)) {
         return { problems: [`auth: "${spec.connector}" is built into Conscious and cannot be used by a plugin`] };
     }
     const builtIn = CONNECTORS.get(spec.connector);
