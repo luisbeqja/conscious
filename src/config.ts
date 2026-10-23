@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import type { ComposioConfig } from "./composio/client.js";
 import type { ModelConfig } from "./engine/models.js";
 import type { GoogleClient } from "./google/oauth.js";
 import { type McpServerEntry, readCatalog, selectServers } from "./mcp/catalog.js";
@@ -26,6 +27,8 @@ export interface Config {
     google?: GoogleClient;
     /** This install's Spotify app. Without it, Spotify is not offered. */
     spotify?: SpotifyClient;
+    /** Other apps through Composio, which holds each user's sign-ins. Off without a key. */
+    composio?: ComposioConfig;
     /** Where voice notes are turned into text. Without it, Conscious says it cannot listen yet. */
     transcription?: TranscriptionConfig;
 }
@@ -103,6 +106,9 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): Config => {
             env.SPOTIFY_CLIENT_ID && env.SPOTIFY_CLIENT_SECRET
                 ? { clientId: env.SPOTIFY_CLIENT_ID, clientSecret: env.SPOTIFY_CLIENT_SECRET }
                 : undefined,
+        composio: env.COMPOSIO_API_KEY
+            ? { apiKey: env.COMPOSIO_API_KEY, baseUrl: env.COMPOSIO_BASE_URL || undefined }
+            : undefined,
         transcription: loadTranscriptionConfig(env),
     };
 };

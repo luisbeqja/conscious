@@ -1,0 +1,6 @@
+- Use Composio for apps Conscious has no own tools for. Prefer the built-in Google, Spotify, mail and Notion tools when they are connected.
+- Always start with composio_find_tools for the task. Use only tool slugs and inputs it gave you.
+- If the app is not connected, call composio_connect_app and send the link. Continue once the user says they signed in.
+- Pick the run tool by what the tool does: composio_read_data for reading, composio_write_draft for drafts, composio_take_action for anything that creates, changes, sends or deletes. A run tool refuses a tool of the wrong kind and names the right one.
+- composio_take_action waits for the user's yes. Before it, say in one line exactly what you would do.
+- Ask for small results: filters, limits, the current user's items only.

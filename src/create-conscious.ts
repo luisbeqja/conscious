@@ -1,12 +1,14 @@
 import { createServer } from "node:http";
 import { join } from "node:path";
 import { BackgroundAgents, type Notify } from "./agents/background-agents.js";
+import { createComposioCapability } from "./capabilities/composio/capability.js";
 import { createGoogleCapability } from "./capabilities/google/capability.js";
 import { createRegistry } from "./capabilities/index.js";
 import { createMailCapability, verifyMailbox } from "./capabilities/mail/capability.js";
 import { createSpotifyCapability } from "./capabilities/spotify/capability.js";
 import type { Capability } from "./capabilities/types.js";
 import { createWebCapability } from "./capabilities/web/capability.js";
+import { ComposioClient } from "./composio/client.js";
 import type { Config } from "./config.js";
 import { FileConversationStore } from "./conversations/file-store.js";
 import { SandboxConversationStore } from "./conversations/sandbox-store.js";
@@ -93,10 +95,31 @@ export const createConscious = (config: Config, notify: Notify, extra: readonly 
         createMailCapability(openImap, vault),
         ...(google ? [createGoogleCapability(new GoogleApi(google), vault)] : []),
         ...(spotify ? [createSpotifyCapability(spotify, vault)] : []),
+        ...(config.composio ? [createComposioCapability(new ComposioClient(config.composio))] : []),
     ];
     const registry = createRegistry(sandboxes, [...builtIn, ...extra], {
         plugins,
         vault: { vault, publicUrl: config.vault.publicUrl },
+        unconfigured: [
+            ...(google
+                ? []
+                : [
+                      {
+                          id: GOOGLE_CONNECTOR.id,
+                          name: "Google (Calendar, Gmail, Drive, Contacts, Tasks)",
+                          setup: `create an OAuth client of type Web application in Google Cloud with the redirect URI ${callback(GOOGLE_CONNECTOR.id)}, set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in .env, and restart Conscious. The README section "Google" has the steps.`,
+                      },
+                  ]),
+            ...(spotify
+                ? []
+                : [
+                      {
+                          id: SPOTIFY_CONNECTOR.id,
+                          name: "Spotify",
+                          setup: `create an app at developer.spotify.com with the redirect URI ${callback(SPOTIFY_CONNECTOR.id).replace("//localhost", "//127.0.0.1")}, set SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET in .env, and restart Conscious. The README section "Spotify" has the steps.`,
+                      },
+                  ]),
+        ],
         signInConnectors: [
             MAIL_CONNECTOR,
             ...(google ? [GOOGLE_CONNECTOR] : []),

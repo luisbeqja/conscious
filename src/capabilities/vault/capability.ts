@@ -8,10 +8,22 @@ import { type Capability, defineTool } from "../types.js";
  * The Vault: the user's connected accounts. Secrets go in through a private page, never the chat.
  * `connectors` lists the accounts a user can connect: the built-in ones and those their plugins define.
  */
+/** An account Conscious can connect, but this install has not been set up for yet. */
+export interface UnconfiguredConnector {
+    id: string;
+    name: string;
+    /** What whoever runs Conscious must do once, on that machine. */
+    setup: string;
+}
+
+const setupGuidance = (missing: UnconfiguredConnector) =>
+    `${missing.name} is not set up on this install yet, so no link can be made. Tell the user plainly that this is a one-time step by whoever runs Conscious, on the machine it runs on, not something to do in the chat: ${missing.setup} Do not offer other accounts instead.`;
+
 export const createVaultCapability = (
     vault: Vault,
     publicUrl: string,
     connectors: (userId: string) => Connector[] = () => [...CONNECTORS.values()],
+    unconfigured: readonly UnconfiguredConnector[] = [],
 ): Capability => {
     const request = defineTool({
         name: "vault_request_connection",
@@ -28,6 +40,13 @@ export const createVaultCapability = (
         execute: async (params, context) => {
             const available = connectors(context.userId);
             const connector = available.find((candidate) => candidate.id === params.connector);
+            const missing = unconfigured.find((candidate) => candidate.id === params.connector);
+            if (!connector && missing) {
+                return {
+                    data: { error: `${missing.name} is not set up on this install` },
+                    guidance: setupGuidance(missing),
+                };
+            }
             if (!connector) {
                 const known = available.map((candidate) => candidate.id).join(", ");
                 return {
@@ -54,11 +73,22 @@ export const createVaultCapability = (
         execute: async (_params, context) => {
             const connected = new Set(vault.connected(context.userId).map((entry) => entry.id));
             return {
-                data: connectors(context.userId).map((connector) => ({
-                    connector: connector.id,
-                    name: connector.name,
-                    connected: connected.has(connector.id),
-                })),
+                data: [
+                    ...connectors(context.userId).map((connector) => ({
+                        connector: connector.id,
+                        name: connector.name,
+                        connected: connected.has(connector.id),
+                    })),
+                    ...unconfigured.map((missing) => ({
+                        connector: missing.id,
+                        name: missing.name,
+                        connected: false,
+                        setUpOnThisInstall: false,
+                    })),
+                ],
+                guidance: unconfigured.length
+                    ? "Accounts with setUpOnThisInstall false need a one-time setup by whoever runs Conscious; vault_request_connection says what."
+                    : undefined,
             };
         },
     });

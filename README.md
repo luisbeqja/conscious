@@ -176,6 +176,12 @@ Notion, Todoist, Strava and Dropbox need your account. Ask "what's on my Todoist
 
 Set `CONSCIOUS_MCP_SERVERS` to choose (for example `kiwi,notion,todoist`, or `none`). Reading is free; adding and changing pages or tasks is allowed; deleting, and any tool a manifest does not mark, waits for your yes.
 
+## Other apps through Composio
+
+For apps Conscious has no tools of its own for (Linear, Slack, Trello, Asana, HubSpot, Jira, Airtable and hundreds more), it can use [Composio](https://composio.dev). Set `COMPOSIO_API_KEY` in `.env` (from the Composio dashboard) and restart. Ask "what are my open Linear issues?" and Conscious finds the right tool. If Linear is not connected yet, it sends a link to Composio's sign-in page. There is no app to register.
+
+Composio is a hosted service: it holds each user's app sign-ins and runs the tools, so that data passes through Composio. Conscious sends it an opaque id per user, never a phone number or name. Reading is free, saving drafts is allowed, and anything that creates, changes, sends or deletes waits for your yes. Without a key, nothing goes to Composio.
+
 ## Plugins
 
 Ask Conscious about an app it has no capability for and it installs a plugin that ships with Conscious, or writes one itself. A plugin it writes stays on your install. Plugins run in a sandbox and reach only the hosts they declare. See [Plugins](docs/architecture.md#plugins).
@@ -241,6 +247,7 @@ src/
 ├─ plugins/              plugins: manifest, connectors, sandbox, broker, review, local store
 ├─ vault/                the user's secrets: sealed store and the Vault page
 ├─ mcp/                  MCP catalog and client: each server becomes a capability
+├─ composio/             Composio's tool router: one session per user
 ├─ conversations/        one conversation per user, in memory or in their sandbox
 └─ prompts/              system and background prompts as markdown
 skills/                  bundled skills, copied into every computer

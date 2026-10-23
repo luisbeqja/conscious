@@ -50,6 +50,27 @@ describe("Vault", () => {
     });
 });
 
+describe("accounts not set up on this install", () => {
+    it("tells the agent what the owner must do, instead of listing only what works", async () => {
+        const capability = createVaultCapability(new Vault(), "https://c.example", () => [github], [
+            { id: "google", name: "Google", setup: "set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in .env." },
+        ]);
+        const context = { userId: "me", timezone: "Europe/Rome", scheduler: undefined as never };
+        const [request, list] = capability.tools;
+        const listed = await list?.execute({}, context);
+        expect(listed?.data).toContainEqual({
+            connector: "google",
+            name: "Google",
+            connected: false,
+            setUpOnThisInstall: false,
+        });
+        const asked = await request?.execute({ connector: "google" }, context);
+        expect(JSON.stringify(asked?.data)).not.toContain("/vault/");
+        expect(asked?.guidance).toMatch(/GOOGLE_CLIENT_ID/);
+        expect(asked?.guidance).toMatch(/whoever runs Conscious/);
+    });
+});
+
 describe("Vault page", () => {
     let close = () => {};
     afterEach(() => close());

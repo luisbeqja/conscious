@@ -24,6 +24,7 @@ Conscious is open source and self-hosted. Whoever runs it picks the model and ke
 | Connectors | The user's own accounts, linked one by one. |
 | Skills | `SKILL.md` instructions on the user's computer: copied from the repo, or written by the agent. |
 | MCP servers | Vendor-hosted tool servers from a reviewed catalog, called from the host. |
+| Composio | Optional: hundreds of other apps through Composio's hosted tool router, which holds each user's sign-ins. |
 | Plugins | Apps without a capability: bundled with Conscious or written by the agent on your install, run in a sandbox. |
 | Vault | Your secrets, saved through a private page and sealed. Only the broker reads them. |
 
@@ -62,6 +63,10 @@ A skill is a folder with a `SKILL.md` in the [AgentSkills](https://agentskills.i
 - A tool's effect is the manifest's, then `read` if the server marks it read-only, then the manifest's `default_effect`, and `commit` when nothing says otherwise.
 - Servers with `auth: none` connect once at start. Servers with `auth: oauth` connect per user, only after that user signs in on the Vault page: Conscious finds the server's authorization server (RFC 9728), registers itself as a client once per run (dynamic registration), sends the user there with PKCE, and keeps the tokens in the Vault under `mcp-<name>`, an id no plugin can use. Every request carries that user's token; a refused one is refreshed once, and a sign-in that can no longer be refreshed is dropped so the agent offers a new link.
 - Today: Kiwi.com flights and trivago hotels (no account), Notion, Todoist, Strava and Dropbox (sign-in), AllTrails (off: its schemas cost about 24K tokens a message).
+
+## Composio
+
+With `COMPOSIO_API_KEY` set, the `composio` capability reaches apps Conscious has no tools for. Conscious opens one Composio session per user, under an opaque id (a hash of the user id), and keeps Composio's own connection-management tools out of it. The agent gets six tools: list apps, make a sign-in link (Composio's page), find tools for a task, and three run tools by effect. Each run tool looks up the target tool's tags first: `readOnlyHint` is a read, a `DRAFT` tool that is not destructive is a draft, anything else is a commit and waits for the user's yes. The API key stays on the host.
 
 ## Plugins
 

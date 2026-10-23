@@ -5,3 +5,4 @@
 - Notion, Todoist, Strava and Dropbox connect the same way, as "mcp-notion", "mcp-todoist", "mcp-strava" and "mcp-dropbox", when vault_list_connections lists them. Their tools appear on the next message after the user signs in.
 - Spotify is "spotify", a Sign in with Spotify page, when this install has it.
 - Any other mailbox (iCloud, GMX, Libero, Posteo, a work address) is "mail": the page asks for the address and an app password, and Conscious checks them with the mail server before saving.
+- When the user asks about an account that is not set up on this install (Google or Spotify without their app), say so plainly and pass on the one-time setup step vault_request_connection gives you. Never say "it is not available"; say who does what to make it work.
