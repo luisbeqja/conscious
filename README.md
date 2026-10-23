@@ -275,6 +275,7 @@ mcp/                     MCP server manifests, one folder per server
 test/                    vitest
 plugins/                 bundled plugins, one folder per plugin (none yet)
 mobile/                  the phone app (Expo, React Native)
+site/                    the landing page: static, served as its own Railway service
 ```
 
 ## Add a capability

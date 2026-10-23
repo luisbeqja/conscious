@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Conscious · a personal assistant that feels more like a friend than a coworker</title>
+<meta name="description" content="A personal assistant for your life, not your job. Text it on iMessage or WhatsApp: reminders, plans, errands, things to look up. Open source, built in Europe, and it runs on your own machine." />
+<meta name="theme-color" content="#f3f2ee" />
+<meta property="og:type" content="website" />
+<meta property="og:title" content="Conscious" />
+<meta property="og:description" content="A personal assistant that feels more like a friend than a coworker." />
+<link rel="icon" href="favicon.svg" type="image/svg+xml" />
+<link rel="preload" href="fonts/cormorant-garamond-latin.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="fonts/ibm-plex-mono-latin.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="stylesheet" href="fonts/fonts.css" />
+<link rel="stylesheet" href="styles.css" />
+<script type="module" src="art.js"></script>
+<script type="module" src="chat.js"></script>
+</head>
+<body>
+<section class="hero" id="hero">
+  <nav>
+    <a class="brand" href="./">Conscious</a>
+    <div class="right">
+      <div class="links mono"><a href="#how">How it works</a><span>/</span><a href="#privacy">Privacy</a><span>/</span><a href="#run">Run it yourself</a></div>
+      <a class="btn mono" href="#early-access"><span><span class="opt">Get </span>early access</span> <span aria-hidden="true">→</span></a>
+    </div>
+  </nav>
+
+  <div class="left">
+    <h1>A personal assistant that feels more like a friend than a&nbsp;coworker</h1>
+    <p class="lede">Reminders, plans, errands, things to look up. Text it on iMessage or WhatsApp. It keeps working after you put the phone down.</p>
+    <div class="chat">
+      <div class="chat-head"><span class="avatar" aria-hidden="true">C</span><b>Conscious</b><span class="via" id="via">on iMessage</span><span class="status" id="status">replies in seconds</span></div>
+      <div class="talk" id="talk" aria-live="off"></div>
+      <form class="composer" id="composer"><input id="typed" placeholder="Text Conscious…" autocomplete="off" aria-label="Write to Conscious" /><button class="send" aria-label="Send">↑</button></form>
+    </div>
+    <div class="chips" id="chips">
+      <button type="button" data-scene="0">Call mum at 9</button>
+      <button type="button" data-scene="1">Flight to Lisbon</button>
+      <button type="button" data-scene="2">What's on this week?</button>
+    </div>
+  </div>
+
+  <div class="art" id="art" role="img" aria-label="Paintings from the public domain, drawn in characters, changing every few seconds" title="Hover to hold this one. Click for the next.">
+    <div class="canvas" id="canvas"></div>
+    <pre class="ink" id="ink" aria-hidden="true"></pre>
+    <pre class="head" id="head" aria-hidden="true"></pre>
+  </div>
+  <p class="credit mono"><span class="held">Held ·</span><span id="credit"></span><span class="count" id="count"></span></p>
+</section>
+
+<section class="block" id="how">
+  <div class="eyebrow">How it works</div>
+  <h2>Text it where you already are. It does the rest in the background.</h2>
+  <p class="lead">iMessage, WhatsApp, its own app, or the terminal: one conversation. Longer jobs go to background agents, so it keeps talking while they run.</p>
+  <div class="grid">
+    <div class="card">
+      <h3>It keeps working when you stop typing</h3>
+      <p>Hand it something slow. It answers at once, keeps chatting, and messages you when the job is done.</p>
+      <div class="demo"><div class="log">✓ <b>flights.search</b> → 214 fares, Lisbon, Nov<br />✓ <b>price.watch</b> → set, daily at 08:00<br />✓ <b>reply</b> → “Found one: €96, 14 Nov. Watch it?”</div></div>
+    </div>
+    <div class="card" id="privacy">
+      <h3>Nothing happens without your yes</h3>
+      <p>Reading is free. Drafts wait for you. Sending, booking, paying or deleting always asks first.</p>
+      <div class="demo"><div class="ask">Book Dr. Weber, Saturday 10:30?<div class="row"><span class="yes">Yes, book it</span><span>Not now</span></div></div></div>
+    </div>
+    <div class="card">
+      <h3>It remembers what matters</h3>
+      <p>Its memory lives on a computer of its own, one per person. It learns how you like things done and saves skills it can reuse.</p>
+      <div class="demo"><div class="ask">Noted: Marta can't have nuts. I'll check menus for that.</div><div class="mem">Updated memory · <b>people/marta.md</b></div></div>
+    </div>
+    <div class="card" id="run">
+      <h3>Runs on your machine, with your model</h3>
+      <p>Open source and self-hosted. Your accounts and keys stay on your install, sealed in a Vault the model never sees.</p>
+      <div class="demo">
+        <div class="picker" id="picker">
+          <button type="button" class="on" data-provider="mistral">Mistral</button>
+          <button type="button" data-provider="anthropic">Claude</button>
+          <button type="button" data-provider="openai">GPT</button>
+          <button type="button" data-provider="local">On your machine</button>
+        </div>
+        <div class="env" id="env">CONSCIOUS_MODEL_PROVIDER=mistral</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer id="early-access">
+  <div class="cta">
+    <h2>Start with one reminder.<br /><em>Stay for the friendship.</em></h2>
+    <!-- TODO: point "Get early access" at the sign-up (an email address, a form or a waitlist) once there is one. -->
+    <a class="btn mono" href="#early-access">Get early access <span aria-hidden="true">→</span></a>
+  </div>
+  <div class="big" aria-hidden="true">CONSCIOUS</div>
+  <div class="row mono">
+    <span><a href="#how">How it works</a> / <a href="#privacy">Privacy</a> / <a href="#run">Run it yourself</a></span>
+    <span>MIT licence · built in Europe</span>
+    <span>Conscious, 2026.</span>
+  </div>
+</footer>
+</body>
+</html>
