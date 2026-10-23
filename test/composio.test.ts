@@ -93,7 +93,10 @@ const fakeComposio = (options: { forgetFirstSession?: boolean } = {}) => {
 
 const setup = (options?: { forgetFirstSession?: boolean }) => {
     const fake = fakeComposio(options);
-    const capability = createComposioCapability(new ComposioClient({ apiKey: "ak_test" }, fake.doFetch));
+    const capability = createComposioCapability(
+        new ComposioClient({ apiKey: "ak_test", authConfigs: { googlecalendar: "ac_own" } }, fake.doFetch),
+        (app) => `http://localhost:8787/vault/connected?app=${app}`,
+    );
     const tool = (name: string) => {
         const found = capability.tools.find((candidate) => candidate.name === name);
         if (!found) throw new Error(name);
@@ -109,13 +112,16 @@ describe("Composio", () => {
         await tool("composio_find_tools").execute({ task: "my open Linear issues" }, context);
         const created = calls.filter((call) => call.url === `${BASE}/tool_router/session`);
         expect(created).toHaveLength(1);
-        expect(created[0]?.body).toMatchObject({ user_id: composioUserId(context.userId) });
+        expect(created[0]?.body).toMatchObject({
+            user_id: composioUserId(context.userId),
+            auth_configs: { googlecalendar: "ac_own" },
+        });
         expect(JSON.stringify(calls)).not.toContain("393331234567");
         expect(calls.every((call) => call.key === "ak_test")).toBe(true);
     });
 
-    it("lists apps with their connection, and makes a sign-in link", async () => {
-        const { tool } = setup();
+    it("lists apps with their connection, and makes a sign-in link that ends on a Conscious page", async () => {
+        const { calls, tool } = setup();
         const apps = await tool("composio_list_apps").execute({ search: "lin" }, context);
         expect(apps.data).toEqual([
             { app: "linear", name: "Linear", description: "Issues", connected: true, noSignIn: false },
@@ -123,6 +129,10 @@ describe("Composio", () => {
         ]);
         const link = await tool("composio_connect_app").execute({ app: "Slack" }, context);
         expect(link.data).toEqual({ link: "https://connect.composio.dev/link/abc" });
+        expect(calls.find((call) => call.url.endsWith("/link"))?.body).toEqual({
+            toolkit: "slack",
+            callback_url: "http://localhost:8787/vault/connected?app=Slack",
+        });
     });
 
     it("finds tools with their inputs", async () => {

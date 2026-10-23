@@ -182,6 +182,12 @@ For apps Conscious has no tools of its own for (Linear, Slack, Trello, Asana, Hu
 
 Composio is a hosted service: it holds each user's app sign-ins and runs the tools, so that data passes through Composio. Conscious sends it an opaque id per user, never a phone number or name. Reading is free, saving drafts is allowed, and anything that creates, changes, sends or deletes waits for your yes. Without a key, nothing goes to Composio.
 
+After signing in, the user lands on a Conscious page, not Composio's. To make the sign-in itself show Conscious:
+
+1. In the Composio dashboard, under Project Settings → Auth Screen, set the logo and app name. That changes the Connect Link page for every app.
+2. For apps with a consent screen (Google, GitHub, Slack…), register your own OAuth app with the redirect URI `https://backend.composio.dev/api/v3.1/toolkits/auth/callback`. Then create an auth config with its client ID and secret in the Composio dashboard. Google then says "Conscious wants access", not Composio.
+3. List those auth configs in `.env`: `COMPOSIO_AUTH_CONFIGS=googlecalendar=ac_…,gmail=ac_…`. Only new connections use them. Users connected before have to connect again.
+
 ## Plugins
 
 Ask Conscious about an app it has no capability for and it installs a plugin that ships with Conscious, or writes one itself. A plugin it writes stays on your install. Plugins run in a sandbox and reach only the hosts they declare. See [Plugins](docs/architecture.md#plugins).

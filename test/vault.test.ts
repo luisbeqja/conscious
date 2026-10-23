@@ -96,6 +96,16 @@ describe("Vault page", () => {
         return { vault, connected, base, post };
     };
 
+    it("ends a sign-in on another service's page with a Conscious page", async () => {
+        const { base } = serve("x");
+        const done = await (await fetch(`${base}/vault/connected?app=linear&status=success`)).text();
+        expect(done).toContain("Linear is connected");
+        const failed = await (await fetch(`${base}/vault/connected?app=linear&status=failed`)).text();
+        expect(failed).toContain("Linear is not connected");
+        const injected = await (await fetch(`${base}/vault/connected?app=%3Cscript%3E`)).text();
+        expect(injected).not.toContain("<script>");
+    });
+
     it("saves a working token once, tells the user, and retires the link", async () => {
         const { vault, connected, base, post } = serve("ghp_good");
         const { code } = vault.createLink("me", github);

@@ -3,6 +3,11 @@ import { createHash } from "node:crypto";
 export interface ComposioConfig {
     apiKey: string;
     baseUrl?: string;
+    /**
+     * The install's own auth configs by app (`googlecalendar` → `ac_…`), made in the Composio
+     * dashboard with the owner's OAuth apps, so the sign-in shows Conscious instead of Composio.
+     */
+    authConfigs?: Record<string, string>;
 }
 
 export interface ComposioApp {
@@ -73,8 +78,11 @@ export class ComposioClient {
     }
 
     /** A Composio page where the user signs in to the app. */
-    async connectLink(userId: string, app: string): Promise<string> {
-        const body = await this.inSession<{ redirect_url: string }>(userId, "POST", "link", { toolkit: app });
+    async connectLink(userId: string, app: string, callbackUrl?: string): Promise<string> {
+        const body = await this.inSession<{ redirect_url: string }>(userId, "POST", "link", {
+            toolkit: app,
+            ...(callbackUrl ? { callback_url: callbackUrl } : {}),
+        });
         return body.redirect_url;
     }
 
@@ -166,6 +174,7 @@ export class ComposioClient {
                 user_id: composioUserId(userId),
                 // Conscious offers its own connect tool, so Composio's meta tools stay out of the session.
                 manage_connections: { enable: false },
+                ...(this.config.authConfigs ? { auth_configs: this.config.authConfigs } : {}),
             }).then((body) => body.session_id);
             session.catch(() => this.sessions.delete(userId));
             this.sessions.set(userId, session);

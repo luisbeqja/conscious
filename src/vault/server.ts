@@ -33,6 +33,9 @@ export interface SignInProvider {
 
 export const signInCallbackPath = (connectorId: string) => `/vault/oauth/${connectorId}`;
 
+/** Where a sign-in on another service's page lands, so the user ends on a Conscious page. */
+export const CONNECTED_PATH = "/vault/connected";
+
 const MAX_BODY_BYTES = 8_192;
 
 /** The form's values as one JSON secret, or undefined when a required one is missing. */
@@ -126,6 +129,22 @@ const saved = (connector: Connector) =>
         `<h1>${escapeHtml(connector.name)} is connected</h1><p>You can close this page and go back to the chat.</p>`,
     );
 
+/** Services append their own status; anything but a clear failure reads as done. */
+const connectedPage = (url: URL) => {
+    const app = (url.searchParams.get("app") ?? "").replace(/[^\w .&+-]/g, "").slice(0, 40);
+    const name = app ? app[0]?.toUpperCase() + app.slice(1) : "The app";
+    const status = (url.searchParams.get("status") ?? "").toLowerCase();
+    return /fail|error|denied|cancel/.test(status)
+        ? page(
+              "Not connected",
+              `<h1>${escapeHtml(name)} is not connected</h1><p>The sign-in did not finish. Go back to the chat and ask for a new link.</p>`,
+          )
+        : page(
+              "Connected",
+              `<h1>${escapeHtml(name)} is connected</h1><p>You can close this page and go back to the chat.</p>`,
+          );
+};
+
 const readBody = (request: IncomingMessage): Promise<string | undefined> =>
     new Promise((resolve, reject) => {
         let size = 0;
@@ -152,6 +171,7 @@ export const vaultHandler =
     async (request: IncomingMessage, response: ServerResponse) => {
         const send = (status: number, html: string) => response.writeHead(status, HEADERS).end(html);
         const url = new URL(request.url ?? "/", "http://vault");
+        if (url.pathname === CONNECTED_PATH && request.method === "GET") return send(200, connectedPage(url));
         const callback = /^\/vault\/oauth\/([a-z0-9-]{2,40})$/.exec(url.pathname)?.[1];
         const callbackProvider = callback ? options.signIns?.get(callback) : undefined;
         if (callback && callbackProvider) return signInCallback(options, callback, callbackProvider, url, send);

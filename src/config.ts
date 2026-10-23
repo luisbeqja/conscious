@@ -107,10 +107,23 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): Config => {
                 ? { clientId: env.SPOTIFY_CLIENT_ID, clientSecret: env.SPOTIFY_CLIENT_SECRET }
                 : undefined,
         composio: env.COMPOSIO_API_KEY
-            ? { apiKey: env.COMPOSIO_API_KEY, baseUrl: env.COMPOSIO_BASE_URL || undefined }
+            ? {
+                  apiKey: env.COMPOSIO_API_KEY,
+                  baseUrl: env.COMPOSIO_BASE_URL || undefined,
+                  authConfigs: parsePairs(env.COMPOSIO_AUTH_CONFIGS),
+              }
             : undefined,
         transcription: loadTranscriptionConfig(env),
     };
+};
+
+/** `a=1,b=2` → `{ a: "1", b: "2" }`; empty or unset → undefined. */
+const parsePairs = (value: string | undefined): Record<string, string> | undefined => {
+    const pairs = (value ?? "")
+        .split(",")
+        .map((pair) => pair.split("=").map((part) => part.trim()))
+        .filter((pair): pair is [string, string] => pair.length === 2 && Boolean(pair[0]) && Boolean(pair[1]));
+    return pairs.length ? Object.fromEntries(pairs.map(([key, id]) => [key.toLowerCase(), id])) : undefined;
 };
 
 /** Mistral's Voxtral when there is a Mistral key, else OpenAI's, else a local Whisper server if one is set. */

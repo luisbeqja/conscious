@@ -29,7 +29,13 @@ import { createE2BClient, E2BSandboxes } from "./sandbox/e2b.js";
 import { Scheduler } from "./scheduler/scheduler.js";
 import { SkillLibrary } from "./skills/library.js";
 import { SPOTIFY_CONNECTOR, SpotifyOAuth } from "./spotify/oauth.js";
-import { type SignInProvider, signInCallbackPath, vaultHandler, verifyWithService } from "./vault/server.js";
+import {
+    CONNECTED_PATH,
+    type SignInProvider,
+    signInCallbackPath,
+    vaultHandler,
+    verifyWithService,
+} from "./vault/server.js";
 import { loadOrCreateVaultKey, Vault } from "./vault/vault.js";
 import { createSearchProvider } from "./web/search.js";
 
@@ -95,7 +101,15 @@ export const createConscious = (config: Config, notify: Notify, extra: readonly 
         createMailCapability(openImap, vault),
         ...(google ? [createGoogleCapability(new GoogleApi(google), vault)] : []),
         ...(spotify ? [createSpotifyCapability(spotify, vault)] : []),
-        ...(config.composio ? [createComposioCapability(new ComposioClient(config.composio))] : []),
+        ...(config.composio
+            ? [
+                  createComposioCapability(
+                      new ComposioClient(config.composio),
+                      (app) =>
+                          `${config.vault.publicUrl.replace(/\/$/, "")}${CONNECTED_PATH}?app=${encodeURIComponent(app)}`,
+                  ),
+              ]
+            : []),
     ];
     const registry = createRegistry(sandboxes, [...builtIn, ...extra], {
         plugins,

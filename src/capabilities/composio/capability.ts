@@ -27,7 +27,11 @@ const clip = (data: unknown): unknown => {
  * The long tail of apps (Linear, Slack, Trello, HubSpot…) through Composio, which holds each
  * user's sign-ins on its side. Only on when the install sets COMPOSIO_API_KEY.
  */
-export const createComposioCapability = (composio: ComposioClient): Capability => {
+/** `connectedUrl` is the Conscious page the user lands on after signing in to an app. */
+export const createComposioCapability = (
+    composio: ComposioClient,
+    connectedUrl?: (app: string) => string,
+): Capability => {
     const ARGS = Type.Record(Type.String(), Type.Unknown(), {
         description: "The tool's inputs, exactly as composio_find_tools described them.",
     });
@@ -85,16 +89,20 @@ export const createComposioCapability = (composio: ComposioClient): Capability =
             defineTool({
                 name: "composio_connect_app",
                 label: "Connect an app",
-                description:
-                    "A sign-in link for one app, for the user to open. They sign in on Composio's page; no password passes through the chat.",
+                description: "A sign-in link for one app, for the user to open. No password passes through the chat.",
                 effect: "draft",
                 parameters: Type.Object({
                     app: Type.String({ description: "The app's id from composio_list_apps, for example linear." }),
                 }),
                 execute: async (params, context) => ({
-                    data: { link: await composio.connectLink(context.userId, params.app.trim().toLowerCase()) },
-                    guidance:
-                        "Send the link as it is. Say the sign-in happens on Composio's page, and to tell you when they are done.",
+                    data: {
+                        link: await composio.connectLink(
+                            context.userId,
+                            params.app.trim().toLowerCase(),
+                            connectedUrl?.(params.app.trim()),
+                        ),
+                    },
+                    guidance: "Send the link as it is, and ask them to tell you when they are done.",
                 }),
             }),
             defineTool({
