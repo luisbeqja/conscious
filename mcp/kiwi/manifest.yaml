@@ -2,6 +2,7 @@
 manifest_version: 1
 
 name: kiwi
+title: Kiwi.com
 description: 'Flight search on Kiwi.com: itineraries with direct booking links.'
 
 transport:

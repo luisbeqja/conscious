@@ -150,7 +150,13 @@ While the app is in Testing, Google ends the sign-in after 7 days, and Conscious
 
 
 
-Conscious connects to vendor-hosted MCP servers listed in [`mcp/`](mcp/), from the host, and offers their tools like any capability. By default that is Kiwi.com flights and trivago hotels, which need no account; set `CONSCIOUS_MCP_SERVERS` to choose (`alltrails`, or `none`). A tool that is not marked read-only waits for your yes. Servers that need a sign-in come with OAuth on the Vault page.
+## Notion, Todoist, Strava and Dropbox
+
+Conscious connects to vendor-hosted MCP servers listed in [`mcp/`](mcp/), from the host, and offers their tools like any capability. Kiwi.com flights and trivago hotels need no account and are on from the start.
+
+Notion, Todoist, Strava and Dropbox need your account. Ask "what's on my Todoist today?" and Conscious sends a Vault link with a **Sign in with Todoist** button. You sign in on Todoist's own page, and from then on Conscious calls Todoist as you. There is nothing to set up first: Conscious registers itself with each service the first time someone signs in. The redirect goes to your `CONSCIOUS_PUBLIC_URL`, so it works on the same machine with `http://localhost:8787`, and from a phone through an https address.
+
+Set `CONSCIOUS_MCP_SERVERS` to choose (for example `kiwi,notion,todoist`, or `none`). Reading is free; adding and changing pages or tasks is allowed; deleting, and any tool a manifest does not mark, waits for your yes.
 
 ## Plugins
 

@@ -15,6 +15,7 @@ import { Scheduler } from "../src/scheduler/scheduler.js";
 
 const entry = (overrides: Partial<McpServerEntry> = {}): McpServerEntry => ({
     name: "trips",
+    title: "Trips",
     description: "Trip search.",
     url: "https://mcp.example.com",
     auth: "none",
@@ -62,12 +63,23 @@ const context: ToolContext = { userId: "me", timezone: "Europe/Rome", scheduler:
 describe("the MCP catalog", () => {
     it("loads the repo's catalog, and connects only to servers without a sign-in by default", () => {
         const catalog = readCatalog();
-        expect(catalog.map((server) => server.name)).toEqual(["alltrails", "kiwi", "trivago"]);
-        expect(selectServers(catalog, undefined).map((server) => server.name)).toEqual(["kiwi", "trivago"]);
+        expect(catalog.map((server) => server.name)).toEqual([
+            "alltrails",
+            "dropbox",
+            "kiwi",
+            "notion",
+            "strava",
+            "todoist",
+            "trivago",
+        ]);
+        expect(
+            selectServers(catalog, undefined)
+                .filter((server) => server.auth === "none")
+                .map((server) => server.name),
+        ).toEqual(["kiwi", "trivago"]);
         expect(selectServers(catalog, "alltrails").map((server) => server.name)).toEqual(["alltrails"]);
         expect(selectServers(catalog, "none")).toEqual([]);
         expect(() => selectServers(catalog, "spotify")).toThrow("not in mcp/");
-        expect(() => selectServers([entry({ name: "todoist", auth: "oauth" })], "todoist")).toThrow("not built yet");
     });
 
     it("refuses a manifest whose name does not match its folder, or that is not https", () => {

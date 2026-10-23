@@ -2,6 +2,7 @@
 manifest_version: 1
 
 name: alltrails
+title: AllTrails
 description: 'AllTrails: find hikes and trails with reviews and ratings.'
 
 transport:

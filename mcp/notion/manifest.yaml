@@ -1,0 +1,40 @@
+# A vendor-hosted MCP server. Conscious connects to it from the host, as each user, after they sign
+# in on the Vault page (OAuth 2.1 with dynamic client registration). Nothing runs locally.
+manifest_version: 1
+
+name: notion
+title: Notion
+description: "The user's Notion: search, read, and add or change pages and databases."
+
+transport:
+  type: http
+  url: https://mcp.notion.com/mcp
+
+auth:
+  type: oauth
+
+enabled_by_default: true
+
+# Adding and editing pages in the user's own workspace is like adding a calendar event: it can be
+# changed back. Deleting, and anything not listed, waits for the user's yes.
+default_effect: commit
+effects:
+  notion-search: read
+  notion-fetch: read
+  notion-get-comments: read
+  notion-get-users: read
+  notion-get-teams: read
+  notion-get-self: read
+  notion-query-data-sources: read
+  notion-query-meeting-notes: read
+  notion-list-recent-pages: read
+  notion-list-favorite-pages: read
+  notion-create-pages: draft
+  notion-update-page: draft
+  notion-duplicate-page: draft
+  notion-move-pages: draft
+  notion-create-comment: draft
+  notion-create-database: draft
+  notion-update-data-source: draft
+  notion-create-view: draft
+  notion-update-view: draft

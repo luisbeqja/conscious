@@ -17,6 +17,8 @@ const SERVER_NAME = /^[a-z][a-z0-9]{0,31}$/;
  */
 export interface McpServerEntry {
     name: string;
+    /** How the user knows it: "Notion". */
+    title: string;
     description: string;
     url: string;
     auth: "none" | "oauth";
@@ -57,6 +59,7 @@ export const parseManifest = (text: string, folder: string): McpServerEntry => {
     const tools = record(raw.tools);
     return {
         name,
+        title: typeof raw.title === "string" ? raw.title : name,
         description: typeof raw.description === "string" ? raw.description.trim() : name,
         url,
         auth,
@@ -88,22 +91,16 @@ export const readCatalog = (dir: string = DEFAULT_CATALOG_DIR): McpServerEntry[]
 };
 
 /**
- * The servers this install connects to: `CONSCIOUS_MCP_SERVERS` names them (or says `none`), else
- * the catalog's defaults. Servers that need a sign-in wait for OAuth on the Vault page.
+ * The servers this install offers: `CONSCIOUS_MCP_SERVERS` names them (or says `none`), else the
+ * catalog's defaults. Servers without a sign-in are connected at start; the others once per user,
+ * after that user signs in on the Vault page.
  */
 export const selectServers = (catalog: readonly McpServerEntry[], setting: string | undefined): McpServerEntry[] => {
     const wanted = setting?.trim();
     if (wanted === "none") return [];
-    if (!wanted) return catalog.filter((entry) => entry.enabledByDefault && entry.auth === "none");
+    if (!wanted) return catalog.filter((entry) => entry.enabledByDefault);
     const names = wanted.split(",").map((name) => name.trim());
     const unknown = names.filter((name) => !catalog.some((entry) => entry.name === name));
     if (unknown.length) throw new Error(`CONSCIOUS_MCP_SERVERS names servers not in mcp/: ${unknown.join(", ")}`);
-    const chosen = catalog.filter((entry) => names.includes(entry.name));
-    const needSignIn = chosen.filter((entry) => entry.auth !== "none");
-    if (needSignIn.length) {
-        throw new Error(
-            `Signing in to MCP servers is not built yet: ${needSignIn.map((entry) => entry.name).join(", ")}`,
-        );
-    }
-    return chosen;
+    return catalog.filter((entry) => names.includes(entry.name));
 };
