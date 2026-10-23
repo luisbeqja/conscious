@@ -152,6 +152,8 @@ const loadSandboxConfig = (env: NodeJS.ProcessEnv): E2BOptions | undefined => {
     return {
         apiKey: required(env, "E2B_API_KEY"),
         domain: env.E2B_DOMAIN || undefined,
+        // E2B's SDK ignores HTTPS_PROXY on its own.
+        proxy: env.HTTPS_PROXY || env.https_proxy || undefined,
         template: env.CONSCIOUS_SANDBOX_TEMPLATE || "base",
         idleMs: Number(env.CONSCIOUS_SANDBOX_IDLE_MINUTES || 10) * 60_000,
         internet: env.CONSCIOUS_SANDBOX_INTERNET === "true",

@@ -6,6 +6,8 @@ export interface E2BOptions {
     apiKey: string;
     /** The E2B EU cluster, or a self-hosted E2B. Unset means E2B's default cloud. */
     domain?: string;
+    /** An outbound HTTPS proxy, for hosts that cannot reach E2B directly. */
+    proxy?: string;
     template: string;
     /** Idle time before the sandbox pauses. Pausing keeps its files and memory. */
     idleMs: number;
@@ -26,7 +28,7 @@ const HOME = "/home/user";
 const RECONNECT_MARGIN_MS = 60_000;
 
 export const createE2BClient = (options: E2BOptions): E2BClient => {
-    const connection = { apiKey: options.apiKey, domain: options.domain };
+    const connection = { apiKey: options.apiKey, domain: options.domain, proxy: options.proxy };
     return {
         find: async (metadata) => {
             const [found] = await E2BSandbox.list({ ...connection, query: { metadata }, limit: 1 }).nextItems();

@@ -47,12 +47,8 @@ try {
     if (!options.internet)
         console.log("\nSkills that fetch from the web stay hidden until CONSCIOUS_SANDBOX_INTERNET=true.");
 } finally {
-    const [found] = await E2BSandbox.list({
-        apiKey: options.apiKey,
-        domain: options.domain,
-        query: { metadata: { conscious: userKey(user) } },
-        limit: 1,
-    }).nextItems();
-    if (found) await E2BSandbox.kill(found.sandboxId, { apiKey: options.apiKey, domain: options.domain });
+    const connection = { apiKey: options.apiKey, domain: options.domain, proxy: options.proxy };
+    const found = await createE2BClient(options).find({ conscious: userKey(user) });
+    if (found) await (await E2BSandbox.connect(found, connection)).kill();
     console.log("\nTest computer deleted.");
 }

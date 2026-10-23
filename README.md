@@ -102,6 +102,8 @@ The sandbox pauses after 10 minutes without a message and resumes on the next on
 
 To keep data in Europe, ask E2B support for its EU cluster, or run E2B yourself: its runtime is open source ([e2b-dev/infra](https://github.com/e2b-dev/infra)) and needs a Linux host with KVM. Set `E2B_DOMAIN` to either.
 
+Behind an outbound proxy, Conscious sends E2B traffic through `HTTPS_PROXY`.
+
 No secrets go in: the sandbox starts with an empty environment, and account tokens stay on the host. Internet is off unless you set `CONSCIOUS_SANDBOX_INTERNET=true`; most skills need it, so turn it on unless you have a reason not to. The setting applies to existing computers too, the next time they wake.
 
 To check a setup before you text it, run `pnpm computer:check`. It starts a throwaway computer with your `.env`, checks that internet matches the setting, lists the programs skills rely on and the skills that show up, then deletes it.
