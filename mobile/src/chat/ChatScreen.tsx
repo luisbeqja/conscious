@@ -247,23 +247,42 @@ export const ChatScreen = ({ connection, onDisconnect }: { connection: Connectio
                 { text: "Cancel", style: "cancel" },
                 { text: "Disconnect", style: "destructive", onPress: onDisconnect },
             ]);
+        const startFresh = () =>
+            Alert.alert(
+                "Start fresh?",
+                "Conscious forgets this chat, everything it knows about you, and your reminders. This can't be undone.",
+                [
+                    { text: "Cancel", style: "cancel" },
+                    { text: "Start fresh", style: "destructive", onPress: chat.startFresh },
+                ],
+            );
         if (Platform.OS === "ios") {
             ActionSheetIOS.showActionSheetWithOptions(
                 {
                     title: connection.server,
-                    options: ["The Dot", "Disconnect", "Cancel"],
-                    destructiveButtonIndex: 1,
-                    cancelButtonIndex: 2,
+                    options: ["The Dot", "Start fresh", "Disconnect", "Cancel"],
+                    destructiveButtonIndex: [1, 2],
+                    cancelButtonIndex: 3,
                 },
                 (index) => {
                     if (index === 0) router.push("/dot");
-                    if (index === 1) disconnect();
+                    if (index === 1) startFresh();
+                    if (index === 2) disconnect();
                 },
             );
         } else if (Platform.OS === "web") {
-            onDisconnect();
+            // The browser preview has no native dialogs to confirm with.
+            if (globalThis.confirm?.("Start fresh? Conscious forgets this chat, what it knows about you, and your reminders.")) {
+                chat.startFresh();
+            } else {
+                onDisconnect();
+            }
         } else {
-            disconnect();
+            Alert.alert(connection.server, undefined, [
+                { text: "Start fresh", style: "destructive", onPress: startFresh },
+                { text: "Disconnect", style: "destructive", onPress: disconnect },
+                { text: "Cancel", style: "cancel" },
+            ]);
         }
     };
 

@@ -21,7 +21,7 @@ you remind me to call mum tomorrow at 9
 conscious [reminders_create_reminder] done, tomorrow 9:00 📞
 ```
 
-Reminders and finished background tasks print on their own, above the prompt. Commands: `/reminders`, `/tasks`, `/reset` (forget the conversation), `/exit`.
+Reminders and finished background tasks print on their own, above the prompt. Commands: `/reminders`, `/tasks`, `/reset` (start fresh: forget the conversation, memory and reminders), `/exit`.
 
 Reminders, scheduled checks and the conversation are saved in `.conscious/`, so a restart keeps them. A one-off reminder that came due while Conscious was off is sent, marked late, when it starts again (up to 12 hours late).
 
@@ -93,6 +93,8 @@ Phone app on http://192.168.1.20:8788
 ```
 
 Then run the app (see [`mobile/README.md`](mobile/README.md)) and enter that address and code. `pnpm app` talks as `me`, the same user as `pnpm chat`.
+
+*Start fresh* in the app's ⋯ menu does what `/reset` does: it clears the chat, forgets the memory and drops the reminders, so the next message is a first meeting again. Files on the computer stay.
 
 To have the app next to WhatsApp and iMessage, set `CONSCIOUS_APP_USERS` to your own number and run `pnpm photon`: the app and your messaging chat are then one conversation. Reminders go to whichever you wrote from last. Each user listed gets an access code the first time; codes are kept in `.conscious/app-codes.json`, and deleting a line there and restarting gives that user a new one.
 

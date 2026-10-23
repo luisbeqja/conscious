@@ -142,4 +142,34 @@ describe("memory", () => {
         expect(prompts[1]).toMatch(/About them:\n- Goes by Lu \(#\w+\)/);
         expect(prompts[1]).not.toContain("You have only just met");
     });
+
+    it("starts fresh: forgets the conversation, memory and reminders, so the next message is a first meeting", async () => {
+        const memory = new InMemoryMemoryStore();
+        await memory.save("me", { about: [{ id: "a1", text: "Goes by Lu" }], people: [] });
+        const store = new InMemoryConversationStore();
+        await store.save("me", [{ role: "user", content: "hi", timestamp: 0 }]);
+        scheduler.add({ userId: "me", text: "Call mum", cron: "0 9 * * *", timezone: "Europe/Rome" });
+        scheduler.add({ userId: "someone-else", text: "Gym", cron: "0 9 * * *", timezone: "Europe/Rome" });
+        const faux = fauxProvider();
+        const orchestrator = new Orchestrator({
+            registry: createRegistry(),
+            store,
+            runtime: { model: faux.getModel(), streamFn: () => Promise.reject(new Error("unused")) as never },
+            budgets: { maxTurnsPerRun: 1, maxToolCallsPerRun: 1, maxBackgroundAgents: 1 },
+            timezone: "Europe/Rome",
+            scheduler,
+            background: new BackgroundAgents(
+                async () => "",
+                async () => {},
+                1,
+            ),
+            memory,
+        });
+
+        await orchestrator.startFresh("me");
+        expect(await store.load("me")).toEqual([]);
+        expect(await memory.load("me")).toEqual({ about: [], people: [] });
+        expect(scheduler.list("me")).toEqual([]);
+        expect(scheduler.list("someone-else")).toHaveLength(1);
+    });
 });

@@ -14,11 +14,15 @@ afterEach(() => {
     for (const server of servers.splice(0)) server.close();
 });
 
-const start = async (answer: (text: string, options: SendOptions) => Promise<string>, others?: RequestListener) => {
+const start = async (
+    answer: (text: string, options: SendOptions) => Promise<string>,
+    others?: RequestListener,
+    startFresh: (userId: string) => Promise<void> = async () => {},
+) => {
     const dir = mkdtempSync(join(tmpdir(), "conscious-app-"));
     const log = new AppLog(join(dir, "app"));
     const channel = new AppChannel(
-        { send: (_userId, text, options) => answer(text, options) },
+        { send: (_userId, text, options) => answer(text, options), startFresh },
         new Map([["me", "abcd-efgh"]]),
         log,
     );
@@ -75,6 +79,29 @@ describe("AppChannel", () => {
             ["assistant", "Sunny for Rome", undefined],
         ]);
         app.socket.close();
+    });
+
+    it("starts fresh: Conscious forgets the user and every open phone shows an empty chat", async () => {
+        const forgotten: string[] = [];
+        const { url, log } = await start(
+            async (text) => `hi ${text}`,
+            undefined,
+            async (userId) => void forgotten.push(userId),
+        );
+        const app = await phone(url, "abcd-efgh");
+        await app.waitFor("ready");
+        app.socket.send(JSON.stringify({ type: "send", clientId: "c1", text: "Lu" }));
+        await app.waitFor("entry");
+        const other = await phone(url, "abcd-efgh");
+        expect((await other.waitFor("ready")).history).toHaveLength(2);
+
+        const before = other.received.length;
+        app.socket.send(JSON.stringify({ type: "reset" }));
+        expect((await other.waitFor("ready", before)).history).toEqual([]);
+        expect(forgotten).toEqual(["me"]);
+        expect(log.entries("me")).toEqual([]);
+        app.socket.close();
+        other.socket.close();
     });
 
     it("closes a socket with a wrong code", async () => {

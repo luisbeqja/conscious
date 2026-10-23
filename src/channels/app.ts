@@ -12,6 +12,8 @@ import { type AppEntry, type AppFile, AppLog } from "./app-log.js";
 /** The parts of the orchestrator the app needs. */
 export interface AppAnswerer {
     send(userId: string, text: string, options: SendOptions): Promise<string>;
+    /** Forgets the user: conversation, memory, reminders. */
+    startFresh(userId: string): Promise<void>;
 }
 
 /** What the phone sends. */
@@ -22,7 +24,9 @@ export type ClientMessage =
           clientId: string;
           text: string;
           files?: { name: string; mimeType: string; data: string }[];
-      };
+      }
+    /** Start over: Conscious forgets this user and the chat is emptied on every open phone. */
+    | { type: "reset" };
 
 /** What the phone receives. The app keeps a copy of these types in `mobile/src/protocol.ts`. */
 export type ServerMessage =
@@ -187,6 +191,14 @@ export class AppChannel {
                 this.join(userId, socket);
                 return;
             }
+            if (message.type === "reset") {
+                const user = userId;
+                void this.startFresh(user).catch((error: unknown) => {
+                    console.error(`[app] starting fresh for ${user} failed`, error);
+                    this.send(socket, { type: "error", message: "I couldn't start fresh just now. Try again?" });
+                });
+                return;
+            }
             if (message.type === "send") {
                 const user = userId;
                 void this.handle(user, socket, message).catch((error: unknown) => {
@@ -266,6 +278,12 @@ export class AppChannel {
             this.running.set(userId, left);
             this.broadcast(userId, { type: "typing", active: left > 0 });
         }
+    }
+
+    private async startFresh(userId: string): Promise<void> {
+        await this.orchestrator.startFresh(userId);
+        this.log.clear(userId);
+        this.broadcast(userId, { type: "ready", history: [] });
     }
 
     private broadcast(userId: string, message: ServerMessage): void {

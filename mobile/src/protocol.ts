@@ -23,7 +23,8 @@ export type ClientMessage =
           clientId: string;
           text: string;
           files?: { name: string; mimeType: string; data: string }[];
-      };
+      }
+    | { type: "reset" };
 
 export type ServerMessage =
     | { type: "ready"; history: AppEntry[] }

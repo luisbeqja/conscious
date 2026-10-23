@@ -229,6 +229,10 @@ export const useConscious = (connection: Connection) => {
 
     const retry = useCallback((clientId: string) => dispatch({ type: "retry", clientId }), []);
     const clearError = useCallback(() => dispatch({ type: "clearError" }), []);
+    // The server answers with an empty history, which empties the chat on every open phone.
+    const startFresh = useCallback(() => {
+        socket.current?.send(JSON.stringify({ type: "reset" } satisfies ClientMessage));
+    }, []);
 
-    return { ...state, send, retry, clearError };
+    return { ...state, send, retry, clearError, startFresh };
 };

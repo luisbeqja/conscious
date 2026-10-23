@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 /** A file in the app chat. Its bytes live on the host and are fetched by id. */
@@ -47,6 +47,12 @@ export class AppLog {
         const saved: AppEntry = { ...entry, id: randomUUID(), at: (entry.at ?? new Date()).toISOString() };
         this.save(userId, [...this.entries(userId), saved].slice(-KEEP));
         return saved;
+    }
+
+    /** Empties the user's chat and deletes its files. */
+    clear(userId: string): void {
+        this.cache.set(userId, []);
+        rmSync(this.userDir(userId), { recursive: true, force: true });
     }
 
     react(userId: string, entryId: string, emoji: string): void {

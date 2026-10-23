@@ -4,7 +4,7 @@ import type { Capability, ToolContext } from "../capabilities/types.js";
 import type { Budgets } from "../config.js";
 import type { ConversationStore } from "../conversations/store.js";
 import { type IncomingFile, type OutgoingFile, prepareFiles, withoutImages } from "../media/incoming.js";
-import { isEmpty, type MemoryStore, renderMemory, SandboxMemoryStore } from "../memory/memory.js";
+import { emptyMemory, isEmpty, type MemoryStore, renderMemory, SandboxMemoryStore } from "../memory/memory.js";
 import {
     buildBackgroundPrompt,
     buildCheckBrief,
@@ -13,7 +13,7 @@ import {
     isNothing,
     type PromptContext,
 } from "../prompts/prompts.js";
-import { loadOlderNotes } from "../sandbox/memory.js";
+import { loadOlderNotes, OLDER_NOTES } from "../sandbox/memory.js";
 import type { SandboxProvider } from "../sandbox/sandbox.js";
 import type { Reminder, Scheduler } from "../scheduler/scheduler.js";
 import type { SkillLibrary } from "../skills/library.js";
@@ -101,6 +101,28 @@ export class Orchestrator {
 
     async reset(userId: string): Promise<void> {
         await this.deps.store.save(userId, []);
+    }
+
+    /**
+     * Forgets the user entirely, so the next message is a first meeting: the conversation, memory,
+     * reminders and checks, and background work. Files and learned skills on their computer stay.
+     * Waits for any answer in progress, so nothing half-finished is saved after the wipe.
+     */
+    startFresh(userId: string): Promise<void> {
+        const previous = this.queues.get(userId) ?? Promise.resolve();
+        const next = previous
+            .catch(() => {})
+            .then(async () => {
+                const { store, scheduler, background, sandboxes, sent } = this.deps;
+                for (const task of background.running(userId)) background.cancel(userId, task.id);
+                for (const reminder of scheduler.list(userId)) scheduler.cancel(userId, reminder.id);
+                sent?.take(userId);
+                await store.save(userId, []);
+                await this.memory?.save(userId, emptyMemory());
+                if (sandboxes) await (await sandboxes.forUser(userId)).run(`rm -f ${OLDER_NOTES}`);
+            });
+        this.queues.set(userId, next);
+        return next;
     }
 
     private async handle(userId: string, text: string, options: SendOptions): Promise<string> {
