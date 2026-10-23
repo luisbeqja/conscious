@@ -4,30 +4,33 @@ import { promptFile } from "./prompt-file.js";
 const SYSTEM = promptFile(import.meta.url, "system.md");
 const BACKGROUND = promptFile(import.meta.url, "background.md");
 const SKILLS = promptFile(import.meta.url, "skills.md");
+const FIRST_MEETING = promptFile(import.meta.url, "first-meeting.md");
 
-/** What the user's computer holds for the prompt. Absent when they have no computer. */
-export interface ComputerContext {
-    /** The memory index. */
-    memory: string;
-    /** The skills list. */
-    skills: string;
+/** What goes into the prompt besides the capabilities. A part left out is not shown at all. */
+export interface PromptContext {
+    /** What Conscious remembers about the user. */
+    memory?: string;
+    /** The skills on the user's computer. Only with a computer. */
+    skills?: string;
+    /** Conscious knows nothing about the user yet, so it starts by getting to know them. */
+    firstMeeting?: boolean;
 }
 
-const fill = (template: string, capabilities: string, computer?: ComputerContext): string => {
-    const prompt = template.replace("{{capabilities}}", capabilities);
-    if (!computer) return prompt;
-    return [
-        prompt,
-        SKILLS.replace("{{skills}}", computer.skills),
-        `# What you remember about the user\n\n${computer.memory}`,
-    ].join("\n\n");
+const fill = (template: string, capabilities: string, context: PromptContext = {}): string => {
+    const parts = [template.replace("{{capabilities}}", capabilities)];
+    if (context.skills !== undefined) parts.push(SKILLS.replace("{{skills}}", context.skills));
+    if (context.memory !== undefined) parts.push(`# What you remember about the user\n\n${context.memory}`);
+    return parts.join("\n\n");
 };
 
-export const buildSystemPrompt = (capabilities: string, computer?: ComputerContext): string =>
-    fill(SYSTEM, capabilities, computer);
+export const buildSystemPrompt = (capabilities: string, context: PromptContext = {}): string => {
+    const prompt = fill(SYSTEM, capabilities, context);
+    return context.firstMeeting ? `${prompt}\n\n${FIRST_MEETING}` : prompt;
+};
 
-export const buildBackgroundPrompt = (capabilities: string, computer?: ComputerContext): string =>
-    fill(BACKGROUND, capabilities, computer);
+/** A background agent never runs the first meeting: it has a job of its own. */
+export const buildBackgroundPrompt = (capabilities: string, context?: PromptContext): string =>
+    fill(BACKGROUND, capabilities, context);
 
 /** What a scheduled check's agent answers when there is nothing to tell the user. */
 const NOTHING = "NOTHING";
@@ -39,7 +42,7 @@ export const buildCheckBrief = (title: string, job: string): string =>
 
 ${job}
 
-If there is something the user should hear, your final answer is that message. If there is nothing new or worth a message, answer exactly ${NOTHING} and nothing else: the user then gets no message.`;
+If there is something the user should hear, your final answer is that message, written the way a friend would text it, not as a report. If there is nothing new or worth a message, answer exactly ${NOTHING} and nothing else: the user then gets no message.`;
 
 const formatNow = (now: Date, timezone: string): string =>
     `${new Intl.DateTimeFormat("en-GB", { dateStyle: "full", timeStyle: "short", timeZone: timezone }).format(now)} (${timezone})`;

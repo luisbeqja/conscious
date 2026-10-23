@@ -1,6 +1,6 @@
 # Bundled plugins
 
-Every folder here is one plugin that ships with Conscious. Each was reviewed as a pull request, and Conscious loads them at start for every user of an install.
+Every folder here is one plugin that ships with Conscious. There are none yet: Conscious writes the plugins each user needs, and a good one can be offered here. Each was reviewed as a pull request, and Conscious loads them at start for every user of an install.
 
 ```
 <id>/

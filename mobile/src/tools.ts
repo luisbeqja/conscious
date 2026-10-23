@@ -1,6 +1,7 @@
 /** What the agent is doing, in words, from the name of the tool it called. Undefined shows nothing. */
 export const toolLabel = (name: string): string | undefined => {
-    if (name.startsWith("reactions_")) return undefined;
+    // A friend does not announce that they are making a mental note.
+    if (name.startsWith("reactions_") || name.startsWith("memory_")) return undefined;
     if (name === "web_read_page") return "Reading a page";
     if (name.startsWith("web_")) return "Searching the web";
     if (name.includes("mail")) return "Looking at your mail";

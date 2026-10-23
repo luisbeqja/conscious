@@ -3,15 +3,10 @@
     "version": "1.1.0",
     "name": "GitHub",
     "summary": "Your GitHub notifications, pull requests and assigned issues, and opening new issues.",
-    "hosts": [
-        "api.github.com"
-    ],
+    "hosts": ["api.github.com"],
     "auth": {
         "connector": "github",
-        "scopes": [
-            "notifications",
-            "repo"
-        ]
+        "scopes": ["notifications", "repo"]
     },
     "tools": [
         {
@@ -45,11 +40,7 @@
                     },
                     "state": {
                         "type": "string",
-                        "enum": [
-                            "open",
-                            "closed",
-                            "all"
-                        ],
+                        "enum": ["open", "closed", "all"],
                         "description": "Default all"
                     },
                     "limit": {
@@ -97,10 +88,7 @@
                         "type": "string"
                     }
                 },
-                "required": [
-                    "repo",
-                    "title"
-                ]
+                "required": ["repo", "title"]
             }
         }
     ]

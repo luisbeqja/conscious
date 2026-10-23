@@ -5,6 +5,8 @@ import { createComposioCapability } from "./capabilities/composio/capability.js"
 import { createGoogleCapability } from "./capabilities/google/capability.js";
 import { createRegistry } from "./capabilities/index.js";
 import { createMailCapability, verifyMailbox } from "./capabilities/mail/capability.js";
+import { createMemoryCapability } from "./capabilities/memory/capability.js";
+import { createQuietCapability } from "./capabilities/quiet/capability.js";
 import { createSpotifyCapability } from "./capabilities/spotify/capability.js";
 import type { Capability } from "./capabilities/types.js";
 import { createWebCapability } from "./capabilities/web/capability.js";
@@ -19,6 +21,7 @@ import { GOOGLE_CONNECTOR, GoogleOAuth } from "./google/oauth.js";
 import { MAIL_CONNECTOR } from "./mail/account.js";
 import { openImap } from "./mail/imap.js";
 import { McpSignIn, McpUserServers } from "./mcp/sign-in.js";
+import { FileMemoryStore, type MemoryStore, SandboxMemoryStore } from "./memory/memory.js";
 import { fetchTransport } from "./plugins/broker.js";
 import { manifestProblems } from "./plugins/manifest.js";
 import { loadPluginFolder, type PluginDeps, pluginCapabilities } from "./plugins/plugins.js";
@@ -26,6 +29,7 @@ import { PluginInstalls, PluginRegistry } from "./plugins/registry.js";
 import { NodeSandbox } from "./plugins/sandbox/sandbox.js";
 import { persistPlugins } from "./plugins/state-file.js";
 import { createE2BClient, E2BSandboxes } from "./sandbox/e2b.js";
+import { Pacing } from "./scheduler/pacing.js";
 import { Scheduler } from "./scheduler/scheduler.js";
 import { SkillLibrary } from "./skills/library.js";
 import { SPOTIFY_CONNECTOR, SpotifyOAuth } from "./spotify/oauth.js";
@@ -47,21 +51,34 @@ export const createConscious = (config: Config, notify: Notify, extra: readonly 
     const sandboxes = config.sandbox
         ? new E2BSandboxes(createE2BClient(config.sandbox), config.sandbox.idleMs)
         : undefined;
+    const memory: MemoryStore = sandboxes
+        ? new SandboxMemoryStore(sandboxes)
+        : new FileMemoryStore(join(config.dataDir, "memory"));
     // Background results reach the orchestrator their own way; everything else it hears about here.
     const sent = new SentLog();
     const say: Notify = (userId, text) => {
         sent.record(userId, text);
         return notify(userId, text);
     };
+    const pacing = new Pacing(config.pacing, join(config.dataDir, "pacing.json"));
     // The fire callback runs only after `start`, once `orchestrator` exists.
     const scheduler: Scheduler = new Scheduler(
         async (reminder, late) => {
-            if (!reminder.check) {
-                const text = late ? `${reminder.text}\n\n(Late: I was offline when this was due.)` : reminder.text;
-                return say(reminder.userId, text);
+            const pace = pacing.decide(reminder);
+            if (pace.action === "skip") return console.log(`[pacing] held ${reminder.id}: ${pace.reason}`);
+            if (pace.action === "defer") {
+                const { id, createdAt, cron, ...again } = reminder;
+                scheduler.add({ ...again, at: pace.to });
+                return console.log(`[pacing] ${id} waits until ${pace.to.toISOString()}, out of quiet hours`);
             }
-            const text = await orchestrator.runCheck(reminder);
-            if (text) await say(reminder.userId, text);
+            const text = !reminder.check
+                ? late
+                    ? `${reminder.text}\n\n(Sorry this is late, I was offline when it was due.)`
+                    : reminder.text
+                : await orchestrator.runCheck(reminder);
+            if (!text) return;
+            await say(reminder.userId, text);
+            pacing.record(reminder);
         },
         { file: join(config.dataDir, "reminders.json") },
     );
@@ -97,6 +114,8 @@ export const createConscious = (config: Config, notify: Notify, extra: readonly 
     if (google) signIns.set(GOOGLE_CONNECTOR.id, google);
     if (spotify) signIns.set(SPOTIFY_CONNECTOR.id, spotify);
     const builtIn = [
+        createMemoryCapability(memory),
+        createQuietCapability(pacing),
         web,
         createMailCapability(openImap, vault),
         ...(google ? [createGoogleCapability(new GoogleApi(google), vault)] : []),
@@ -107,6 +126,7 @@ export const createConscious = (config: Config, notify: Notify, extra: readonly 
                       new ComposioClient(config.composio),
                       (app) =>
                           `${config.vault.publicUrl.replace(/\/$/, "")}${CONNECTED_PATH}?app=${encodeURIComponent(app)}`,
+                      config.composio.apps,
                   ),
               ]
             : []),
@@ -162,6 +182,7 @@ export const createConscious = (config: Config, notify: Notify, extra: readonly 
         scheduler,
         background,
         sandboxes,
+        memory,
         skills: config.sandbox ? new SkillLibrary({ internet: config.sandbox.internet }) : undefined,
         sent,
     });

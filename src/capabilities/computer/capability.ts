@@ -133,7 +133,7 @@ export const createComputerCapability = (sandboxes: SandboxProvider): Capability
 
     return {
         id: "computer",
-        summary: "Your own Linux computer: files, a shell, and your memory of the user.",
+        summary: "Your own Linux computer: files and a shell, kept between conversations.",
         skill: promptFile(import.meta.url, "SKILL.md"),
         tools: [runCommand, readFile, writeFile, listFiles, sendFile],
     };

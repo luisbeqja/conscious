@@ -1,13 +1,13 @@
 import type { Sandbox } from "./sandbox.js";
 
-export const MEMORY_INDEX = "memory/MEMORY.md";
-// The index is read into every prompt; past this it should point to files, not hold the facts.
-const MAX_MEMORY_CHARS = 6_000;
+/** Where memory lived before the memory tools: free notes the agent wrote itself. */
+export const OLDER_NOTES = "memory/MEMORY.md";
+const MAX_NOTES_CHARS = 6_000;
 
-/** What Conscious remembers about the user, read from their sandbox for the system prompt. */
-export const loadMemory = async (sandbox: Sandbox): Promise<string> => {
-    const index = (await sandbox.readFile(MEMORY_INDEX))?.trim();
-    if (!index) return "Nothing yet.";
-    if (index.length <= MAX_MEMORY_CHARS) return index;
-    return `${index.slice(0, MAX_MEMORY_CHARS)}\n…(cut: ${MEMORY_INDEX} is too long, move details into their own files)`;
+/** The free-form notes from before the memory tools, so nothing a user told Conscious is lost. */
+export const loadOlderNotes = async (sandbox: Sandbox): Promise<string | undefined> => {
+    const notes = (await sandbox.readFile(OLDER_NOTES))?.trim();
+    if (!notes) return undefined;
+    if (notes.length <= MAX_NOTES_CHARS) return notes;
+    return `${notes.slice(0, MAX_NOTES_CHARS)}\n…(cut: ${OLDER_NOTES} is too long, move its facts into memory)`;
 };

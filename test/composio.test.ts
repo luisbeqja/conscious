@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { composioEffect, createComposioCapability } from "../src/capabilities/composio/capability.js";
+import { composioEffect, createComposioCapability, LIFE_APPS } from "../src/capabilities/composio/capability.js";
 import type { ToolContext } from "../src/capabilities/types.js";
 import { ComposioClient, composioUserId } from "../src/composio/client.js";
 import { Scheduler } from "../src/scheduler/scheduler.js";
@@ -91,11 +91,12 @@ const fakeComposio = (options: { forgetFirstSession?: boolean } = {}) => {
     return { calls, doFetch };
 };
 
-const setup = (options?: { forgetFirstSession?: boolean }) => {
+const setup = (options?: { forgetFirstSession?: boolean; apps?: readonly string[] | "all" }) => {
     const fake = fakeComposio(options);
     const capability = createComposioCapability(
         new ComposioClient({ apiKey: "ak_test", authConfigs: { googlecalendar: "ac_own" } }, fake.doFetch),
         (app) => `http://localhost:8787/vault/connected?app=${app}`,
+        options?.apps ?? "all",
     );
     const tool = (name: string) => {
         const found = capability.tools.find((candidate) => candidate.name === name);
@@ -177,5 +178,20 @@ describe("Composio", () => {
         await tool("composio_list_apps").execute({}, context);
         expect(calls.filter((call) => call.url === `${BASE}/tool_router/session`)).toHaveLength(2);
         expect(calls.at(-1)?.url).toContain("/session/s2/toolkits");
+    });
+
+    it("reaches only everyday-life apps by default", async () => {
+        const { calls, tool } = setup({ apps: LIFE_APPS });
+        expect(await tool("composio_list_apps").execute({}, context)).toEqual({ data: [] });
+        const link = await tool("composio_connect_app").execute({ app: "Slack" }, context);
+        expect(link.guidance).toMatch(/life, not their job/);
+        const found = await tool("composio_find_tools").execute({ task: "my open Linear issues" }, context);
+        expect(found).toMatchObject({
+            data: { tools: [], apps: [] },
+            guidance: expect.stringMatching(/not their job/),
+        });
+        const run = await tool("composio_read_data").execute({ tool: "LINEAR_LIST_LINEAR_ISSUES" }, context);
+        expect(run.guidance).toMatch(/not their job/);
+        expect(calls.some((call) => call.url.endsWith("/link") || call.url.endsWith("/execute"))).toBe(false);
     });
 });

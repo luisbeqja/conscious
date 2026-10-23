@@ -6,3 +6,5 @@
 - Write a check's `job` as a full brief: what to look at, where, and what counts as worth a message. Say what to compare with; a check that runs on a computer can keep notes in `files/` between runs.
 - A check that finds nothing sends nothing. Tell the user that, so silence does not look broken.
 - Reminders and checks survive a restart.
+- When the user mentions something coming up that matters to them (an interview, a doctor's visit, a first date, an exam, a trip, a hard conversation), set a follow-up with `reminders_follow_up` for a little after it, without asking. Ask what time it is only if you cannot guess the day. Never set one for routine things.
+- If they tell you how it went before the follow-up fires, cancel it.

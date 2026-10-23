@@ -18,7 +18,7 @@ export const createPluginsCapability = (deps: PluginDeps): Capability => {
         name: "plugins_search_plugins",
         label: "Search plugins",
         description:
-            "Search the plugins on this Conscious for an app or service, e.g. 'github': the bundled ones and those you wrote for the user.",
+            "Search the plugins on this Conscious for an app or service, e.g. 'bike sharing': the bundled ones and those you wrote for the user.",
         effect: "read",
         parameters: Type.Object({ query: Type.String() }),
         execute: async (params, context) => {

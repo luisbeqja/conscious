@@ -4,15 +4,16 @@ import type { Capability, ToolContext } from "../capabilities/types.js";
 import type { Budgets } from "../config.js";
 import type { ConversationStore } from "../conversations/store.js";
 import { type IncomingFile, type OutgoingFile, prepareFiles, withoutImages } from "../media/incoming.js";
+import { isEmpty, type MemoryStore, renderMemory, SandboxMemoryStore } from "../memory/memory.js";
 import {
     buildBackgroundPrompt,
     buildCheckBrief,
     buildSystemPrompt,
     buildUserTurn,
-    type ComputerContext,
     isNothing,
+    type PromptContext,
 } from "../prompts/prompts.js";
-import { loadMemory } from "../sandbox/memory.js";
+import { loadOlderNotes } from "../sandbox/memory.js";
 import type { SandboxProvider } from "../sandbox/sandbox.js";
 import type { Reminder, Scheduler } from "../scheduler/scheduler.js";
 import type { SkillLibrary } from "../skills/library.js";
@@ -28,8 +29,10 @@ export interface OrchestratorDeps {
     timezone: string;
     scheduler: Scheduler;
     background: BackgroundAgents;
-    /** The users' computers. Without them Conscious has no memory beyond the conversation. */
+    /** The users' computers, for skills and files. */
     sandboxes?: SandboxProvider;
+    /** What Conscious remembers about each user. Defaults to their computer when there is one. */
+    memory?: MemoryStore;
     /** The skills on each computer. Only used with `sandboxes`. */
     skills?: SkillLibrary;
     /** Messages Conscious sent on its own since the user last wrote, so the next answer knows about them. */
@@ -62,7 +65,7 @@ export interface SendOptions {
     sendFile?: (file: OutgoingFile) => Promise<void>;
 }
 
-const FALLBACK = "Sorry, something went wrong on my side. Try again in a moment?";
+const FALLBACK = "Oops, something broke on my side. Try me again in a minute?";
 
 const toolsFor = (capabilities: readonly Capability[], context: ToolContext) => {
     const registered = capabilities.flatMap((capability) => capability.tools);
@@ -79,8 +82,11 @@ const toolsFor = (capabilities: readonly Capability[], context: ToolContext) => 
  */
 export class Orchestrator {
     private readonly queues = new Map<string, Promise<unknown>>();
+    private readonly memory?: MemoryStore;
 
-    constructor(private readonly deps: OrchestratorDeps) {}
+    constructor(private readonly deps: OrchestratorDeps) {
+        this.memory = deps.memory ?? (deps.sandboxes ? new SandboxMemoryStore(deps.sandboxes) : undefined);
+    }
 
     /**
      * Answers one message. Messages from the same user wait for the one before them.
@@ -126,7 +132,7 @@ export class Orchestrator {
             : { notes: [], images: [] };
         const result = await runAgent({
             runtime,
-            systemPrompt: buildSystemPrompt(registry.renderIndex(capabilities), await this.computer(userId)),
+            systemPrompt: buildSystemPrompt(registry.renderIndex(capabilities), await this.context(userId)),
             tools,
             effects,
             history: await store.load(userId),
@@ -174,7 +180,7 @@ export class Orchestrator {
         const { tools, effects } = toolsFor(capabilities, { userId, timezone, scheduler });
         const result = await runAgent({
             runtime,
-            systemPrompt: buildBackgroundPrompt(registry.renderIndex(capabilities), await this.computer(userId)),
+            systemPrompt: buildBackgroundPrompt(registry.renderIndex(capabilities), await this.context(userId)),
             tools,
             effects,
             history: [],
@@ -188,20 +194,31 @@ export class Orchestrator {
     }
 
     /** A computer that cannot be reached costs the user their memory and skills for one message, not the answer. */
-    private async computer(userId: string): Promise<ComputerContext | undefined> {
+    private async context(userId: string): Promise<PromptContext> {
         const { sandboxes, skills } = this.deps;
-        if (!sandboxes) return undefined;
+        const unreachable = "(Your computer could not be reached, so this is unavailable for this message.)";
+        const failed = (error: unknown) => {
+            console.error(`[orchestrator] could not read the computer for ${userId}`, error);
+            return unreachable;
+        };
+        const loaded = await this.memory?.load(userId).catch(failed);
+        const memory = typeof loaded === "object" ? renderMemory(loaded) : loaded;
+        // Only a memory that was read and is empty means a new user; one that failed to load does not.
+        const isNew = typeof loaded === "object" && isEmpty(loaded);
+        if (!sandboxes) return { memory, firstMeeting: isNew };
         try {
             const sandbox = await sandboxes.forUser(userId);
-            const [memory, skillList] = await Promise.all([
-                loadMemory(sandbox),
+            const [notes, skillList] = await Promise.all([
+                loadOlderNotes(sandbox),
                 skills ? skills.render(userId, sandbox) : "None yet.",
             ]);
-            return { memory, skills: skillList };
+            return {
+                memory: notes ? `${memory}\n\nOlder notes, from before the memory tools:\n${notes}` : memory,
+                skills: skillList,
+                firstMeeting: isNew && !notes,
+            };
         } catch (error) {
-            console.error(`[orchestrator] could not read the computer for ${userId}`, error);
-            const unreachable = "(Your computer could not be reached, so this is unavailable for this message.)";
-            return { memory: unreachable, skills: unreachable };
+            return { memory, skills: failed(error), firstMeeting: false };
         }
     }
 }

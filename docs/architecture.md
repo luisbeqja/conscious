@@ -1,6 +1,6 @@
 # Architecture
 
-Conscious is open source and self-hosted. Whoever runs it picks the model and keeps the data: the Vault, plugins and installs live in the install's own data folder, and memory and conversations live in each user's computer (an E2B sandbox, hosted or self-run). There is no Conscious server that sees any of it.
+Conscious is a personal assistant for daily life, not work, and it should feel like a friend: it remembers you and the people in your life, follows up, and knows when to stay quiet. It is open source and self-hosted. Whoever runs it picks the model and keeps the data: the Vault, plugins and installs live in the install's own data folder, and memory and conversations live there too, or in each user's computer (an E2B sandbox, hosted or self-run) when there is one. There is no Conscious server that sees any of it.
 
 ## The idea
 
@@ -9,7 +9,9 @@ Conscious is open source and self-hosted. Whoever runs it picks the model and ke
 3. **Reminders are cron jobs.** One-off or recurring, read in your timezone, sent to you as a normal message. A scheduled check is a reminder with a job: when it fires, an agent does the job and messages you only if it found something. Both are saved in `.conscious/reminders.json` and re-armed at start.
 4. **Connectors bring in your life.** A connector is a link to one of your accounts. A pack that needs one is invisible until you connect it. Tokens never reach the model.
 5. **A computer for what no API covers.** A disposable sandbox with a browser. Not built yet.
-6. **Safety is code, not prompt.** Every tool is `read`, `draft` or `commit`. A `commit` (send, book, pay, delete) never runs without your explicit yes. Until approvals exist, commits are blocked outright.
+6. **Memory is not the transcript.** What Conscious knows about you and the people in your life is kept apart from the conversation, read into every prompt, and yours to see and delete.
+7. **Speaking first is rationed in code.** What Conscious sends on its own waits out the night and stops at a daily limit. A friend who texts too much is worse than one who never does.
+8. **Safety is code, not prompt.** Every tool is `read`, `draft` or `commit`. A `commit` (send, book, pay, delete) never runs without your explicit yes. Until approvals exist, commits are blocked outright.
 
 ## Building blocks
 
@@ -24,7 +26,9 @@ Conscious is open source and self-hosted. Whoever runs it picks the model and ke
 | Connectors | The user's own accounts, linked one by one. |
 | Skills | `SKILL.md` instructions on the user's computer: copied from the repo, or written by the agent. |
 | MCP servers | Vendor-hosted tool servers from a reviewed catalog, called from the host. |
-| Composio | Optional: hundreds of other apps through Composio's hosted tool router, which holds each user's sign-ins. |
+| Memory | Facts about the user and the people in their life, with birthdays. On the host's disk, or on the user's computer. |
+| Pacing | Quiet hours, a daily limit and a pause for the messages Conscious sends on its own. |
+| Composio | Optional: more everyday apps through Composio's hosted tool router, which holds each user's sign-ins. Work apps are refused. |
 | Plugins | Apps without a capability: bundled with Conscious or written by the agent on your install, run in a sandbox. |
 | Vault | Your secrets, saved through a private page and sealed. Only the broker reads them. |
 
@@ -34,6 +38,14 @@ Conscious is open source and self-hosted. Whoever runs it picks the model and ke
 2. The orchestrator loads the conversation, builds the turn (the time in your timezone, background tasks that finished or are still running, your text), and runs the loop with the packs available to you.
 3. The answer streams back as it is written, tool calls shown as they start, and the conversation is saved.
 4. Reminders and finished background tasks reach you through `notify`, the one way Conscious speaks first.
+
+## Memory and speaking first
+
+- **Memory** (`src/memory/`, `capabilities/memory/`) holds two lists: facts about the user, and people (name, relation, birthday, notes). It is a JSON file per user: `.conscious/memory/<hash>.json` on the host, or `memory/memory.json` on the user's computer. Every prompt carries it with an id per line, so the agent can forget one. Older free-form notes in `memory/MEMORY.md` are shown too, until the agent moves them over.
+- **The first meeting.** While memory is empty, the system prompt adds `prompts/first-meeting.md`: say hi, ask their name, offer to look them up online. The look-up is a background task with a brief written from the memory skill: public pages only, no addresses, money or health, and it asks when two people share a name. Nothing it finds is saved until the user confirms it.
+- **Birthdays and follow-ups** are scheduled checks marked `unprompted`: a birthday arms one a week before and one on the day, and `reminders_follow_up` arms one after an event the user mentioned. Each runs the agent with memory, so the words fit what Conscious knows by then.
+- **Pacing** (`scheduler/pacing.ts`) runs before any reminder fires. A plain reminder the user set always goes. An unprompted one inside quiet hours is moved to their end, and past the daily limit it is dropped. While the user paused messages (`quiet_pause_messages`), unprompted ones and scheduled checks are dropped. The pause and the day's count are kept in `.conscious/pacing.json`.
+- **Bubbles.** On iMessage and WhatsApp, a reply of two to four short paragraphs goes out as that many messages, with a short pause between them.
 
 ## Channels
 

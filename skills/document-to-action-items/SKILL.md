@@ -1,6 +1,6 @@
 ---
 name: document-to-action-items
-description: "Extract cited obligations, deadlines, tasks from documents."
+description: "Life paperwork (contracts, letters, forms): what to do, by when, cited."
 version: 0.1.0
 license: MIT
 platforms: [linux, macos, windows]
@@ -15,10 +15,10 @@ Turn documents into cited facts and proposed actions. Extraction is not legal ad
 
 ## When to Use
 
-- "Extract deadlines and obligations from this contract."
-- "Turn this report into tasks."
-- "Read these scanned forms and structure the data."
-- "Find risks, owners, and follow-ups in these attachments."
+- "What do I actually have to do about this letter from the tax office?"
+- "Read my new rental contract: notice period, deposit, what I pay for."
+- "When do I have to renew this insurance, and what happens if I don't?"
+- "The school sent three PDFs, what do I need to sign or bring, and by when?"
 
 Don't use for: plain text extraction with no downstream structuring (load `pdf` directly).
 

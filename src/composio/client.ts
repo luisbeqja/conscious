@@ -8,6 +8,8 @@ export interface ComposioConfig {
      * dashboard with the owner's OAuth apps, so the sign-in shows Conscious instead of Composio.
      */
     authConfigs?: Record<string, string>;
+    /** The apps it may reach, by Composio id; unset means the everyday-life list. */
+    apps?: readonly string[] | "all";
 }
 
 export interface ComposioApp {

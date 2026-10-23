@@ -55,6 +55,45 @@ const check = defineTool({
     },
 });
 
+const followUp = defineTool({
+    name: "reminders_follow_up",
+    label: "Follow up later",
+    description:
+        "After something the user has coming up (an interview, a doctor's visit, a date, a trip, an exam), ask them how it went, once, at `at`.",
+    effect: "draft",
+    parameters: Type.Object({
+        about: Type.String({ description: "What it is, in a few words: 'the Bending Spoons interview'." }),
+        at: Type.String({
+            description:
+                "When to ask, ISO 8601 with offset: a little after it ends, at a sensible hour (not at night).",
+        }),
+        context: Type.Optional(
+            Type.String({
+                description: "What you know that makes the question personal: how they felt, what was at stake.",
+            }),
+        ),
+    }),
+    execute: async (params, context) => {
+        const job = [
+            `Earlier the user told you about ${params.about}, and it has happened by now.`,
+            params.context ? `What you knew then: ${params.context}` : "",
+            "Ask them how it went in one short, warm message, the way a friend who remembered would. No advice, no list of questions.",
+            "If you remember that they already told you how it went, answer NOTHING.",
+        ]
+            .filter(Boolean)
+            .join(" ");
+        const reminder = context.scheduler.add({
+            userId: context.userId,
+            text: `How did ${params.about} go?`,
+            check: job,
+            at: new Date(params.at),
+            timezone: context.timezone,
+            unprompted: true,
+        });
+        return { data: { id: reminder.id, at: reminder.at } };
+    },
+});
+
 const list = defineTool({
     name: "reminders_list_reminders",
     label: "List reminders",
@@ -76,7 +115,7 @@ const cancel = defineTool({
 export const remindersCapability: Capability = {
     id: "reminders",
     summary:
-        "Schedule messages to the user (one-off and recurring reminders) and checks an agent runs on its own (price watches, news, a morning brief).",
+        "Schedule messages to the user (one-off and recurring reminders), follow-ups after things in their life, and checks an agent runs on its own (price watches, news, a morning brief).",
     skill: promptFile(import.meta.url, "SKILL.md"),
-    tools: [create, check, list, cancel],
+    tools: [create, check, followUp, list, cancel],
 };

@@ -130,9 +130,10 @@ describe("signing in to an MCP server", () => {
 
     it("ships sign-in servers in the catalog, offered by default", () => {
         const offered = selectServers(readCatalog(), undefined).map((server) => `${server.name}:${server.auth}`);
-        expect(offered).toEqual(
-            expect.arrayContaining(["notion:oauth", "todoist:oauth", "strava:oauth", "dropbox:oauth", "kiwi:none"]),
-        );
+        expect(offered).toEqual(expect.arrayContaining(["todoist:oauth", "strava:oauth", "kiwi:none"]));
+        // Mostly used for work, so only on when the install names them.
+        expect(offered).not.toContain("notion:oauth");
+        expect(offered).not.toContain("dropbox:oauth");
     });
 });
 

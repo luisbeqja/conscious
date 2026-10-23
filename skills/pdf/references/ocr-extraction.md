@@ -4,7 +4,7 @@ Scripts referenced below live in this skill's scripts/ directory.
 # PDF & Document Extraction
 
 For DOCX: see the `docx` skill (create/edit) or use `python-docx` for structured reads.
-For PPTX: see the `powerpoint` skill (full create/read/edit support).
+For PPTX: convert it to PDF first.
 For PDF manipulation (merge, split, forms, watermarks, creation): see the `pdf` skill.
 This skill covers **text extraction from PDFs and scanned documents**.
 
@@ -162,4 +162,4 @@ No extra dependencies needed — pymupdf covers split, merge, search, and text e
 - Both helper scripts accept `--help` for full usage
 - marker-pdf downloads ~2.5GB of models to `~/.cache/huggingface/` on first use
 - For Word docs: `pip install python-docx` (better than OCR — parses actual structure)
-- For PowerPoint: see the `powerpoint` skill (uses python-pptx)
+- For PowerPoint: convert it to PDF first

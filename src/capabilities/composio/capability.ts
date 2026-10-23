@@ -16,6 +16,37 @@ export const composioEffect = (tool: string, tags: readonly string[]): Effect =>
     return "commit";
 };
 
+/**
+ * The apps Composio may reach on a default install: everyday life, not work. Linear, Slack, Jira
+ * and the like are refused. `COMPOSIO_APPS` replaces the list, and `all` lifts it.
+ */
+export const LIFE_APPS: readonly string[] = [
+    "googlecalendar",
+    "gmail",
+    "googledrive",
+    "googlephotos",
+    "googletasks",
+    "google_maps",
+    "youtube",
+    "outlook",
+    "spotify",
+    "strava",
+    "fitbit",
+    "oura",
+    "todoist",
+    "ticktick",
+    "splitwise",
+    "pinterest",
+    "reddit",
+    "discord",
+    "instagram",
+    "eventbrite",
+    "yelp",
+];
+
+const NOT_FOR_LIFE =
+    "Conscious is for the user's life, not their job, so this install does not connect that app. Say so kindly, and offer what you can do instead.";
+
 const clip = (data: unknown): unknown => {
     const text = JSON.stringify(data) ?? "null";
     return text.length <= MAX_RESULT_CHARS
@@ -24,14 +55,20 @@ const clip = (data: unknown): unknown => {
 };
 
 /**
- * The long tail of apps (Linear, Slack, Trello, HubSpot…) through Composio, which holds each
+ * The long tail of life apps (photos, fitness, shared expenses…) through Composio, which holds each
  * user's sign-ins on its side. Only on when the install sets COMPOSIO_API_KEY.
+ * `connectedUrl` is the Conscious page the user lands on after signing in to an app.
  */
-/** `connectedUrl` is the Conscious page the user lands on after signing in to an app. */
 export const createComposioCapability = (
     composio: ComposioClient,
     connectedUrl?: (app: string) => string,
+    apps: readonly string[] | "all" = LIFE_APPS,
 ): Capability => {
+    const appAllowed = (app: string): boolean => apps === "all" || apps.includes(app.trim().toLowerCase());
+    // A tool's slug starts with its app's: GOOGLECALENDAR_FIND_EVENT, GOOGLE_MAPS_TEXT_SEARCH.
+    const toolAllowed = (tool: string): boolean =>
+        apps === "all" || apps.some((app) => tool.toLowerCase().startsWith(`${app}_`));
+
     const ARGS = Type.Record(Type.String(), Type.Unknown(), {
         description: "The tool's inputs, exactly as composio_find_tools described them.",
     });
@@ -41,6 +78,7 @@ export const createComposioCapability = (
         (allowed: readonly Effect[]) =>
         async (params: { tool: string; arguments?: Record<string, unknown> }, userId: string): Promise<ToolOutput> => {
             const tool = params.tool.trim().toUpperCase();
+            if (!toolAllowed(tool)) return { data: { error: `${tool} is not available` }, guidance: NOT_FOR_LIFE };
             const effect = composioEffect(tool, await composio.toolTags(tool));
             if (!allowed.includes(effect)) {
                 const better =
@@ -72,7 +110,7 @@ export const createComposioCapability = (
     return {
         id: "composio",
         summary:
-            "Hundreds of other apps through Composio (Linear, Slack, Trello, Asana, HubSpot, Jira, Airtable…): find a tool, connect the app, read and draft.",
+            "More of the user's everyday apps through Composio (Google Photos, Fitbit, Oura, Splitwise, YouTube…): find a tool, connect the app, read and draft.",
         skill: promptFile(import.meta.url, "SKILL.md"),
         tools: [
             defineTool({
@@ -84,7 +122,9 @@ export const createComposioCapability = (
                     search: Type.Optional(Type.String({ description: "Part of an app name, for example linear." })),
                     connectedOnly: Type.Optional(Type.Boolean()),
                 }),
-                execute: async (params, context) => ({ data: await composio.apps(context.userId, params) }),
+                execute: async (params, context) => ({
+                    data: (await composio.apps(context.userId, params)).filter((app) => appAllowed(app.app)),
+                }),
             }),
             defineTool({
                 name: "composio_connect_app",
@@ -94,16 +134,20 @@ export const createComposioCapability = (
                 parameters: Type.Object({
                     app: Type.String({ description: "The app's id from composio_list_apps, for example linear." }),
                 }),
-                execute: async (params, context) => ({
-                    data: {
-                        link: await composio.connectLink(
-                            context.userId,
-                            params.app.trim().toLowerCase(),
-                            connectedUrl?.(params.app.trim()),
-                        ),
-                    },
-                    guidance: "Send the link as it is, and ask them to tell you when they are done.",
-                }),
+                execute: async (params, context) => {
+                    if (!appAllowed(params.app))
+                        return { data: { error: `${params.app} is not available` }, guidance: NOT_FOR_LIFE };
+                    return {
+                        data: {
+                            link: await composio.connectLink(
+                                context.userId,
+                                params.app.trim().toLowerCase(),
+                                connectedUrl?.(params.app.trim()),
+                            ),
+                        },
+                        guidance: "Send the link as it is, and ask them to tell you when they are done.",
+                    };
+                },
             }),
             defineTool({
                 name: "composio_find_tools",
@@ -112,7 +156,12 @@ export const createComposioCapability = (
                     "Find the app tools for a task in plain words (for example: list my open Linear issues). Returns tool slugs, their inputs, and which apps are connected.",
                 effect: "read",
                 parameters: Type.Object({ task: Type.String() }),
-                execute: async (params, context) => ({ data: await composio.findTools(context.userId, params.task) }),
+                execute: async (params, context) => {
+                    const found = await composio.findTools(context.userId, params.task);
+                    const tools = found.tools.filter((tool) => toolAllowed(tool.tool));
+                    const data = { ...found, tools, apps: found.apps.filter((app) => appAllowed(app.app)) };
+                    return tools.length || !found.tools.length ? { data } : { data, guidance: NOT_FOR_LIFE };
+                },
             }),
             defineTool({
                 name: "composio_read_data",

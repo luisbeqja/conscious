@@ -54,7 +54,7 @@ describe("plugins in the agent loop", () => {
             plugins,
             vault: { vault, publicUrl: "https://conscious.example.com" },
         }).addSource(pluginCapabilities(plugins));
-        for (const pkg of loadPluginFolder(join(import.meta.dirname, "..", "plugins"))) {
+        for (const pkg of loadPluginFolder(join(import.meta.dirname, "fixtures", "plugins"))) {
             plugins.registry.publish(pkg, { author: "conscious", source: "bundled" });
         }
         const orchestrator = new Orchestrator({

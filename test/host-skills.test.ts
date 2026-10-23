@@ -10,9 +10,9 @@ const context: ToolContext = { userId: "me", timezone: "Europe/Rome", scheduler:
 describe("Skills without a computer", () => {
     it("offers only the repo's skills that need no scripts and no files", () => {
         const names = readHostSkills().map((skill) => skill.name);
-        expect(names).toEqual(expect.arrayContaining(["weather", "weekly-review-planning", "decision-questionnaire"]));
+        expect(names).toEqual(expect.arrayContaining(["weather", "sunday-reset", "product-price-monitor"]));
         expect(names).not.toContain("rss-feeds");
-        expect(names).not.toContain("llm-wiki");
+        expect(names).not.toContain("watchers");
         expect(names).not.toContain("pdf");
     });
 

@@ -1,23 +1,21 @@
 ---
 name: watchers
-description: Poll RSS, JSON APIs, and GitHub with watermark dedup.
+description: Poll RSS feeds and JSON APIs with watermark dedup.
 version: 1.0.0
 license: MIT
 platforms: [linux, macos]
 metadata:
   conscious:
-    tags: [cron, polling, rss, github, http, automation, monitoring]
-    category: devops
+    tags: [cron, polling, rss, http, monitoring]
 ---
 
 # Watchers
 
-Poll external sources on an interval and react only to new items. Three ready-made scripts plus a shared watermark helper; wire them into a cron job (or run them ad-hoc from the terminal).
+Poll external sources on an interval and react only to new items. Two ready-made scripts plus a shared watermark helper; wire them into a cron job (or run them ad-hoc from the terminal).
 
 ## When to Use
 
 - User wants to watch an RSS/Atom feed and be notified of new entries
-- User wants to watch a GitHub repo's issues / pulls / releases / commits
 - User wants to poll an arbitrary JSON endpoint and get notified on new items
 - User asks for "a watcher for X" or "notify me when X changes"
 
@@ -34,15 +32,14 @@ The scripts below handle all three. The agent runs them via the terminal tool â€
 
 ## Ready-made scripts
 
-All three live in this skill's `scripts/` folder. Each reads `WATCHER_STATE_DIR` (defaults to `~/watcher-state/`) for its state file, keyed by the `--name` argument.
+Both live in this skill's `scripts/` folder. Each reads `WATCHER_STATE_DIR` (defaults to `~/watcher-state/`) for its state file, keyed by the `--name` argument.
 
 | Script | What it watches | Dedup key |
 |---|---|---|
 | `watch_rss.py` | RSS 2.0 or Atom feed URL | `<guid>` / `<id>` |
 | `watch_http_json.py` | Any JSON endpoint returning a list of objects | Configurable id field |
-| `watch_github.py` | GitHub issues / pulls / releases / commits for a repo | `id` / `sha` |
 
-All three:
+Both:
 
 - First run records a baseline â€” never replays existing feed
 - Watermark is a bounded ID set (max 500) to cap memory
@@ -57,13 +54,6 @@ Run a watcher directly from the terminal tool:
 ```bash
 python scripts/watch_rss.py \
   --name hn --url https://news.ycombinator.com/rss --max 5
-```
-
-Watch a GitHub repo (anonymous calls are limited to 60 an hour):
-
-```bash
-python scripts/watch_github.py \
-  --name node-issues --repo nodejs/node --scope issues
 ```
 
 Poll an arbitrary JSON API:
@@ -98,7 +88,7 @@ rm ~/watcher-state/hn.json
 
 ## Writing your own
 
-All three scripts use the same template: load watermark, fetch, diff, save, emit. `scripts/_watermark.py` is the shared helper; import it to get atomic writes + bounded ID set + first-run baseline for free. See any of the three reference scripts for how little boilerplate it takes.
+Both scripts use the same template: load watermark, fetch, diff, save, emit. `scripts/_watermark.py` is the shared helper; import it to get atomic writes + bounded ID set + first-run baseline for free. See either reference script for how little boilerplate it takes.
 
 ## Common Pitfalls
 

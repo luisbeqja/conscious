@@ -5,6 +5,7 @@ import type { GoogleClient } from "./google/oauth.js";
 import { type McpServerEntry, readCatalog, selectServers } from "./mcp/catalog.js";
 import type { TranscriptionConfig } from "./media/transcribe.js";
 import type { E2BOptions } from "./sandbox/e2b.js";
+import { type PacingConfig, parseQuietHours } from "./scheduler/pacing.js";
 import type { SpotifyClient } from "./spotify/oauth.js";
 import type { SearchConfig } from "./web/search.js";
 
@@ -17,6 +18,8 @@ export interface Config {
     vault: VaultConfig;
     model: ModelConfig;
     budgets: Budgets;
+    /** How often Conscious may write first. */
+    pacing: PacingConfig;
     /** Unset means no computer: memory and the conversation live in this process only. */
     sandbox?: E2BOptions;
     /** MCP servers from the repo's catalog that this install connects to. */
@@ -95,6 +98,10 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): Config => {
             apiKey: env.CONSCIOUS_MODEL_API_KEY || undefined,
         },
         budgets: { maxTurnsPerRun: 20, maxToolCallsPerRun: 40, maxBackgroundAgents: 3 },
+        pacing: {
+            quietHours: parseQuietHours(env.CONSCIOUS_QUIET_HOURS || "22-8"),
+            maxUnpromptedPerDay: Number(env.CONSCIOUS_MAX_UNPROMPTED || 3),
+        },
         sandbox: loadSandboxConfig(env),
         mcpServers: selectServers(readCatalog(), env.CONSCIOUS_MCP_SERVERS),
         search: loadSearchConfig(env),
@@ -111,6 +118,12 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): Config => {
                   apiKey: env.COMPOSIO_API_KEY,
                   baseUrl: env.COMPOSIO_BASE_URL || undefined,
                   authConfigs: parsePairs(env.COMPOSIO_AUTH_CONFIGS),
+                  apps:
+                      env.COMPOSIO_APPS === "all"
+                          ? "all"
+                          : env.COMPOSIO_APPS
+                            ? list(env.COMPOSIO_APPS).map((app) => app.toLowerCase())
+                            : undefined,
               }
             : undefined,
         transcription: loadTranscriptionConfig(env),

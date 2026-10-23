@@ -1,8 +1,8 @@
 # Conscious
 
-A personal assistant for your life, not your job: reminders, plans, errands, things to look up. It keeps talking while longer jobs run in the background, and tells you when they are done. You text it on iMessage or WhatsApp through [Photon](https://photon.codes), chat with it in its own phone app, or in the terminal.
+A personal assistant for your daily life, not your work, that feels more like a friend than a coworker. It remembers you and the people in your life, nudges you before your sister's birthday, asks how the interview went, and quietly handles reminders, plans, errands and things to look up. It keeps talking while longer jobs run in the background, and tells you when they are done. You text it on iMessage or WhatsApp through [Photon](https://photon.codes), chat with it in its own phone app, or in the terminal.
 
-Conscious is open source and built in Europe. You run it yourself, on your own machine or server, with the model you choose: a hosted one such as Mistral, Claude or GPT, or a local one through Ollama. Your accounts and plugins stay on your install. With a computer (below), memory and conversations live in an E2B sandbox that you can also run yourself.
+Conscious is open source and built in Europe. You run it yourself, on your own machine or server, with the model you choose: a hosted one such as Mistral, Claude or GPT, or a local one through Ollama. Your memory, accounts and plugins stay on your install. With a computer (below), memory and conversations live in an E2B sandbox that you can also run yourself.
 
 The agent loop is [`pi-agent-core`](https://github.com/earendil-works/pi). Design: [`docs/architecture.md`](docs/architecture.md).
 
@@ -18,7 +18,7 @@ pnpm chat
 
 ```
 you remind me to call mum tomorrow at 9
-conscious [reminders_create_reminder] Done: tomorrow at 9:00 I'll nudge you to call mum 📞
+conscious [reminders_create_reminder] done, tomorrow 9:00 📞
 ```
 
 Reminders and finished background tasks print on their own, above the prompt. Commands: `/reminders`, `/tasks`, `/reset` (forget the conversation), `/exit`.
@@ -26,6 +26,16 @@ Reminders and finished background tasks print on their own, above the prompt. Co
 Reminders, scheduled checks and the conversation are saved in `.conscious/`, so a restart keeps them. A one-off reminder that came due while Conscious was off is sent, marked late, when it starts again (up to 12 hours late).
 
 A **scheduled check** is a reminder with a job: at the time, an agent does the work with all of Conscious's tools and messages you only if it finds something. "Every morning at 8, tell me if it will rain", "check the Lisbon flight daily and tell me if it drops under 120 EUR".
+
+## A friend, not a coworker
+
+- **It remembers you.** What you tell it about yourself and the people in your life (who they are, their birthday, what is going on with them) is kept with the memory tools and read into every conversation, with or without a computer. Ask "what do you know about me?" to see it, and "forget that" to delete a line. Without a computer it is saved in `.conscious/memory/`, on a computer in `memory/memory.json`.
+- **It gets to know you.** The first time you write, it introduces itself, asks your name, and offers to look you up online. With your yes, a background agent reads what is public about you (your name and city, the profiles you point it to) and shows you what it found. Only what you confirm is kept.
+- **It remembers the people you care about.** A birthday in memory becomes a nudge a week before, with a present idea, and another on the morning of the day.
+- **It follows up.** Mention an interview, a doctor's visit or a first date, and it asks how it went afterwards, once.
+- **It knows when to be quiet.** What it sends on its own waits out the night (`CONSCIOUS_QUIET_HOURS`, 22-8 by default) and stops at a few a day (`CONSCIOUS_MAX_UNPROMPTED`, 3). Tell it "leave me alone this week" and it holds those and scheduled checks until then. Reminders you set yourself always come.
+- **It texts like a person.** Short messages, often two or three bubbles instead of one block, reactions when a reaction is enough, and no assistant phrases.
+- **It stays out of your job.** No work apps, no work skills: ask about work and it helps only with the personal side.
 
 ## Choose your model
 
@@ -90,7 +100,7 @@ The app server runs on `CONSCIOUS_APP_PORT` (8788). On your home network the pho
 
 ## Give it a computer
 
-Conscious can have a computer of its own: one [E2B](https://e2b.dev) sandbox per user. Everything it knows about you lives there: its memory (`memory/MEMORY.md`, read into every conversation), the files it keeps for you (`files/`), and the conversation itself (`.conscious/conversation.json`). It also gets a shell and file tools that run there, never on your machine.
+Conscious can have a computer of its own: one [E2B](https://e2b.dev) sandbox per user. Everything it knows about you lives there: its memory (`memory/memory.json`, read into every conversation), the files it keeps for you (`files/`), and the conversation itself (`.conscious/conversation.json`). It also gets a shell and file tools that run there, never on your machine.
 
 ```bash
 CONSCIOUS_SANDBOX=e2b
@@ -112,19 +122,18 @@ To check a setup before you text it, run `pnpm computer:check`. It starts a thro
 
 Skills are instructions for jobs that come up often, in the [AgentSkills](https://agentskills.io) format. They live on the user's computer, in `skills/`: the repo's [`skills/`](skills/) folder is copied in when a computer starts, next to the skills the agent wrote for that user. The system prompt lists the ones that can run there, and the agent reads a skill's `SKILL.md` before it uses it.
 
-23 ship today:
+18 ship today, all for everyday life:
 
 | Area | Skills |
 | --- | --- |
 | Search | `duckduckgo-search`, `reddit-reading`, `youtube-content`, `blocked-page-recovery`, `rss-feeds` |
 | Watching | `product-price-monitor`, `watchers`, `stocks` |
-| Daily life | `weather`, `maps`, `fitness-nutrition` |
-| Planning | `weekly-review-planning`, `decision-questionnaire`, `one-three-one-rule`, `social-media-content-calendar`, `llm-wiki` |
+| Daily life | `weather`, `maps`, `fitness-nutrition`, `sunday-reset` |
 | Mail | `email-inbox-triage` (with Gmail or any IMAP mailbox) |
-| Documents | `pdf`, `docx`, `xlsx`, `powerpoint`, `document-to-action-items` |
+| Paperwork | `pdf`, `docx`, `xlsx`, `document-to-action-items` |
 | Agent | `skill-creator` |
 
-Without a computer, the skills that need no scripts and no files still work, read straight from the repo and followed with Conscious's own tools (web search, page reading, reminders): `weather`, `product-price-monitor`, `weekly-review-planning`, `decision-questionnaire`, `one-three-one-rule`, `social-media-content-calendar`, `document-to-action-items`, `email-inbox-triage`. The rest need a computer. A skill can opt out with `"computer": true` in its `conscious.json`.
+Without a computer, the skills that need no scripts and no files still work, read straight from the repo and followed with Conscious's own tools (web search, page reading, reminders): `weather`, `product-price-monitor`, `sunday-reset`, `document-to-action-items`, `email-inbox-triage`. The rest need a computer. A skill can opt out with `"computer": true` in its `conscious.json`.
 
 Skills that fetch from the web show up on a computer only with `CONSCIOUS_SANDBOX_INTERNET=true`. Watching skills can run on a schedule as checks (see Chat with it). To copy another one at a pinned commit:
 
@@ -168,31 +177,33 @@ Like Google, each install brings its own Spotify app. Once:
 
 Spotify lets an app in development mode serve only a few listed users, and its owner needs Premium. That fits one household; more people need Spotify's review.
 
-## Notion, Todoist, Strava and Dropbox
+## Todoist, Strava, Notion and Dropbox
 
 Conscious connects to vendor-hosted MCP servers listed in [`mcp/`](mcp/), from the host, and offers their tools like any capability. Kiwi.com flights and trivago hotels need no account and are on from the start.
 
-Notion, Todoist, Strava and Dropbox need your account. Ask "what's on my Todoist today?" and Conscious sends a Vault link with a **Sign in with Todoist** button. You sign in on Todoist's own page, and from then on Conscious calls Todoist as you. There is nothing to set up first: Conscious registers itself with each service the first time someone signs in. The redirect goes to your `CONSCIOUS_PUBLIC_URL`, so it works on the same machine with `http://localhost:8787`, and from a phone through an https address.
+Todoist and Strava need your account. Ask "what's on my Todoist today?" and Conscious sends a Vault link with a **Sign in with Todoist** button. You sign in on Todoist's own page, and from then on Conscious calls Todoist as you. There is nothing to set up first: Conscious registers itself with each service the first time someone signs in. The redirect goes to your `CONSCIOUS_PUBLIC_URL`, so it works on the same machine with `http://localhost:8787`, and from a phone through an https address.
 
-Set `CONSCIOUS_MCP_SERVERS` to choose (for example `kiwi,notion,todoist`, or `none`). Reading is free; adding and changing pages or tasks is allowed; deleting, and any tool a manifest does not mark, waits for your yes.
+Notion and Dropbox work the same way, but are off unless you name them, since most people use them for work. Set `CONSCIOUS_MCP_SERVERS` to choose (for example `kiwi,todoist,notion`, or `none`). Reading is free; adding and changing pages or tasks is allowed; deleting, and any tool a manifest does not mark, waits for your yes.
 
-## Other apps through Composio
+## More everyday apps through Composio
 
-For apps Conscious has no tools of its own for (Linear, Slack, Trello, Asana, HubSpot, Jira, Airtable and hundreds more), it can use [Composio](https://composio.dev). Set `COMPOSIO_API_KEY` in `.env` (from the Composio dashboard) and restart. Ask "what are my open Linear issues?" and Conscious finds the right tool. If Linear is not connected yet, it sends a link to Composio's sign-in page. There is no app to register.
+For everyday apps Conscious has no tools of its own for (Google Photos, Fitbit, Oura, Splitwise, YouTube, Pinterest and more), it can use [Composio](https://composio.dev). Set `COMPOSIO_API_KEY` in `.env` (from the Composio dashboard) and restart. Ask "how did I sleep this week?" and Conscious finds the right tool. If the app is not connected yet, it sends a link to Composio's sign-in page. There is no app to register.
+
+Conscious is for your life, not your job, so work apps (Linear, Slack, Jira, HubSpot…) are not offered. The list of allowed apps is `LIFE_APPS` in `src/capabilities/composio/capability.ts`; `COMPOSIO_APPS` replaces it with your own comma-separated list, and `COMPOSIO_APPS=all` lifts it.
 
 Composio is a hosted service: it holds each user's app sign-ins and runs the tools, so that data passes through Composio. Conscious sends it an opaque id per user, never a phone number or name. Reading is free, saving drafts is allowed, and anything that creates, changes, sends or deletes waits for your yes. Without a key, nothing goes to Composio.
 
 After signing in, the user lands on a Conscious page, not Composio's. To make the sign-in itself show Conscious:
 
 1. In the Composio dashboard, under Project Settings → Auth Screen, set the logo and app name. That changes the Connect Link page for every app.
-2. For apps with a consent screen (Google, GitHub, Slack…), register your own OAuth app with the redirect URI `https://backend.composio.dev/api/v3.1/toolkits/auth/callback`. Then create an auth config with its client ID and secret in the Composio dashboard. Google then says "Conscious wants access", not Composio.
+2. For apps with a consent screen (Google, Fitbit, Spotify…), register your own OAuth app with the redirect URI `https://backend.composio.dev/api/v3.1/toolkits/auth/callback`. Then create an auth config with its client ID and secret in the Composio dashboard. Google then says "Conscious wants access", not Composio.
 3. List those auth configs in `.env`: `COMPOSIO_AUTH_CONFIGS=googlecalendar=ac_…,gmail=ac_…`. Only new connections use them. Users connected before have to connect again.
 
 ## Plugins
 
-Ask Conscious about an app it has no capability for and it installs a plugin that ships with Conscious, or writes one itself. A plugin it writes stays on your install. Plugins run in a sandbox and reach only the hosts they declare. See [Plugins](docs/architecture.md#plugins).
+Ask Conscious about an app it has no capability for and it writes a plugin for it, or installs one that ships with Conscious. A plugin it writes stays on your install. Plugins run in a sandbox and reach only the hosts they declare. See [Plugins](docs/architecture.md#plugins).
 
-Ask "anything new on GitHub?". Conscious installs the GitHub plugin and sends you a **Vault** link: a private page where you paste a GitHub token. It checks the token with GitHub, saves it encrypted, and tells you in the chat when you are connected. Secrets never pass through the chat or the model.
+When the plugin needs your account, Conscious sends you a **Vault** link: a private page where you paste the key. It checks the key with the service, saves it encrypted, and tells you in the chat when you are connected. Secrets never pass through the chat or the model.
 
 For a service with no built-in connection, Conscious reads the service's API docs and defines the connection in the plugin it writes. The Vault page then shows exactly which hosts your key will go to, and says that Conscious wrote this connection itself. Your key only ever goes to those hosts. Sign-in by redirect works for Google (above); open banking and other providers come later.
 
@@ -229,7 +240,7 @@ src/
 ├─ main.ts               the terminal chat
 ├─ photon.ts             iMessage and WhatsApp through Photon Spectrum
 ├─ app.ts                the phone app on its own
-├─ channels/photon.ts    Spectrum messages → orchestrator, replies and notifications back
+├─ channels/photon.ts    Spectrum messages → orchestrator, replies (as short bubbles) and notifications back
 ├─ channels/app.ts       the phone app's WebSocket: streamed replies, reactions, files
 ├─ create-conscious.ts   composition root: which implementation sits behind each seam
 ├─ config.ts             environment → typed config
@@ -239,10 +250,13 @@ src/
 │  ├─ tool-adapter.ts    capability tool → pi tool
 │  └─ models.ts          the model you chose: any pi-ai provider, or a local server
 ├─ agents/               background sub-agents: spawn, list, cancel, report back
-├─ scheduler/            reminders: one-off and cron, in your timezone
-├─ sandbox/              each user's computer: the Sandbox seam, the E2B backend, memory
+├─ memory/               what Conscious remembers about you and the people in your life
+├─ scheduler/            reminders: one-off and cron, in your timezone; pacing of what it sends unprompted
+├─ sandbox/              each user's computer: the Sandbox seam, the E2B backend, older notes
 ├─ capabilities/         one folder per pack: capability.ts + SKILL.md
-│  ├─ reminders/
+│  ├─ memory/            remember, people and birthdays, forget
+│  ├─ reminders/         reminders, follow-ups and scheduled checks
+│  ├─ quiet/             give the user space: pause what Conscious would send on its own
 │  ├─ background/
 │  ├─ reactions/         an emoji on the user's message, before an answer or instead of one
 │  ├─ computer/          shell and files in the user's sandbox
@@ -255,11 +269,11 @@ src/
 ├─ mcp/                  MCP catalog and client: each server becomes a capability
 ├─ composio/             Composio's tool router: one session per user
 ├─ conversations/        one conversation per user, in memory or in their sandbox
-└─ prompts/              system and background prompts as markdown
+└─ prompts/              system, background and first-meeting prompts as markdown
 skills/                  bundled skills, copied into every computer
 mcp/                     MCP server manifests, one folder per server
 test/                    vitest
-plugins/                 the bundled plugins, one folder per plugin
+plugins/                 bundled plugins, one folder per plugin (none yet)
 mobile/                  the phone app (Expo, React Native)
 ```
 

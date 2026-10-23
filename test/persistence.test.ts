@@ -9,7 +9,7 @@ import { PluginInstalls, PluginRegistry } from "../src/plugins/registry.js";
 import { persistPlugins } from "../src/plugins/state-file.js";
 import { loadOrCreateVaultKey, Vault } from "../src/vault/vault.js";
 
-const [github] = loadPluginFolder(join(import.meta.dirname, "..", "plugins"));
+const [github] = loadPluginFolder(join(import.meta.dirname, "fixtures", "plugins"));
 if (!github) throw new Error("plugins/github is missing");
 
 /** One "process": a registry and installs backed by the file, with the bundled plugins seeded. */

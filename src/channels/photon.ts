@@ -3,6 +3,7 @@ import { attachment } from "@spectrum-ts/core";
 import { whatsappTemplate } from "@spectrum-ts/whatsapp-business";
 import type { IncomingFile, OutgoingFile } from "../media/incoming.js";
 import type { Transcriber } from "../media/transcribe.js";
+import { bubblePauseMs, bubbles } from "./bubbles.js";
 import { type Chat, ChatBook } from "./chats.js";
 
 /** The parts of the orchestrator a channel needs: answer a message, nothing else. */
@@ -45,6 +46,8 @@ export interface PhotonChannelOptions {
     /** Shows "typing…" on WhatsApp for a message id. Spectrum's own indicator only reaches iMessage. */
     showWhatsAppTyping?: (messageId: string) => Promise<void>;
     now?: () => Date;
+    /** Waits between two bubbles of one reply. */
+    pause?: (ms: number) => Promise<void>;
 }
 
 /** Template variables may not hold line breaks, tabs or long runs of spaces, and the whole body is capped. */
@@ -134,7 +137,7 @@ export class PhotonChannel {
         };
         const reply = await space.responding(() => this.orchestrator.send(userId, text, { react, files, sendFile }));
         // Empty when a reaction was the whole answer.
-        if (reply) await space.send(reply);
+        if (reply) await this.sendBubbles(space, reply);
     }
 
     /**
@@ -148,8 +151,20 @@ export class PhotonChannel {
             console.warn(`[photon] ${userId} has never written, so there is no chat to send to; dropped: ${text}`);
             return;
         }
-        await space.send(this.outbound(chat, text));
+        const outbound = this.outbound(chat, text);
+        if (typeof outbound === "string") await this.sendBubbles(space, outbound);
+        else await space.send(outbound);
     };
+
+    /** A reply in short separate messages, the way a friend texts, with a moment between them. */
+    private async sendBubbles(space: Space, text: string): Promise<void> {
+        const pause = this.options.pause ?? ((ms: number) => new Promise<void>((done) => setTimeout(done, ms)));
+        const parts = bubbles(text);
+        for (const [index, part] of parts.entries()) {
+            if (index > 0) await pause(bubblePauseMs(part));
+            await space.send(part);
+        }
+    }
 
     private outbound(chat: Chat, text: string): ContentInput {
         const quiet = this.now().getTime() - chat.lastInboundAt.getTime();

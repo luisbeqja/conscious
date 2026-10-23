@@ -9,7 +9,11 @@ import { reviewPlugin } from "../src/plugins/review.js";
 import { NodeSandbox } from "../src/plugins/sandbox/sandbox.js";
 
 const sandbox = new NodeSandbox({ timeoutMs: 5_000 });
-const bundled = loadPluginFolder(join(import.meta.dirname, "..", "plugins"));
+// The repo's own plugins, and the GitHub plugin kept as a test fixture.
+const bundled = [
+    ...loadPluginFolder(join(import.meta.dirname, "..", "plugins")),
+    ...loadPluginFolder(join(import.meta.dirname, "fixtures", "plugins")),
+];
 const github = bundled.find((pkg) => pkg.manifest.id === "github");
 if (!github) throw new Error("plugins/github is missing");
 

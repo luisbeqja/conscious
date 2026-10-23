@@ -13,6 +13,11 @@ export interface Reminder {
      * and messages the user only if it finds something worth telling.
      */
     check?: string;
+    /**
+     * Conscious set this up on its own, not because the user asked: a birthday nudge, a follow-up.
+     * It waits out quiet hours and counts toward the daily limit (see `Pacing`).
+     */
+    unprompted?: boolean;
     /** A one-off reminder fires once at `at`; a recurring one follows `cron` in the user's timezone. */
     at?: Date;
     cron?: string;
