@@ -112,7 +112,7 @@ To check a setup before you text it, run `pnpm computer:check`. It starts a thro
 
 Skills are instructions for jobs that come up often, in the [AgentSkills](https://agentskills.io) format. They live on the user's computer, in `skills/`: the repo's [`skills/`](skills/) folder is copied in when a computer starts, next to the skills the agent wrote for that user. The system prompt lists the ones that can run there, and the agent reads a skill's `SKILL.md` before it uses it.
 
-22 ship today:
+23 ship today:
 
 | Area | Skills |
 | --- | --- |
@@ -120,10 +120,11 @@ Skills are instructions for jobs that come up often, in the [AgentSkills](https:
 | Watching | `product-price-monitor`, `watchers`, `stocks` |
 | Daily life | `weather`, `maps`, `fitness-nutrition` |
 | Planning | `weekly-review-planning`, `decision-questionnaire`, `one-three-one-rule`, `social-media-content-calendar`, `llm-wiki` |
+| Mail | `email-inbox-triage` (with Gmail or any IMAP mailbox) |
 | Documents | `pdf`, `docx`, `xlsx`, `powerpoint`, `document-to-action-items` |
 | Agent | `skill-creator` |
 
-Without a computer, the skills that need no scripts and no files still work, read straight from the repo and followed with Conscious's own tools (web search, page reading, reminders): `weather`, `product-price-monitor`, `weekly-review-planning`, `decision-questionnaire`, `one-three-one-rule`, `social-media-content-calendar`, `document-to-action-items`. The rest need a computer. A skill can opt out with `"computer": true` in its `conscious.json`.
+Without a computer, the skills that need no scripts and no files still work, read straight from the repo and followed with Conscious's own tools (web search, page reading, reminders): `weather`, `product-price-monitor`, `weekly-review-planning`, `decision-questionnaire`, `one-three-one-rule`, `social-media-content-calendar`, `document-to-action-items`, `email-inbox-triage`. The rest need a computer. A skill can opt out with `"computer": true` in its `conscious.json`.
 
 Skills that fetch from the web show up on a computer only with `CONSCIOUS_SANDBOX_INTERNET=true`. Watching skills can run on a schedule as checks (see Chat with it). To copy another one at a pinned commit:
 
