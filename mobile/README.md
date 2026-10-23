@@ -34,3 +34,21 @@ Everything the app uses ships in Expo Go, so no Xcode or Android Studio is neede
 - `src/protocol.ts` mirrors the server's message types in `src/channels/app.ts`. Change both together.
 - `src/chat/Markdown.tsx` reads the Markdown the agent writes, including WhatsApp-style `*bold*`.
 - The address and code are kept in the phone's secure storage.
+
+## The Dot
+
+Conscious's mascot is one dot. It has no face; its state shows in how it moves and in the soft trail it leaves, which fades as soon as the motion ends.
+
+| State | When | Motion |
+| --- | --- | --- |
+| idle | Nothing going on | Drifts a little, then rests |
+| thinking | Conscious is working | A calm, compact orbit |
+| confirmed | An answer just arrived | One check-mark stroke, then rest |
+| error | A failure, or the connection is down | Starts, stops short, steps back |
+| awaiting | The last answer asked you something | Still, with a small loop now and then |
+
+- `src/dot/motion.ts` is the motion engine. Each state is a moving target the dot follows on a spring, so a new state starts from wherever the dot is, never from a reset.
+- `src/dot/Dot.tsx` draws the dot and its trail from the dot's recent path, on the UI thread. The trail is stacked faint layers, so it is strongest at the dot and fades along the path.
+- `src/dot/useDotMood.ts` picks the state from the real chat state. It confirms only when an answer actually arrived.
+- With Reduce Motion on, the dot stays still and a soft ring fades instead.
+- Hold the dot in the chat header (or open `conscious:///dot`) to see every state at every size.
