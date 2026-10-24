@@ -209,3 +209,14 @@ describe("composioReaches", () => {
         expect(composioReaches("all", "spotify")).toBe(true);
     });
 });
+
+describe("composio summary", () => {
+    it("names the apps it reaches, so a calendar question leads here", () => {
+        const client = new ComposioClient({ apiKey: "ak_test" });
+
+        expect(createComposioCapability(client).summary).toContain("Google Calendar, Gmail");
+        const fitness = createComposioCapability(client, undefined, ["strava"]).summary;
+        expect(fitness).toContain("(Strava…)");
+        expect(fitness).not.toContain("Google");
+    });
+});

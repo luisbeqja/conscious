@@ -22,6 +22,8 @@ export interface PluginOptions {
     signInConnectors?: readonly Connector[];
     /** Accounts this install could offer once its owner sets them up, such as Google without a client. */
     unconfigured?: readonly UnconfiguredConnector[];
+    /** Accounts that connect another way on this install (Google through Composio), with what to do instead. */
+    elsewhere?: Readonly<Record<string, string>>;
 }
 
 /** `extra` are capabilities found at startup, such as the tools of connected MCP servers. */
@@ -43,6 +45,10 @@ export const createRegistry = (
                     plugins.vault.publicUrl,
                     (userId) => [...(plugins.signInConnectors ?? []), ...userConnectors(plugins.plugins, userId)],
                     plugins.unconfigured,
+                    {
+                        offered: (plugins.signInConnectors ?? []).map((connector) => connector.id),
+                        elsewhere: plugins.elsewhere,
+                    },
                 ),
             )
             .register(createPluginsCapability(plugins.plugins));

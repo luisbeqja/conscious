@@ -164,6 +164,19 @@ export const createConscious = (config: Config, notify: Notify, extra: readonly 
                       },
                   ]),
         ],
+        elsewhere: {
+            ...(!google && throughComposio("googlecalendar", "gmail", "googledrive", "googletasks")
+                ? {
+                      google: "On this install Google (Calendar, Gmail, Drive, Tasks) connects through Composio, not the Vault: call composio_connect_app with googlecalendar, gmail, googledrive or googletasks, and send that link.",
+                  }
+                : {}),
+            ...(!spotify && throughComposio("spotify")
+                ? {
+                      spotify:
+                          "On this install Spotify connects through Composio, not the Vault: call composio_connect_app with spotify, and send that link.",
+                  }
+                : {}),
+        },
         signInConnectors: [
             MAIL_CONNECTOR,
             ...(google ? [GOOGLE_CONNECTOR] : []),

@@ -16,6 +16,19 @@ export interface UnconfiguredConnector {
     setup: string;
 }
 
+/** How to use a sign-in account, told to the agent only on installs that offer it. */
+const SIGN_IN_NOTES: Readonly<Record<string, string>> = {
+    google: '- Google (Calendar, Gmail, Drive, Contacts, Tasks) is one connection, "google": the link opens a Sign in with Google page. Offer it when the user asks about any of these and the google tools are missing.',
+    spotify: '- Spotify is "spotify", a Sign in with Spotify page.',
+};
+
+export interface VaultOptions {
+    /** The sign-in accounts this install offers, by connector id, such as "google". */
+    offered?: readonly string[];
+    /** Accounts that connect another way on this install, with what the agent should do instead. */
+    elsewhere?: Readonly<Record<string, string>>;
+}
+
 const setupGuidance = (missing: UnconfiguredConnector) =>
     `${missing.name} is not set up on this install yet, so no link can be made. Tell the user plainly that this is a one-time step by whoever runs Conscious, on the machine it runs on, not something to do in the chat: ${missing.setup} Do not offer other accounts instead.`;
 
@@ -24,6 +37,7 @@ export const createVaultCapability = (
     publicUrl: string,
     connectors: (userId: string) => Connector[] = () => [...CONNECTORS.values()],
     unconfigured: readonly UnconfiguredConnector[] = [],
+    options: VaultOptions = {},
 ): Capability => {
     const request = defineTool({
         name: "vault_request_connection",
@@ -45,6 +59,13 @@ export const createVaultCapability = (
                 return {
                     data: { error: `${missing.name} is not set up on this install` },
                     guidance: setupGuidance(missing),
+                };
+            }
+            const elsewhere = options.elsewhere?.[params.connector];
+            if (!connector && elsewhere) {
+                return {
+                    data: { error: `"${params.connector}" does not connect through the Vault on this install` },
+                    guidance: elsewhere,
                 };
             }
             if (!connector) {
@@ -105,7 +126,10 @@ export const createVaultCapability = (
     return {
         id: "vault",
         summary: "The Vault: connect the user's accounts (GitHub, …) through a private page, and disconnect them.",
-        skill: promptFile(import.meta.url, "SKILL.md"),
+        skill: [
+            promptFile(import.meta.url, "SKILL.md"),
+            ...(options.offered ?? []).flatMap((id) => SIGN_IN_NOTES[id] ?? []),
+        ].join("\n"),
         tools: [request, list, remove],
     };
 };

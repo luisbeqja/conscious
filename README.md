@@ -198,7 +198,7 @@ Notion and Dropbox work the same way, but are off unless you name them, since mo
 
 ## More everyday apps through Composio
 
-For everyday apps Conscious has no tools of its own for (Google Photos, Fitbit, Oura, Splitwise, YouTube, Pinterest and more), it can use [Composio](https://composio.dev). Set `COMPOSIO_API_KEY` in `.env` (from the Composio dashboard) and restart. Ask "how did I sleep this week?" and Conscious finds the right tool. If the app is not connected yet, it sends a link to Composio's sign-in page. There is no app to register.
+For everyday apps Conscious has no tools of its own for (Google Photos, Fitbit, Oura, Splitwise, YouTube, Pinterest and more), it can use [Composio](https://composio.dev). Set `COMPOSIO_API_KEY` in `.env` (from the Composio dashboard) and restart. Ask "how did I sleep this week?" and Conscious finds the right tool. On an install without its own Google or Spotify client, those connect through Composio too, and Conscious never mentions the setup it skipped. If the app is not connected yet, it sends a link to Composio's sign-in page. There is no app to register.
 
 Conscious is for your life, not your job, so work apps (Linear, Slack, Jira, HubSpot…) are not offered. The list of allowed apps is `LIFE_APPS` in `src/capabilities/composio/capability.ts`; `COMPOSIO_APPS` replaces it with your own comma-separated list, and `COMPOSIO_APPS=all` lifts it.
 

@@ -44,6 +44,21 @@ export const LIFE_APPS: readonly string[] = [
     "yelp",
 ];
 
+/** The apps named in the one-line summary, so "calendar" or "Gmail" leads the agent here. */
+const SUMMARY_APPS: Readonly<Record<string, string>> = {
+    googlecalendar: "Google Calendar",
+    gmail: "Gmail",
+    googledrive: "Google Drive",
+    googlephotos: "Google Photos",
+    googletasks: "Google Tasks",
+    spotify: "Spotify",
+    strava: "Strava",
+    fitbit: "Fitbit",
+    oura: "Oura",
+    splitwise: "Splitwise",
+    youtube: "YouTube",
+};
+
 /** Whether this install's Composio may reach any of these apps: its own list, the default one, or all. */
 export const composioReaches = (apps: readonly string[] | "all" | undefined, ...wanted: string[]): boolean =>
     apps === "all" || wanted.some((app) => (apps ?? LIFE_APPS).includes(app));
@@ -69,6 +84,7 @@ export const createComposioCapability = (
     apps: readonly string[] | "all" = LIFE_APPS,
 ): Capability => {
     const appAllowed = (app: string): boolean => apps === "all" || apps.includes(app.trim().toLowerCase());
+    const named = Object.entries(SUMMARY_APPS).flatMap(([app, name]) => (appAllowed(app) ? [name] : []));
     // A tool's slug starts with its app's: GOOGLECALENDAR_FIND_EVENT, GOOGLE_MAPS_TEXT_SEARCH.
     const toolAllowed = (tool: string): boolean =>
         apps === "all" || apps.some((app) => tool.toLowerCase().startsWith(`${app}_`));
@@ -113,8 +129,7 @@ export const createComposioCapability = (
 
     return {
         id: "composio",
-        summary:
-            "More of the user's everyday apps through Composio (Google Photos, Fitbit, Oura, Splitwise, YouTube…): find a tool, connect the app, read and draft.",
+        summary: `The user's everyday apps through Composio${named.length ? ` (${named.join(", ")}…)` : ""}: find a tool, connect the app, read and draft.`,
         skill: promptFile(import.meta.url, "SKILL.md"),
         tools: [
             defineTool({

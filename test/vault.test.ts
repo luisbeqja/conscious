@@ -71,6 +71,27 @@ describe("accounts not set up on this install", () => {
     });
 });
 
+describe("accounts that connect another way", () => {
+    const context = { userId: "me", timezone: "Europe/Rome", scheduler: undefined as never };
+
+    it("names the Google sign-in only on installs that offer it", () => {
+        expect(createVaultCapability(new Vault(), "https://c.example").skill).not.toContain("Sign in with Google");
+        expect(
+            createVaultCapability(new Vault(), "https://c.example", () => [], [], { offered: ["google"] }).skill,
+        ).toContain("Sign in with Google");
+    });
+
+    it("sends the agent to Composio when Google connects there", async () => {
+        const capability = createVaultCapability(new Vault(), "https://c.example", () => [github], [], {
+            elsewhere: { google: "Call composio_connect_app with googlecalendar." },
+        });
+        const asked = await capability.tools[0]?.execute({ connector: "google" }, context);
+
+        expect(JSON.stringify(asked?.data)).not.toContain("/vault/");
+        expect(asked?.guidance).toContain("composio_connect_app");
+    });
+});
+
 describe("Vault page", () => {
     let close = () => {};
     afterEach(() => close());
