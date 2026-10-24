@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { composioEffect, createComposioCapability, LIFE_APPS } from "../src/capabilities/composio/capability.js";
+import {
+    composioEffect,
+    composioReaches,
+    createComposioCapability,
+    LIFE_APPS,
+} from "../src/capabilities/composio/capability.js";
 import type { ToolContext } from "../src/capabilities/types.js";
 import { ComposioClient, composioUserId } from "../src/composio/client.js";
 import { Scheduler } from "../src/scheduler/scheduler.js";
@@ -193,5 +198,14 @@ describe("Composio", () => {
         const run = await tool("composio_read_data").execute({ tool: "LINEAR_LIST_LINEAR_ISSUES" }, context);
         expect(run.guidance).toMatch(/not their job/);
         expect(calls.some((call) => call.url.endsWith("/link") || call.url.endsWith("/execute"))).toBe(false);
+    });
+});
+
+describe("composioReaches", () => {
+    it("reaches Google through the default apps, a chosen list, or all", () => {
+        expect(composioReaches(undefined, "googlecalendar", "gmail")).toBe(true);
+        expect(composioReaches(["strava"], "googlecalendar", "gmail")).toBe(false);
+        expect(composioReaches(["gmail"], "googlecalendar", "gmail")).toBe(true);
+        expect(composioReaches("all", "spotify")).toBe(true);
     });
 });

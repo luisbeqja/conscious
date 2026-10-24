@@ -44,6 +44,10 @@ export const LIFE_APPS: readonly string[] = [
     "yelp",
 ];
 
+/** Whether this install's Composio may reach any of these apps: its own list, the default one, or all. */
+export const composioReaches = (apps: readonly string[] | "all" | undefined, ...wanted: string[]): boolean =>
+    apps === "all" || wanted.some((app) => (apps ?? LIFE_APPS).includes(app));
+
 const NOT_FOR_LIFE =
     "Conscious is for the user's life, not their job, so this install does not connect that app. Say so kindly, and offer what you can do instead.";
 

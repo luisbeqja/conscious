@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { createServer } from "node:http";
 import { join } from "node:path";
 import { BackgroundAgents, type Notify } from "./agents/background-agents.js";
-import { createComposioCapability } from "./capabilities/composio/capability.js";
+import { composioReaches, createComposioCapability } from "./capabilities/composio/capability.js";
 import { createGoogleCapability } from "./capabilities/google/capability.js";
 import { createRegistry } from "./capabilities/index.js";
 import { createItalyCapability } from "./capabilities/italy/capability.js";
@@ -106,6 +106,8 @@ export const createConscious = (config: Config, notify: Notify, extra: readonly 
     };
     const web = createWebCapability({ search: createSearchProvider(config.search) });
     const italy = openItalyIndex(config);
+    const throughComposio = (...apps: string[]) =>
+        config.composio !== undefined && composioReaches(config.composio.apps, ...apps);
     const callback = (connectorId: string) =>
         `${config.vault.publicUrl.replace(/\/$/, "")}${signInCallbackPath(connectorId)}`;
     const google = config.google ? new GoogleOAuth(config.google, callback(GOOGLE_CONNECTOR.id), vault) : undefined;
@@ -141,8 +143,9 @@ export const createConscious = (config: Config, notify: Notify, extra: readonly 
     const registry = createRegistry(sandboxes, [...builtIn, ...extra], {
         plugins,
         vault: { vault, publicUrl: config.vault.publicUrl },
+        // An app Composio reaches is not missing: the agent signs the user in through Composio instead.
         unconfigured: [
-            ...(google
+            ...(google || throughComposio("googlecalendar", "gmail", "googledrive", "googletasks")
                 ? []
                 : [
                       {
@@ -151,7 +154,7 @@ export const createConscious = (config: Config, notify: Notify, extra: readonly 
                           setup: `create an OAuth client of type Web application in Google Cloud with the redirect URI ${callback(GOOGLE_CONNECTOR.id)}, set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in .env, and restart Conscious. The README section "Google" has the steps.`,
                       },
                   ]),
-            ...(spotify
+            ...(spotify || throughComposio("spotify")
                 ? []
                 : [
                       {
