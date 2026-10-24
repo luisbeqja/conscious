@@ -33,6 +33,11 @@ export interface Match {
 
 export interface SearchHit extends DocumentInfo {
     matches: Match[];
+    /**
+     * How much of the query the page's best passage, headings and title contain, from 0 to 1. Rare
+     * words weigh more, so "TARI" or "monopattino" decides it rather than "contributo".
+     */
+    coverage: number;
 }
 
 export interface SearchOptions {
@@ -84,6 +89,8 @@ const addressKey = (url: string): string =>
 export class KnowledgeIndex {
     private vectors?: { ids: Int32Array; values: Float32Array; dims: number };
     private readonly position: Map<string, number>;
+    /** How many passages contain a word, by word, as searches ask. */
+    private readonly frequencies = new Map<string, number>();
     private readonly addresses: Map<string, number>;
     /** Each document's authority, folded like a query, for the place filter. */
     private readonly authorities: string[];
@@ -187,8 +194,21 @@ export class KnowledgeIndex {
             .sort((a, b) => b.score - a.score)
             .slice(0, options.limit ?? 5);
         const text = this.db.prepare("SELECT text FROM chunks WHERE id = ?");
+        const weights = words.map((word) => Math.log((this.passages.size + 1) / (this.frequency(word) + 1)));
+        const total = weights.reduce((sum, weight) => sum + weight, 0);
+        const coverage = (info: DocumentInfo, passage: Passage, body: string): number => {
+            if (!total) return 1;
+            const found = new Set(terms(`${info.title} ${info.authority} ${passage.heading} ${plain(body)}`));
+            return words.reduce((sum, word, index) => sum + (found.has(word) ? (weights[index] ?? 0) : 0), 0) / total;
+        };
         return ranked.map(({ doc, hits }) => ({
             ...(this.docs[doc] as DocumentInfo),
+            coverage: Math.max(
+                ...hits.slice(0, 2).map((hit) => {
+                    const row = text.get(hit.id) as { text: string };
+                    return coverage(this.docs[doc] as DocumentInfo, this.passages.get(hit.id) as Passage, row.text);
+                }),
+            ),
             // Pages that repeat a block (tabs, print versions) would show it twice.
             matches: hits
                 .slice(0, 3)
@@ -213,6 +233,19 @@ export class KnowledgeIndex {
 
     close(): void {
         this.db.close();
+    }
+
+    /** In how many passages a folded word appears. */
+    private frequency(word: string): number {
+        let count = this.frequencies.get(word);
+        if (count === undefined) {
+            const row = this.db
+                .prepare("SELECT count(*) AS n FROM chunks_fts WHERE chunks_fts MATCH ?")
+                .get(`"${word}"`);
+            count = (row as { n: number }).n;
+            this.frequencies.set(word, count);
+        }
+        return count;
     }
 
     /** Passage ids by BM25 over the page title, the headings and the passage, in that order of weight. */

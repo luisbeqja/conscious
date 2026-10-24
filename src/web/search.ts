@@ -109,30 +109,53 @@ export const parseDuckDuckGo = (html: string, count: number): SearchResult[] => 
     return results;
 };
 
+/** Parses DuckDuckGo Lite's results page: a table, one link and one snippet per result. */
+export const parseDuckDuckGoLite = (html: string, count: number): SearchResult[] => {
+    const results: SearchResult[] = [];
+    const links =
+        /<a[^>]+href="([^"]+)"[^>]*class=['"]result-link['"][^>]*>([\s\S]*?)<\/a>([\s\S]*?)(?=<a[^>]+class=['"]result-link['"]|$)/g;
+    for (const [, href, title, rest] of html.matchAll(links)) {
+        if (!href || !title) continue;
+        const url = ddgTarget(href.replace(/&amp;/g, "&"));
+        if (url.includes("duckduckgo.com/y.js")) continue;
+        const snippet = /class=['"]result-snippet['"][^>]*>([\s\S]*?)<\/td>/.exec(rest ?? "")?.[1] ?? "";
+        results.push({ title: stripTags(title), url, snippet: stripTags(snippet) });
+        if (results.length >= count) break;
+    }
+    return results;
+};
+
+/** DuckDuckGo's answer to a search it will not serve: HTTP 202 with a challenge instead of results. */
+const limited = (response: Response, html: string): boolean =>
+    response.status === 202 || (/anomaly-modal|captcha/i.test(html) && !/result__a|result-link/.test(html));
+
 /**
- * DuckDuckGo needs no key, so it is the default. It throttles heavy use, so an install that
- * searches a lot should set a Brave key or its own SearXNG.
+ * DuckDuckGo needs no key, so it is the default. It turns away POSTs from cloud servers such as
+ * Railway's but answers GETs, so searches are GETs; when the HTML page is limited anyway, the
+ * Lite one often is not. An install that searches a lot should still set a Brave key or its own SearXNG.
  */
 export const duckDuckGoSearch = (doFetch: typeof fetch = fetch): SearchProvider => ({
     name: "duckduckgo",
     search: async (query, options) => {
-        const form = new URLSearchParams({ q: query });
-        if (options.country) form.set("kl", `${options.country}-${options.language ?? options.country}`);
-        if (options.freshness) form.set("df", DDG_FRESHNESS[options.freshness]);
-        const response = await doFetch("https://html.duckduckgo.com/html/", {
-            method: "POST",
-            headers: { "content-type": "application/x-www-form-urlencoded", "user-agent": USER_AGENT },
-            body: form.toString(),
-            signal: timeout(options.signal),
-        });
-        if (!response.ok) return failed("DuckDuckGo", response);
-        const html = await response.text();
-        if (/anomaly-modal|captcha/i.test(html) && !html.includes("result__a")) {
-            throw new Error(
-                "DuckDuckGo is limiting searches from this address. Set BRAVE_API_KEY or CONSCIOUS_SEARXNG_URL.",
-            );
+        const params = new URLSearchParams({ q: query });
+        if (options.country) params.set("kl", `${options.country}-${options.language ?? options.country}`);
+        if (options.freshness) params.set("df", DDG_FRESHNESS[options.freshness]);
+        const pages = [
+            { url: "https://html.duckduckgo.com/html/", parse: parseDuckDuckGo },
+            { url: "https://lite.duckduckgo.com/lite/", parse: parseDuckDuckGoLite },
+        ];
+        for (const page of pages) {
+            const response = await doFetch(`${page.url}?${params}`, {
+                headers: { "user-agent": USER_AGENT },
+                signal: timeout(options.signal),
+            });
+            if (!response.ok) return failed("DuckDuckGo", response);
+            const html = await response.text();
+            if (!limited(response, html)) return page.parse(html, options.count);
         }
-        return parseDuckDuckGo(html, options.count);
+        throw new Error(
+            "DuckDuckGo is limiting searches from this address. Set BRAVE_API_KEY or CONSCIOUS_SEARXNG_URL.",
+        );
     },
 });
 

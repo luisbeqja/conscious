@@ -1,0 +1,16 @@
+[
+    {
+        "authority": "Comune di Milano",
+        "start": ["https://www.comune.milano.it/servizi", "https://www.comune.milano.it/"],
+        "within": "https://www.comune.milano.it/servizi/",
+        "depth": 2,
+        "max": 400
+    },
+    {
+        "authority": "Comune di Torino",
+        "start": "https://www.comune.torino.it/servizi",
+        "within": "https://www.comune.torino.it/servizi/",
+        "depth": 2,
+        "max": 400
+    }
+]

@@ -4,7 +4,13 @@ import { createWebCapability } from "../src/capabilities/web/capability.js";
 import { Scheduler } from "../src/scheduler/scheduler.js";
 import { htmlToText } from "../src/web/html-text.js";
 import { isPrivateAddress, urlProblem } from "../src/web/safe-fetch.js";
-import { braveSearch, parseDuckDuckGo, type SearchProvider } from "../src/web/search.js";
+import {
+    braveSearch,
+    duckDuckGoSearch,
+    parseDuckDuckGo,
+    parseDuckDuckGoLite,
+    type SearchProvider,
+} from "../src/web/search.js";
 
 const context: ToolContext = { userId: "u1", timezone: "Europe/Rome", scheduler: new Scheduler(async () => {}) };
 const publicDns = async () => ["93.184.216.34"];
@@ -31,6 +37,42 @@ describe("web search", () => {
             },
             { title: "Two", url: "https://example.org/two", snippet: "" },
         ]);
+    });
+
+    it("parses DuckDuckGo Lite's results table and skips ads", () => {
+        const html = `
+<tr><td><a rel="nofollow" href="https://duckduckgo.com/y.js?ad_domain=x" class='result-link'>Ad</a></td></tr>
+<tr><td><a rel="nofollow" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fwww.comune.milano.it%2Fservizi%2Ftributi%2Ftari%2Dpagamento&amp;rut=1" class='result-link'>Tari: pagamento</a></td></tr>
+<tr><td>&nbsp;</td><td class='result-snippet'>Come pagare la <b>Tari</b> a Milano.</td></tr>
+<tr><td><span class='link-text'>www.comune.milano.it/servizi/tributi/tari-pag</span></td></tr>`;
+        expect(parseDuckDuckGoLite(html, 5)).toEqual([
+            {
+                title: "Tari: pagamento",
+                url: "https://www.comune.milano.it/servizi/tributi/tari-pagamento",
+                snippet: "Come pagare la Tari a Milano.",
+            },
+        ]);
+    });
+
+    it("searches DuckDuckGo with a GET, which it answers from cloud servers, and falls back to Lite", async () => {
+        const asked: { url: string; method?: string }[] = [];
+        const lite = `<a href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fa.it" class='result-link'>A</a><td class='result-snippet'>a</td>`;
+        const fakeFetch = (async (input: string, init?: RequestInit) => {
+            asked.push({ url: input, method: init?.method });
+            return input.startsWith("https://html.")
+                ? new Response('<div class="anomaly-modal"></div>', { status: 202 })
+                : new Response(lite);
+        }) as unknown as typeof fetch;
+        const results = await duckDuckGoSearch(fakeFetch).search("tari milano", {
+            count: 3,
+            country: "it",
+            language: "it",
+        });
+
+        expect(results).toEqual([{ title: "A", url: "https://a.it", snippet: "a" }]);
+        expect(asked.map((request) => request.method ?? "GET")).toEqual(["GET", "GET"]);
+        expect(asked[0]?.url).toBe("https://html.duckduckgo.com/html/?q=tari+milano&kl=it-it");
+        expect(asked[1]?.url).toBe("https://lite.duckduckgo.com/lite/?q=tari+milano&kl=it-it");
     });
 
     it("asks Brave with the key and maps its results", async () => {

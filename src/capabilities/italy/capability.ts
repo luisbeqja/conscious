@@ -46,6 +46,8 @@ export const createItalyCapability = (index: KnowledgeIndex): Capability => {
                 scope: params.scope,
                 signal: context.signal,
             });
+            // Vectors always return the closest pages, even when nothing is close: few of the words means a miss.
+            const loose = hits.length > 0 && Math.max(...hits.map((hit) => hit.coverage)) < 0.5;
             return {
                 data: {
                     results: hits.map((hit) => ({
@@ -60,9 +62,11 @@ export const createItalyCapability = (index: KnowledgeIndex): Capability => {
                         matches: hit.matches,
                     })),
                 },
-                guidance: hits.length
-                    ? "These point to pages; they are not the answer. Read the best one or two with italy_read_page (a match's offset starts you there). For amounts, deadlines and yearly bonuses, check the source address with web_read_page when the copy is more than a few weeks old."
-                    : `Nothing matched${params.place ? ` for "${params.place}"` : ""}. Try other words, drop the place, or search the web.`,
+                guidance: !hits.length
+                    ? `Nothing matched${params.place ? ` for "${params.place}"` : ""}. Try other words, drop the place, or search the web.`
+                    : loose
+                      ? `None of these pages has most of the words you searched for${params.place ? ` (for "${params.place}")` : ""}, so they may not be about it. Skim the titles: if none fits, these pages do not cover it, so search the web (ideally the office's own site) instead of searching here again.`
+                      : "These point to pages; they are not the answer. Read the best one or two with italy_read_page (a match's offset starts you there). For amounts, deadlines and yearly bonuses, check the source address with web_read_page when the copy is more than a few weeks old.",
             };
         },
     });

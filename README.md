@@ -212,7 +212,7 @@ After signing in, the user lands on a Conscious page, not Composio's. To make th
 
 ## Italian official pages
 
-Ask "how do I renew my ID card?" or "can I get the bonus asilo nido?" and Conscious searches 1,892 official pages of Italian public offices: ministries, INPS, Agenzia delle Entrate, regions, comuni and EU portals, as listed on [italiaaperta.it/fonti](https://www.italiaaperta.it/fonti). A search returns pages, not answers. Conscious reads the best one or two whole, searches again when they fall short, and checks the live page when an amount or a deadline may have changed since the copy was saved. The answer ends with the source address.
+Ask "how do I renew my ID card?" or "can I get the bonus asilo nido?" and Conscious searches about 2,250 official pages of Italian public offices: ministries, INPS, Agenzia delle Entrate, regions, comuni and EU portals, as listed on [italiaaperta.it/fonti](https://www.italiaaperta.it/fonti), plus the service pages of big comuni the list misses (Milano and Torino, in [`scripts/italy-extra-sources.json`](scripts/italy-extra-sources.json)). A search returns pages, not answers. Conscious reads the best one or two whole, searches again when they fall short, and checks the live page when an amount or a deadline may have changed since the copy was saved. The answer ends with the source address.
 
 The pages and their index stay on your install. Once, and again whenever you want fresher copies:
 

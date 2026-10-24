@@ -294,6 +294,23 @@ describe("italy capability", () => {
         expect(read.guidance).toContain("https://example.gov.it/naspi");
     });
 
+    it("says when the pages found are not about the question, so the agent goes to the web", async () => {
+        const index = await built(fakeEmbedder());
+        const italy = createItalyCapability(index);
+
+        expect((await index.search("modulo ministeriale residenza", { authority: "Bergamo" }))[0]?.coverage).toBe(1);
+        const [unrelated] = await index.search("TARI scadenze", { authority: "Bergamo" });
+        expect(unrelated?.coverage).toBe(0);
+
+        const found = await tool(italy, "italy_search_pages").execute(
+            { query: "TARI scadenze", place: "Bergamo" },
+            context,
+        );
+        expect((found.data as { results: unknown[] }).results).toHaveLength(1);
+        expect(found.guidance).toContain("may not be about it");
+        expect(found.guidance).toContain("search the web");
+    });
+
     it("reads a long page in parts and says when an id is unknown", async () => {
         const long = page({ id: "lungo", title: "Pagina lunga", authority: "INPS", text: "parola ".repeat(400) });
         const italy = createItalyCapability(await built(fakeEmbedder(), [long]));

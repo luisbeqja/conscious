@@ -10,7 +10,9 @@
 # ///
 """Download every official page listed on https://www.italiaaperta.it/fonti
 (ministries, INPS, Agenzia delle Entrate, regions, comuni, EU portals) and turn
-each one into a Markdown file an agent can read.
+each one into a Markdown file an agent can read. Comuni the list misses are added
+from scripts/italy-extra-sources.json: their service pages, found by following
+the links of each comune's services page.
 
     uv run scripts/download-italia-fonti.py --out .conscious/italy/download
 
@@ -46,13 +48,19 @@ from collections import Counter, defaultdict
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import urljoin, urlsplit, urlunsplit
 from urllib.robotparser import RobotFileParser
 
 import lxml.html
 
 FONTI_URL = "https://www.italiaaperta.it/fonti"
 OUT = Path(".conscious/italy/download")
+EXTRA_SOURCES = Path(__file__).with_name("italy-extra-sources.json")
+# Link words that say nothing about the page they lead to.
+VAGUE_LINKS = {
+    "vai al contenuto", "scopri di più", "scopri", "leggi", "leggi tutto", "vai", "dettagli", "approfondisci",
+}
+PAGE_QUERY = re.compile(r"^(page|pagina|p)=\d+$")
 USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36"
@@ -143,6 +151,10 @@ def parse_fonti(html: bytes) -> list[Link]:
     return links
 
 
+def page_id(url: str) -> str:
+    return hashlib.sha1(url.encode()).hexdigest()[:12]
+
+
 def plan_pages(links: list[Link]) -> list[Page]:
     by_url: dict[str, list[Link]] = {}
     for link in links:
@@ -150,13 +162,103 @@ def plan_pages(links: list[Link]) -> list[Page]:
     pages, taken = [], set()
     for url, group in by_url.items():
         first = group[0]
-        page_id = hashlib.sha1(url.encode()).hexdigest()[:12]
+        page_id_ = page_id(url)
         path = f"pages/{first.scope}/{slug(first.authority)}/{slug(first.title)}.md"
         if path in taken:
-            path = path[: -len(".md")] + f"-{page_id[:6]}.md"
+            path = path[: -len(".md")] + f"-{page_id_[:6]}.md"
         taken.add(path)
-        pages.append(Page(url=url, links=group, id=page_id, path=path))
+        pages.append(Page(url=url, links=group, id=page_id_, path=path))
     return pages
+
+
+def in_section(url: str, within: str) -> str | None:
+    """The address, without fragment or a query that does more than turn a page, when it lies under `within`."""
+    parts = urlsplit(url)
+    if parts.scheme not in ("http", "https"):
+        return None
+    query = parts.query if PAGE_QUERY.match(parts.query) else ""
+    address = urlunsplit((parts.scheme, parts.netloc.lower(), parts.path.rstrip("/"), query, ""))
+    base = within.rstrip("/")
+    return address if address == base or address.startswith((f"{base}/", f"{base}?")) else None
+
+
+def page_links(out: Path, page: Page, within: str) -> list[tuple[str, str]]:
+    """The links of a downloaded page that stay under `within`, with their words."""
+    if not page.raw.endswith(".html"):
+        return []
+    data = (out / page.raw).read_bytes()
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        text = data.decode("cp1252", errors="replace")
+    doc = lxml.html.fromstring(text)
+    doc.make_links_absolute(page.final_url or page.url, handle_failures="discard")
+    found = []
+    for a in doc.iter("a"):
+        address = in_section(a.get("href") or "", within)
+        if address:
+            found.append((address, clean(a.text_content())))
+    return found
+
+
+def starts(source: dict) -> list[str]:
+    """Where a crawl begins: one page or several, such as the services page and the home page."""
+    return source["start"] if isinstance(source["start"], list) else [source["start"]]
+
+
+async def crawl(source: dict, fetcher: Fetcher, out: Path, refresh: bool) -> dict[str, str]:
+    """Pages under `within`, up to `depth` clicks from the start pages, with the words of the first useful link."""
+    limit = source.get("max", 300)
+    frontier = list(dict.fromkeys(in_section(url, source["within"]) or url for url in starts(source)))
+    # Only pages under `within` are kept; a start page outside it (the home page) only gives links.
+    found = {url: "" for url in frontier if in_section(url, source["within"])}
+    for _ in range(source.get("depth", 2)):
+        pages = [Page(url=url, links=[], id=page_id(url), path="") for url in frontier]
+        await asyncio.gather(*(fetch(page, fetcher, out, refresh) for page in pages))
+        frontier = []
+        for page in pages:
+            for address, words in page_links(out, page, source["within"]):
+                if address not in found and len(found) < limit:
+                    found[address] = ""
+                    frontier.append(address)
+                if address in found and not found[address] and len(words) > 3 and words.lower() not in VAGUE_LINKS:
+                    found[address] = words
+    return found
+
+
+def title_from_address(address: str) -> str:
+    words = urlsplit(address).path.rstrip("/").rsplit("/", 1)[-1].replace("-", " ").replace("_", " ")
+    return words[:1].upper() + words[1:]
+
+
+async def extra_links(fetcher: Fetcher, out: Path, refresh: bool, known: list[Link]) -> list[Link]:
+    """Links to the service pages of the comuni in scripts/italy-extra-sources.json that the list misses."""
+    if not EXTRA_SOURCES.exists():
+        return []
+    labels = {link.scope: (link.scope_label, link.scope_note) for link in reversed(known)}
+    listed = {link.url for link in known}
+    links = []
+    for source in json.loads(EXTRA_SOURCES.read_text()):
+        scope = source.get("scope", "comunale")
+        label, note = labels.get(scope, (scope.capitalize(), ""))
+        found = await crawl(source, fetcher, out, refresh)
+        for address, words in found.items():
+            if address in listed:
+                continue
+            listed.add(address)
+            links.append(
+                Link(
+                    scope=scope,
+                    scope_label=label,
+                    scope_note=note,
+                    authority=source["authority"],
+                    title=words or title_from_address(address),
+                    url=address,
+                    kind="Portale" if address in {in_section(url, source["within"]) for url in starts(source)} else "",
+                )
+            )
+        print(f"  {source['authority']}: {len(found)} pages from {', '.join(starts(source))}")
+    return links
 
 
 class CurlError(Exception):
@@ -412,12 +514,19 @@ async def download(page: Page, fetcher: Fetcher, out: Path) -> bool:
     return True
 
 
-async def process(page: Page, fetcher: Fetcher, pool: ProcessPoolExecutor, out: Path, refresh: bool, today: str):
+async def fetch(page: Page, fetcher: Fetcher, out: Path, refresh: bool) -> bool:
+    """The page's file in raw/: downloaded, unless an earlier run already saved it."""
     sidecar = out / "raw" / f"{page.id}.json"
     saved = json.loads(sidecar.read_text()) if sidecar.exists() and not refresh else None
     if saved and (out / saved["raw"]).exists():
         page.final_url, page.content_type, page.raw = saved["final_url"], saved["content_type"], saved["raw"]
-    elif not await download(page, fetcher, out):
+        return True
+    return await download(page, fetcher, out)
+
+
+async def process(page: Page, fetcher: Fetcher, pool: ProcessPoolExecutor, out: Path, refresh: bool, today: str):
+    sidecar = out / "raw" / f"{page.id}.json"
+    if not await fetch(page, fetcher, out, refresh):
         return
     try:
         result = await asyncio.get_running_loop().run_in_executor(
@@ -478,8 +587,9 @@ def write_reports(out: Path, links: list[Link], pages: list[Page], today: str) -
     lines = [
         "# Italian official sources",
         "",
-        f"{len(pages)} official pages from {len(authorities)} public authorities, as listed on {FONTI_URL},",
-        f"downloaded on {today}. {stored} are saved as Markdown under `pages/`, each with its source URL",
+        f"{len(pages)} official pages from {len(authorities)} public authorities, as listed on {FONTI_URL}",
+        f"plus the service pages of comuni it misses ({EXTRA_SOURCES.name}), downloaded on {today}.",
+        f"{stored} are saved as Markdown under `pages/`, each with its source URL",
         "at the top. *Thin* pages have little text, usually because the site builds them with JavaScript;",
         "the source URL is the place to check. Pages *not downloaded* are listed with the reason in `failures.csv`.",
         "",
@@ -523,6 +633,9 @@ async def run(args: argparse.Namespace) -> int:
     if not links:
         print(f"No links found on {FONTI_URL} (HTTP {status}): the page probably changed.", file=sys.stderr)
         return 1
+    fetcher = Fetcher(out, per_host=args.per_host, total=args.concurrency, delay=args.delay)
+    print(f"Adding the comuni in {EXTRA_SOURCES.name}")
+    links += await extra_links(fetcher, out, args.refresh, links)
     pages = plan_pages(links)
     if args.limit:
         pages = pages[: args.limit]
@@ -533,7 +646,6 @@ async def run(args: argparse.Namespace) -> int:
     # pages/ is rebuilt from raw/ on every run, so no file outlives its source.
     shutil.rmtree(out / "pages", ignore_errors=True)
 
-    fetcher = Fetcher(out, per_host=args.per_host, total=args.concurrency, delay=args.delay)
     with ProcessPoolExecutor() as pool:
 
         async def run_pass(batch: list[Page]) -> None:
