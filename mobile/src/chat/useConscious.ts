@@ -50,7 +50,8 @@ type Action =
     | { type: "sending"; clientIds: string[] }
     | { type: "dropped" }
     | { type: "retry"; clientId: string }
-    | { type: "clearError" };
+    | { type: "clearError" }
+    | { type: "fail"; error: string };
 
 const EMPTY_DRAFT: Draft = { text: "" };
 
@@ -84,6 +85,8 @@ const reduce = (state: State, action: Action): State => {
             };
         case "clearError":
             return { ...state, error: undefined };
+        case "fail":
+            return { ...state, error: action.error };
         case "server":
             return receive(state, action.message);
     }
@@ -138,11 +141,14 @@ const INITIAL: State = {
 };
 
 const RETRY_MS = [500, 1_000, 2_000, 4_000, 8_000, 15_000];
+// Wiping a computer's memory takes a few seconds; past this the server did not take the reset.
+const RESET_TIMEOUT_MS = 20_000;
 
 /** One live connection to Conscious: the chat, what is being written, and a way to send. */
 export const useConscious = (connection: Connection) => {
     const [state, dispatch] = useReducer(reduce, INITIAL);
     const socket = useRef<WebSocket | null>(null);
+    const resetTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
     const pendingRef = useRef(state.pending);
     pendingRef.current = state.pending;
 
@@ -176,6 +182,7 @@ export const useConscious = (connection: Connection) => {
             ws.onopen = () => ws.send(JSON.stringify({ type: "auth", code: connection.code } satisfies ClientMessage));
             ws.onmessage = (event) => {
                 const message = JSON.parse(String(event.data)) as ServerMessage;
+                if (message.type === "ready" || message.type === "error") clearTimeout(resetTimer.current);
                 if (message.type === "ready") {
                     attempt = 0;
                     dispatch({ type: "status", status: "online" });
@@ -207,6 +214,7 @@ export const useConscious = (connection: Connection) => {
         return () => {
             stopped = true;
             clearTimeout(retry);
+            clearTimeout(resetTimer.current);
             subscription.remove();
             socket.current?.close();
             socket.current = null;
@@ -236,8 +244,23 @@ export const useConscious = (connection: Connection) => {
     const retry = useCallback((clientId: string) => dispatch({ type: "retry", clientId }), []);
     const clearError = useCallback(() => dispatch({ type: "clearError" }), []);
     // The server answers with an empty history, which empties the chat on every open phone.
+    // A server from before Start fresh ignores the request, so silence becomes an error.
     const startFresh = useCallback(() => {
-        socket.current?.send(JSON.stringify({ type: "reset" } satisfies ClientMessage));
+        const open = socket.current;
+        if (!open || open.readyState !== WebSocket.OPEN) {
+            dispatch({ type: "fail", error: "You're offline. Start fresh once you're back online." });
+            return;
+        }
+        open.send(JSON.stringify({ type: "reset" } satisfies ClientMessage));
+        clearTimeout(resetTimer.current);
+        resetTimer.current = setTimeout(
+            () =>
+                dispatch({
+                    type: "fail",
+                    error: "Your Conscious didn't start fresh. Its server may need the latest version.",
+                }),
+            RESET_TIMEOUT_MS,
+        );
     }, []);
 
     return { ...state, send, retry, clearError, startFresh };
