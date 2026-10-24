@@ -1,0 +1,6 @@
+- For Italian bureaucracy (documents, residence, taxes, INPS, the health service, permits, bonuses, a comune's services), search these official pages before the web.
+- Search in Italian, in the office's own words. Add `place` for a comune's or a region's own rules; national rules come without it.
+- Results point to pages, they are not the answer: read the best one or two, then decide whether you know enough or need another search.
+- Each page carries its source address and the day it was saved. For amounts, deadlines and this year's bonuses, check the source with web_read_page when the copy is more than a few weeks old.
+- Give the answer, then the source address on its own line.
+- Nothing fits? Search the web, ideally on the office's own site.

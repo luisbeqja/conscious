@@ -210,6 +210,21 @@ After signing in, the user lands on a Conscious page, not Composio's. To make th
 2. For apps with a consent screen (Google, Fitbit, Spotify…), register your own OAuth app with the redirect URI `https://backend.composio.dev/api/v3.1/toolkits/auth/callback`. Then create an auth config with its client ID and secret in the Composio dashboard. Google then says "Conscious wants access", not Composio.
 3. List those auth configs in `.env`: `COMPOSIO_AUTH_CONFIGS=googlecalendar=ac_…,gmail=ac_…`. Only new connections use them. Users connected before have to connect again.
 
+## Italian official pages
+
+Ask "how do I renew my ID card?" or "can I get the bonus asilo nido?" and Conscious searches 1,892 official pages of Italian public offices: ministries, INPS, Agenzia delle Entrate, regions, comuni and EU portals, as listed on [italiaaperta.it/fonti](https://www.italiaaperta.it/fonti). A search returns pages, not answers. Conscious reads the best one or two whole, searches again when they fall short, and checks the live page when an amount or a deadline may have changed since the copy was saved. The answer ends with the source address.
+
+The pages and their index stay on your install. Once, and again whenever you want fresher copies:
+
+```bash
+pnpm italy:download    # about 2 minutes, into .conscious/italy/download; needs uv and curl
+pnpm italy:index       # writes .conscious/italy/index.sqlite
+```
+
+The index matches words and, with an embeddings model, meanings too, so an English question finds an Italian page. Embeddings come from Mistral with `MISTRAL_API_KEY`, else OpenAI with `OPENAI_API_KEY`, else a local OpenAI-style server at `CONSCIOUS_EMBEDDINGS_URL` (Ollama with `bge-m3`). A search embeds with the model that built the index; with another one, or none, it matches words only. A rebuild embeds only the passages that changed.
+
+Online, the host needs the index in its data folder and the same embeddings key. On Railway, with the volume at `/data`: `railway volume files upload .conscious/italy/index.sqlite /italy/index.sqlite --overwrite`, then restart the service; the index is opened at start.
+
 ## Plugins
 
 Ask Conscious about an app it has no capability for and it writes a plugin for it, or installs one that ships with Conscious. A plugin it writes stays on your install. Plugins run in a sandbox and reach only the hosts they declare. See [Plugins](docs/architecture.md#plugins).
@@ -272,6 +287,7 @@ src/
 │  ├─ reactions/         an emoji on the user's message, before an answer or instead of one
 │  ├─ computer/          shell and files in the user's sandbox
 │  ├─ skills/            the agent saves its own skills, with undo
+│  ├─ italy/             official Italian pages: search, read, with their source address
 │  ├─ plugins/           search, install and write plugins
 │  └─ vault/             connect and disconnect accounts through Vault links
 ├─ skills/               the skill library: copy into the computer, list what can run, import
@@ -280,6 +296,7 @@ src/
 ├─ mcp/                  MCP catalog and client: each server becomes a capability
 ├─ composio/             Composio's tool router: one session per user
 ├─ conversations/        one conversation per user, in memory or in their sandbox
+├─ knowledge/            search indexes: passages, keywords and vectors in one SQLite file
 └─ prompts/              system, background and first-meeting prompts as markdown
 skills/                  bundled skills, copied into every computer
 mcp/                     MCP server manifests, one folder per server

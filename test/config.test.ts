@@ -18,6 +18,28 @@ describe("loadConfig", () => {
         expect(config.sandbox).toBeUndefined();
     });
 
+    it("embeds with Mistral when there is a Mistral key, and keeps the Italian index in the data folder", () => {
+        const config = loadConfig({ MISTRAL_API_KEY: "k", CONSCIOUS_DATA_DIR: "/data", CONSCIOUS_MCP_SERVERS: "none" });
+
+        expect(config.embeddings).toEqual({
+            provider: "mistral",
+            baseUrl: "https://api.mistral.ai/v1",
+            model: "mistral-embed",
+            apiKey: "k",
+        });
+        expect(config.italyIndex).toBe(join("/data", "italy", "index.sqlite"));
+    });
+
+    it("embeds on a local server when one is set, and not at all without one", () => {
+        const local = loadConfig({
+            CONSCIOUS_EMBEDDINGS_URL: "http://localhost:11434/v1",
+            CONSCIOUS_MCP_SERVERS: "none",
+        });
+
+        expect(local.embeddings).toEqual({ provider: "local", baseUrl: "http://localhost:11434/v1", model: "bge-m3" });
+        expect(loadConfig({ CONSCIOUS_MCP_SERVERS: "none" }).embeddings).toBeUndefined();
+    });
+
     it("takes the Photon project from the SPECTRUM_ names the dashboard gives", () => {
         const photon = loadPhotonConfig({
             SPECTRUM_PROJECT_ID: "project",

@@ -31,6 +31,7 @@ Conscious is a personal assistant for daily life, not work, and it should feel l
 | Composio | Optional: more everyday apps through Composio's hosted tool router, which holds each user's sign-ins. Work apps are refused. |
 | Plugins | Apps without a capability: bundled with Conscious or written by the agent on your install, run in a sandbox. |
 | Vault | Your secrets, saved through a private page and sealed. Only the broker reads them. |
+| Knowledge | Documents saved ahead of time and indexed, searched by words and by meaning: today the official pages of Italian public offices. |
 
 ## A message, end to end
 
@@ -79,6 +80,16 @@ A skill is a folder with a `SKILL.md` in the [AgentSkills](https://agentskills.i
 ## Composio
 
 With `COMPOSIO_API_KEY` set, the `composio` capability reaches apps Conscious has no tools for. Conscious opens one Composio session per user, under an opaque id (a hash of the user id), and keeps Composio's own connection-management tools out of it. The agent gets six tools: list apps, make a sign-in link (Composio's page), find tools for a task, and three run tools by effect. Each run tool looks up the target tool's tags first: `readOnlyHint` is a read, a `DRAFT` tool that is not destructive is a draft, anything else is a commit and waits for the user's yes. The API key stays on the host. Sign-in links send the user back to `/vault/connected` on the Vault server, a Conscious page, and `COMPOSIO_AUTH_CONFIGS` makes chosen apps sign in with the owner's own OAuth apps.
+
+## Knowledge: official Italian pages
+
+Italy is where most users live, and its bureaucracy is where a friend who knows the rules helps most. Conscious keeps a copy of the official pages listed on italiaaperta.it/fonti (ministries, INPS, Agenzia delle Entrate, regions, comuni, EU portals) and searches it like a library: the search finds pages, and the agent reads them.
+
+- **Saving the pages.** `scripts/download-italia-fonti.py` downloads every listed page and keeps its main text as Markdown, with the source address, the office, the page's own date and the day it was saved. Bot walls and maintenance pages are detected and tried again on the next run.
+- **The index** (`src/knowledge/`) is one SQLite file: the documents, their passages (cut at headings, about 1,200 characters, each with the headings above it and where it starts), a BM25 keyword index with light Italian stemming, and one vector per passage from any OpenAI-style embeddings API (Mistral, OpenAI, Ollama). `pnpm italy:index` builds it into the data folder; a rebuild embeds only passages whose text changed.
+- **A search** ranks passages by keywords and by vector, fuses the two rankings by reciprocal rank, and returns pages with their best passages. Vectors are compared only when the install embeds with the model that built the index; otherwise, or when the embeddings call fails, it falls back to keywords.
+- **Two tools.** `italy_search_pages` returns pages with their source, dates and matching passages, each with an offset; `italy_read_page` returns a whole page in parts. The agent decides whether it knows enough, searches again, or checks the live page with `web_read_page` when an amount or a deadline may have moved since the copy.
+- The index is read-only and shared by every user of the install. Calls run on the host, so it works with or without a computer.
 
 ## Plugins
 

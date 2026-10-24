@@ -14,6 +14,8 @@
     "app": "tsx --env-file-if-exists=.env src/app.ts",
     "skills:import": "tsx scripts/import-skill.ts",
     "computer:check": "tsx --env-file-if-exists=.env scripts/check-computer.ts",
+    "italy:download": "uv run scripts/download-italia-fonti.py",
+    "italy:index": "tsx --env-file-if-exists=.env scripts/build-italy-index.ts",
     "start": "node --env-file-if-exists=.env dist/main.js",
     "build": "tsc -p tsconfig.build.json && node scripts/copy-assets.mjs",
     "typecheck": "tsc --noEmit",

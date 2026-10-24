@@ -1,9 +1,11 @@
+import { existsSync } from "node:fs";
 import { createServer } from "node:http";
 import { join } from "node:path";
 import { BackgroundAgents, type Notify } from "./agents/background-agents.js";
 import { createComposioCapability } from "./capabilities/composio/capability.js";
 import { createGoogleCapability } from "./capabilities/google/capability.js";
 import { createRegistry } from "./capabilities/index.js";
+import { createItalyCapability } from "./capabilities/italy/capability.js";
 import { createMailCapability, verifyMailbox } from "./capabilities/mail/capability.js";
 import { createMemoryCapability } from "./capabilities/memory/capability.js";
 import { createQuietCapability } from "./capabilities/quiet/capability.js";
@@ -18,6 +20,8 @@ import { createModelRuntime } from "./engine/models.js";
 import { Orchestrator, SentLog } from "./engine/orchestrator.js";
 import { GoogleApi } from "./google/api.js";
 import { GOOGLE_CONNECTOR, GoogleOAuth } from "./google/oauth.js";
+import { createEmbedder } from "./knowledge/embeddings.js";
+import { KnowledgeIndex } from "./knowledge/store.js";
 import { MAIL_CONNECTOR } from "./mail/account.js";
 import { openImap } from "./mail/imap.js";
 import { McpSignIn, McpUserServers } from "./mcp/sign-in.js";
@@ -101,6 +105,7 @@ export const createConscious = (config: Config, notify: Notify, extra: readonly 
         transport: fetchTransport,
     };
     const web = createWebCapability({ search: createSearchProvider(config.search) });
+    const italy = openItalyIndex(config);
     const callback = (connectorId: string) =>
         `${config.vault.publicUrl.replace(/\/$/, "")}${signInCallbackPath(connectorId)}`;
     const google = config.google ? new GoogleOAuth(config.google, callback(GOOGLE_CONNECTOR.id), vault) : undefined;
@@ -119,6 +124,7 @@ export const createConscious = (config: Config, notify: Notify, extra: readonly 
         createQuietCapability(pacing),
         web,
         createMailCapability(openImap, vault),
+        ...(italy ? [createItalyCapability(italy)] : []),
         ...(google ? [createGoogleCapability(new GoogleApi(google), vault)] : []),
         ...(spotify ? [createSpotifyCapability(spotify, vault)] : []),
         ...(config.composio
@@ -199,4 +205,20 @@ export const createConscious = (config: Config, notify: Notify, extra: readonly 
     /** Serves the Vault page on a port of its own. */
     const startVault = () => createServer(vaultPage).listen(config.vault.port);
     return { orchestrator, scheduler, background, sandboxes, plugins, vault, mcpUsers, vaultPage, startVault };
+};
+
+/** The official Italian pages, when this install has an index of them (`pnpm italy:index`). */
+const openItalyIndex = (config: Config): KnowledgeIndex | undefined => {
+    if (!existsSync(config.italyIndex)) return undefined;
+    const index = KnowledgeIndex.open(config.italyIndex, config.embeddings && createEmbedder(config.embeddings));
+    if (index.model && !index.semantic) {
+        console.warn(
+            `[italy] the index was built with ${index.model}, ${config.embeddings ? `but this install embeds with ${config.embeddings.model}` : "but no embeddings are set up"}: searching by keywords only. Rebuild it with pnpm italy:index, or set CONSCIOUS_EMBEDDINGS to match.`,
+        );
+    } else {
+        console.log(
+            `[italy] ${index.size} official pages, searched by words${index.model ? ` and meaning (${index.model})` : ""}`,
+        );
+    }
+    return index;
 };

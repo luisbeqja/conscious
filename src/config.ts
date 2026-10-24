@@ -2,6 +2,7 @@ import { join } from "node:path";
 import type { ComposioConfig } from "./composio/client.js";
 import type { ModelConfig } from "./engine/models.js";
 import type { GoogleClient } from "./google/oauth.js";
+import type { EmbeddingsConfig } from "./knowledge/embeddings.js";
 import { type McpServerEntry, readCatalog, selectServers } from "./mcp/catalog.js";
 import type { TranscriptionConfig } from "./media/transcribe.js";
 import type { E2BOptions } from "./sandbox/e2b.js";
@@ -34,6 +35,10 @@ export interface Config {
     composio?: ComposioConfig;
     /** Where voice notes are turned into text. Without it, Conscious says it cannot listen yet. */
     transcription?: TranscriptionConfig;
+    /** Where text becomes vectors for search by meaning. Without it, searches match words only. */
+    embeddings?: EmbeddingsConfig;
+    /** The search index of official Italian pages (`pnpm italy:index`). No file, no capability. */
+    italyIndex: string;
 }
 
 export type PhotonPlatform = "imessage" | "whatsapp";
@@ -86,10 +91,11 @@ const checkKeys = (env: NodeJS.ProcessEnv): void => {
 // `||`, not `??`: a line left empty in a copied .env.example means "use the default".
 export const loadConfig = (env: NodeJS.ProcessEnv = process.env): Config => {
     checkKeys(env);
+    const dataDir = env.CONSCIOUS_DATA_DIR || join(process.cwd(), ".conscious");
     return {
         timezone: env.CONSCIOUS_TIMEZONE || Intl.DateTimeFormat().resolvedOptions().timeZone,
         pluginsDir: env.CONSCIOUS_PLUGINS_DIR || join(process.cwd(), "plugins"),
-        dataDir: env.CONSCIOUS_DATA_DIR || join(process.cwd(), ".conscious"),
+        dataDir,
         vault: loadVaultConfig(env),
         model: {
             provider: env.CONSCIOUS_MODEL_PROVIDER || "anthropic",
@@ -127,6 +133,8 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): Config => {
               }
             : undefined,
         transcription: loadTranscriptionConfig(env),
+        embeddings: loadEmbeddingsConfig(env),
+        italyIndex: env.CONSCIOUS_ITALY_INDEX || join(dataDir, "italy", "index.sqlite"),
     };
 };
 
@@ -172,6 +180,41 @@ const loadTranscriptionConfig = (env: NodeJS.ProcessEnv): TranscriptionConfig | 
         return { provider, baseUrl: required(env, "CONSCIOUS_TRANSCRIBE_URL"), model: model ?? "whisper-1" };
     }
     throw new Error(`CONSCIOUS_TRANSCRIBE must be "mistral", "openai", "local" or "none", not "${provider}"`);
+};
+
+/** Mistral when there is a Mistral key, else OpenAI, else a local OpenAI-style server (Ollama) if one is set. */
+const loadEmbeddingsConfig = (env: NodeJS.ProcessEnv): EmbeddingsConfig | undefined => {
+    const provider =
+        env.CONSCIOUS_EMBEDDINGS ||
+        (env.MISTRAL_API_KEY
+            ? "mistral"
+            : env.OPENAI_API_KEY
+              ? "openai"
+              : env.CONSCIOUS_EMBEDDINGS_URL
+                ? "local"
+                : "none");
+    const model = env.CONSCIOUS_EMBEDDINGS_MODEL || undefined;
+    if (provider === "none") return undefined;
+    if (provider === "mistral") {
+        return {
+            provider,
+            baseUrl: "https://api.mistral.ai/v1",
+            model: model ?? "mistral-embed",
+            apiKey: required(env, "MISTRAL_API_KEY"),
+        };
+    }
+    if (provider === "openai") {
+        return {
+            provider,
+            baseUrl: "https://api.openai.com/v1",
+            model: model ?? "text-embedding-3-small",
+            apiKey: required(env, "OPENAI_API_KEY"),
+        };
+    }
+    if (provider === "local") {
+        return { provider, baseUrl: required(env, "CONSCIOUS_EMBEDDINGS_URL"), model: model ?? "bge-m3" };
+    }
+    throw new Error(`CONSCIOUS_EMBEDDINGS must be "mistral", "openai", "local" or "none", not "${provider}"`);
 };
 
 /** A Brave key or a SearXNG address picks that engine; with neither, DuckDuckGo needs no setup. */
