@@ -112,24 +112,34 @@ describe("SkillLibrary", () => {
         const library = new SkillLibrary({ bundledDir: dir, internet: true });
         const sandbox = computer();
 
-        await library.sync("me", sandbox);
+        await library.sync(sandbox);
         expect(sandbox.files.get("/home/user/skills/weather/scripts/get.sh")).toBe("curl wttr.in");
         expect(sandbox.files.get("/home/user/skills/weather/.bundled")).toMatch(/^[0-9a-f]{16}$/);
 
         sandbox.files.set("/home/user/skills/weather/scripts/get.sh", "edited");
-        await new SkillLibrary({ bundledDir: dir, internet: true }).sync("me", sandbox);
+        await new SkillLibrary({ bundledDir: dir, internet: true }).sync(sandbox);
         expect(sandbox.files.get("/home/user/skills/weather/scripts/get.sh")).toBe("edited");
+    });
+
+    it("copies repo skills into a computer that replaced a deleted one", async () => {
+        const library = new SkillLibrary({
+            bundledDir: bundledDir({ "weather/SKILL.md": JSON_STYLE }),
+            internet: true,
+        });
+        await library.sync(computer());
+
+        const replacement = computer();
+        await library.sync(replacement);
+        expect(replacement.files.get("/home/user/skills/weather/SKILL.md")).toBe(JSON_STYLE);
     });
 
     it("copies a skill again when the repo's version changes", async () => {
         const sandbox = computer();
         await new SkillLibrary({ bundledDir: bundledDir({ "weather/SKILL.md": JSON_STYLE }), internet: true }).sync(
-            "me",
             sandbox,
         );
         const updated = `${JSON_STYLE}\nNew line.\n`;
         await new SkillLibrary({ bundledDir: bundledDir({ "weather/SKILL.md": updated }), internet: true }).sync(
-            "me",
             sandbox,
         );
         expect(sandbox.files.get("/home/user/skills/weather/SKILL.md")).toBe(updated);
@@ -140,7 +150,6 @@ describe("SkillLibrary", () => {
         const mine = skill("weather", "", "My own way.");
         sandbox.files.set("/home/user/skills/weather/SKILL.md", mine);
         await new SkillLibrary({ bundledDir: bundledDir({ "weather/SKILL.md": JSON_STYLE }), internet: true }).sync(
-            "me",
             sandbox,
         );
         expect(sandbox.files.get("/home/user/skills/weather/SKILL.md")).toBe(mine);
@@ -150,7 +159,7 @@ describe("SkillLibrary", () => {
     it("removes copies of skills the repo stopped shipping, never the user's own", async () => {
         const sandbox = computer();
         const twoSkills = bundledDir({ "weather/SKILL.md": JSON_STYLE, "maps/SKILL.md": skill("maps", "", "Maps.") });
-        await new SkillLibrary({ bundledDir: twoSkills, internet: true }).sync("me", sandbox);
+        await new SkillLibrary({ bundledDir: twoSkills, internet: true }).sync(sandbox);
         sandbox.files.set("/home/user/skills/receipts/SKILL.md", skill("receipts", "", "Mine."));
         const removed: string[] = [];
         sandbox.run = async (command) => {
@@ -159,7 +168,6 @@ describe("SkillLibrary", () => {
         };
 
         await new SkillLibrary({ bundledDir: bundledDir({ "weather/SKILL.md": JSON_STYLE }), internet: true }).sync(
-            "me",
             sandbox,
         );
         expect(removed).toEqual(["rm -rf 'skills/maps'"]);
@@ -180,12 +188,12 @@ describe("SkillLibrary", () => {
         const sandbox = computer();
         sandbox.files.set("/home/user/skills/packing/SKILL.md", skill("packing", ""));
 
-        const names = (await library.list("me", sandbox)).map((listed) => listed.name);
+        const names = (await library.list(sandbox)).map((listed) => listed.name);
 
         // weather needs only curl; packing is the user's own; the rest need a Mac, a secret,
         // a missing program, or the internet.
         expect(names).toEqual(["packing", "weather"]);
-        expect(await library.render("me", sandbox)).toBe(
+        expect(await library.render(sandbox)).toBe(
             "- `packing` (skills/packing/SKILL.md): packing things.\n- `weather` (skills/weather/SKILL.md): Current weather and forecasts.",
         );
     });
@@ -196,8 +204,8 @@ describe("SkillLibrary", () => {
             internet: true,
         });
         const sandbox = computer();
-        await library.list("me", sandbox);
-        await library.list("me", sandbox);
+        await library.list(sandbox);
+        await library.list(sandbox);
         expect(sandbox.commands).toHaveLength(1);
     });
 

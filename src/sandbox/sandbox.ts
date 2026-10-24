@@ -18,6 +18,8 @@ export interface FileEntry {
  * tokens stay on the host.
  */
 export interface Sandbox {
+    /** Names this computer. One made to replace it, after it was deleted, has a new id. */
+    readonly id: string;
     /** Absolute home directory. Relative paths resolve against it. */
     readonly home: string;
     run(command: string, options?: { cwd?: string; timeoutMs?: number }): Promise<CommandResult>;

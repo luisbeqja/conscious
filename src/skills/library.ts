@@ -66,9 +66,11 @@ export interface SkillLibraryOptions {
 const quote = (word: string): string => `'${word.replaceAll("'", "'\\''")}'`;
 
 /**
- * The skills each user's agent can use. Repo skills are copied into the computer the first time
- * a user is seen by this process (and again when they change); the agent reads them from there,
- * next to the skills it wrote itself. If both have one with the same name, the user's own wins.
+ * The skills each user's agent can use. Repo skills are copied into a computer the first time
+ * this process sees it (and again when they change); the agent reads them from there, next to
+ * the skills it wrote itself. If both have one with the same name, the user's own wins.
+ * Everything here is kept per computer, not per user: a user whose computer was deleted gets
+ * the repo's skills again in the new one.
  */
 export class SkillLibrary {
     private readonly bundled: BundledSkill[];
@@ -84,8 +86,8 @@ export class SkillLibrary {
      * Copies the repo's skills in, leaving alone any skill the user owns or that is already current,
      * and removes copies of skills the repo no longer ships.
      */
-    async sync(userId: string, sandbox: Sandbox): Promise<void> {
-        if (this.synced.has(userId)) return;
+    async sync(sandbox: Sandbox): Promise<void> {
+        if (this.synced.has(sandbox.id)) return;
         await Promise.all(
             this.bundled.map(async (skill) => {
                 const folder = `${SKILLS_DIR}/${skill.name}`;
@@ -112,12 +114,12 @@ export class SkillLibrary {
                     await sandbox.run(`rm -rf ${quote(folder)}`);
                 }),
         );
-        this.synced.add(userId);
+        this.synced.add(sandbox.id);
     }
 
     /** Every skill on the computer that can run there now. */
-    async list(userId: string, sandbox: Sandbox): Promise<ListedSkill[]> {
-        await this.sync(userId, sandbox);
+    async list(sandbox: Sandbox): Promise<ListedSkill[]> {
+        await this.sync(sandbox);
         const folders = await sandbox.listFiles(SKILLS_DIR).catch(() => []);
         const found = await Promise.all(
             folders
@@ -141,7 +143,6 @@ export class SkillLibrary {
         );
         const skills = found.filter((skill): skill is ListedSkill => skill !== undefined);
         const installed = await this.checkInstalled(
-            userId,
             sandbox,
             skills.flatMap((skill) => [...skill.requires.bins, ...skill.requires.anyBins]),
         );
@@ -149,8 +150,8 @@ export class SkillLibrary {
     }
 
     /** The skills section of the system prompt. */
-    async render(userId: string, sandbox: Sandbox): Promise<string> {
-        const skills = await this.list(userId, sandbox);
+    async render(sandbox: Sandbox): Promise<string> {
+        const skills = await this.list(sandbox);
         if (skills.length === 0) return "None yet.";
         return skills.map((skill) => `- \`${skill.name}\` (${skill.path}): ${skill.description}`).join("\n");
     }
@@ -164,13 +165,9 @@ export class SkillLibrary {
         return requires.anyBins.length === 0 || requires.anyBins.some((bin) => installed.get(bin));
     }
 
-    private async checkInstalled(
-        userId: string,
-        sandbox: Sandbox,
-        bins: readonly string[],
-    ): Promise<ReadonlyMap<string, boolean>> {
-        const known = this.installed.get(userId) ?? new Map<string, boolean>();
-        this.installed.set(userId, known);
+    private async checkInstalled(sandbox: Sandbox, bins: readonly string[]): Promise<ReadonlyMap<string, boolean>> {
+        const known = this.installed.get(sandbox.id) ?? new Map<string, boolean>();
+        this.installed.set(sandbox.id, known);
         const unknown = [...new Set(bins)].filter((bin) => !known.has(bin) && /^[\w.+-]+$/.test(bin));
         if (unknown.length > 0) {
             const script = `for b in ${unknown.map(quote).join(" ")}; do command -v "$b" >/dev/null 2>&1 && echo "$b"; done; true`;

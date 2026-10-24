@@ -1,9 +1,11 @@
+import { randomUUID } from "node:crypto";
 import { posix } from "node:path";
 import type { CommandResult, FileEntry, Sandbox, SandboxProvider } from "../src/sandbox/sandbox.js";
 import { resolvePath } from "../src/sandbox/sandbox.js";
 
 /** A sandbox made of a Map: files only, and commands answered by a script. */
 export class FakeSandbox implements Sandbox {
+    readonly id = randomUUID();
     readonly home = "/home/user";
     readonly files = new Map<string, string>();
     readonly bytes = new Map<string, Uint8Array>();

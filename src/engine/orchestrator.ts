@@ -321,7 +321,7 @@ export class Orchestrator {
             const sandbox = await sandboxes.forUser(userId);
             const [notes, skillList] = await Promise.all([
                 loadOlderNotes(sandbox),
-                skills ? skills.render(userId, sandbox) : "None yet.",
+                skills ? skills.render(sandbox) : "None yet.",
             ]);
             return {
                 memory: notes ? `${memory}\n\nOlder notes, from before the memory tools:\n${notes}` : memory,

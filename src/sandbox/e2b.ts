@@ -1,5 +1,12 @@
 import { createHash } from "node:crypto";
-import { ALL_TRAFFIC, CommandExitError, Sandbox as E2BSandbox, type EntryInfo, FileType } from "e2b";
+import {
+    ALL_TRAFFIC,
+    CommandExitError,
+    Sandbox as E2BSandbox,
+    type EntryInfo,
+    FileType,
+    SandboxNotFoundError,
+} from "e2b";
 import { type CommandResult, type FileEntry, resolvePath, type Sandbox, type SandboxProvider } from "./sandbox.js";
 
 export interface E2BOptions {
@@ -73,6 +80,22 @@ export class E2BSandboxes implements SandboxProvider {
     ) {}
 
     async forUser(userId: string): Promise<Sandbox> {
+        try {
+            return await this.reach(userId);
+        } catch (error) {
+            if (!(error instanceof SandboxNotFoundError)) throw error;
+            // Deleted while this process held it, from E2B's dashboard say: look the user's computer
+            // up again, or make a new one, instead of failing the message.
+            return this.reach(userId);
+        }
+    }
+
+    async shutdown(): Promise<void> {
+        // E2B pauses each sandbox on its own timeout; dropping the handles is all there is to do.
+        this.open.clear();
+    }
+
+    private async reach(userId: string): Promise<Sandbox> {
         const cached = this.open.get(userId);
         const fresh = cached && this.now() - cached.usedAt < this.idleMs - RECONNECT_MARGIN_MS;
         const instance = fresh ? cached.instance : this.attach(userId, cached?.instance);
@@ -82,14 +105,10 @@ export class E2BSandboxes implements SandboxProvider {
             if (fresh) await sandbox.setTimeout(this.idleMs);
             return new E2BUserSandbox(sandbox);
         } catch (error) {
-            this.open.delete(userId);
+            // Unless a call that failed first already replaced it: two at once must not make two computers.
+            if (this.open.get(userId)?.instance === instance) this.open.delete(userId);
             throw error;
         }
-    }
-
-    async shutdown(): Promise<void> {
-        // E2B pauses each sandbox on its own timeout; dropping the handles is all there is to do.
-        this.open.clear();
     }
 
     private async attach(userId: string, previous?: Promise<E2BInstance>): Promise<E2BInstance> {
@@ -109,8 +128,11 @@ const toEntry = (entry: EntryInfo): FileEntry => ({
 
 class E2BUserSandbox implements Sandbox {
     readonly home = HOME;
+    readonly id: string;
 
-    constructor(private readonly instance: E2BInstance) {}
+    constructor(private readonly instance: E2BInstance) {
+        this.id = instance.sandboxId;
+    }
 
     async run(command: string, options: { cwd?: string; timeoutMs?: number } = {}): Promise<CommandResult> {
         try {

@@ -1,4 +1,4 @@
-import { CommandExitError } from "e2b";
+import { CommandExitError, SandboxNotFoundError } from "e2b";
 import { describe, expect, it, vi } from "vitest";
 import { type E2BClient, type E2BInstance, E2BSandboxes } from "../src/sandbox/e2b.js";
 
@@ -56,6 +56,50 @@ describe("E2BSandboxes", () => {
         await sandboxes.forUser("me");
         expect(fake.connect).toHaveBeenCalledWith("new");
         expect(fake.find).toHaveBeenCalledTimes(1);
+    });
+
+    it("gets the user a computer again when the one in use was deleted", async () => {
+        const fake = client();
+        const sandboxes = new E2BSandboxes(fake, 600_000);
+        await sandboxes.forUser("me");
+        const deleted = await fake.create.mock.results[0]?.value;
+        const gone = new SandboxNotFoundError("Sandbox new not found");
+        vi.mocked(deleted.setTimeout)
+            .mockRejectedValueOnce(gone)
+            // The second message learns it later, once the first has already made a new computer.
+            .mockImplementationOnce(() => new Promise((_, reject) => setTimeout(() => reject(gone), 10)));
+        fake.create.mockResolvedValueOnce(instance("replacement"));
+
+        // Two messages at once must not make two computers.
+        const [first, second] = await Promise.all([sandboxes.forUser("me"), sandboxes.forUser("me")]);
+
+        expect([first.id, second.id]).toEqual(["replacement", "replacement"]);
+        expect(fake.find).toHaveBeenCalledTimes(2);
+        expect(fake.create).toHaveBeenCalledTimes(2);
+    });
+
+    it("gets the user a computer again when the paused one was deleted", async () => {
+        let now = 0;
+        const fake = client();
+        const sandboxes = new E2BSandboxes(fake, 600_000, () => now);
+        await sandboxes.forUser("me");
+        fake.connect.mockRejectedValueOnce(new SandboxNotFoundError("Paused sandbox new not found"));
+        fake.create.mockResolvedValueOnce(instance("replacement"));
+        now = 600_000;
+
+        expect((await sandboxes.forUser("me")).id).toBe("replacement");
+        expect(fake.connect).toHaveBeenCalledWith("new");
+    });
+
+    it("does not replace a computer it merely could not reach", async () => {
+        const fake = client();
+        const sandboxes = new E2BSandboxes(fake, 600_000);
+        await sandboxes.forUser("me");
+        const created = await fake.create.mock.results[0]?.value;
+        vi.mocked(created.setTimeout).mockRejectedValueOnce(new Error("socket hang up"));
+
+        await expect(sandboxes.forUser("me")).rejects.toThrow("socket hang up");
+        expect(fake.create).toHaveBeenCalledTimes(1);
     });
 
     it("returns a failing command's exit code instead of throwing", async () => {

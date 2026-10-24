@@ -41,7 +41,7 @@ try {
     for (const bin of bins) ok(present.has(bin), `${bin}${present.has(bin) ? "" : " missing"}`);
 
     const library = new SkillLibrary({ internet: options.internet });
-    const skills = await library.list(user, sandbox);
+    const skills = await library.list(sandbox);
     console.log(`\n${skills.length} skills show up:`);
     for (const skill of skills) console.log(`  ${skill.name}${skill.internet ? " (internet)" : ""}`);
     if (!options.internet)
