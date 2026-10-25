@@ -4,7 +4,7 @@
   "private": true,
   "license": "MIT",
   "type": "module",
-  "description": "Conscious: a personal life assistant you text on iMessage and WhatsApp",
+  "description": "Conscious: a personal life assistant you text on iMessage, WhatsApp and Telegram",
   "homepage": "https://github.com/luisbeqja/conscious#readme",
   "repository": {
     "type": "git",
@@ -20,6 +20,7 @@
     "chat": "tsx --env-file-if-exists=.env src/main.ts",
     "photon": "tsx --env-file-if-exists=.env src/photon.ts",
     "app": "tsx --env-file-if-exists=.env src/app.ts",
+    "telegram": "tsx --env-file-if-exists=.env src/telegram.ts",
     "skills:import": "tsx scripts/import-skill.ts",
     "computer:check": "tsx --env-file-if-exists=.env scripts/check-computer.ts",
     "italy:download": "uv run scripts/download-italia-fonti.py",

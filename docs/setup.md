@@ -85,6 +85,18 @@ Send a voice note and Conscious answers what you said. It needs a transcription 
 
 Photos go to the model when it can see them. Every file you send is saved on its computer in `files/inbox/`, where the PDF, Word and Excel skills open it, and it can send files back: a plan as a PDF, a converted spreadsheet. Without a computer, it reads small text files (CSV, plain text) and photos, and says it cannot open the rest.
 
+## Text it on Telegram
+
+Telegram needs no business account and no review: the bot is yours in a minute.
+
+1. In Telegram, message [@BotFather](https://t.me/BotFather), send `/newbot`, and pick a name and a username. It answers with a token.
+2. Set `TELEGRAM_BOT_TOKEN` in `.env` and run `pnpm telegram`.
+3. Message your bot. It does not answer yet: the log shows `ignored a message from 123456789 (@you)`. Put that id in `CONSCIOUS_TELEGRAM_USERS` and restart.
+
+Conscious asks Telegram for its messages (long polling), so like Photon it runs on a laptop with no public address. Only the ids on the list are answered, and only in their private chat with the bot, never in a group. Voice notes, photos and files work as above, `*bold*` shows as bold, and there is no 24-hour window: reminders arrive whenever they are due. Run one copy per bot; two would take turns getting its messages.
+
+With `pnpm photon`, a `TELEGRAM_BOT_TOKEN` adds the bot next to WhatsApp and iMessage. List yourself as `123456789=+393331234567`, your Telegram id and then your number as in `CONSCIOUS_ALLOWED_USERS`, and Telegram, WhatsApp and the app are one conversation; reminders go to whichever you wrote from last. An id alone is a user of its own, `telegram:123456789`. With `pnpm telegram`, `123456789=me` makes you the same user as `pnpm chat`.
+
 ## Use the phone app
 
 `mobile/` is Conscious's own app for iPhone and Android: one chat, answers written out as they come, what it is doing while it works ("Searching the web…"), its reactions, photos both ways, and reminders that arrive while you are away. No messaging account or Meta approval is involved: the app talks straight to your Conscious.
@@ -253,11 +265,11 @@ Connected accounts, plugins (including ones the agent wrote) and installs are sa
 
 ## Run it online
 
-Conscious is one Node process that keeps running, so any host that keeps a process up and gives it a disk works. Nothing has to reach it from outside except your phone: Photon is an outgoing connection, and E2B is already in the cloud.
+Conscious is one Node process that keeps running, so any host that keeps a process up and gives it a disk works. Nothing has to reach it from outside except your phone: Photon and Telegram are outgoing connections, and E2B is already in the cloud.
 
 A host such as Railway, Render or Fly.io gives a service one address. Set `CONSCIOUS_APP_PORT` and `CONSCIOUS_VAULT_PORT` to the same port, and that one https address serves both: the app under `/app/`, the Vault under `/vault/`. It goes in `CONSCIOUS_PUBLIC_URL` and in the phone app.
 
-- Build with `pnpm build`, start with `node dist/photon.js` (`node dist/app.js` for the app alone). On Railway, set the start command in the service settings or as `RAILPACK_START_CMD`.
+- Build with `pnpm build`, start with `node dist/photon.js` (`node dist/app.js` for the app alone, `node dist/telegram.js` for Telegram alone). On Railway, set the start command in the service settings or as `RAILPACK_START_CMD`.
 - Variables: your `.env`, plus `CONSCIOUS_APP_PORT=8080`, `CONSCIOUS_VAULT_PORT=8080`, `CONSCIOUS_DATA_DIR=/data` and a `CONSCIOUS_VAULT_KEY` of its own (`openssl rand -base64 32`).
 - A volume at `/data`, so the Vault, access codes and reminders survive a deploy.
 - One copy only. Two would both answer, and both send every reminder; stop the one on your laptop.
@@ -280,8 +292,10 @@ src/
 ├─ main.ts               the terminal chat
 ├─ photon.ts             iMessage and WhatsApp through Photon Spectrum
 ├─ app.ts                the phone app on its own
+├─ telegram.ts           a Telegram bot on its own
 ├─ channels/photon.ts    Spectrum messages → orchestrator, replies (as short bubbles) and notifications back
 ├─ channels/app.ts       the phone app's WebSocket: streamed replies, reactions, files
+├─ channels/telegram.ts  the Telegram Bot API, long polled: replies as bubbles, reactions, files, notifications
 ├─ create-conscious.ts   composition root: which implementation sits behind each seam
 ├─ config.ts             environment → typed config
 ├─ engine/

@@ -64,6 +64,13 @@ export interface AppConfig {
     users: readonly string[];
 }
 
+export interface TelegramConfig {
+    /** From @BotFather. */
+    botToken: string;
+    /** Telegram user id → the user they are to Conscious. Conscious is personal: anyone else is ignored. */
+    users: ReadonlyMap<string, string>;
+}
+
 export interface VaultConfig {
     port: number;
     /** What the user's phone opens. Behind a tunnel or proxy in production, so it is https. */
@@ -279,6 +286,28 @@ export const loadAppConfig = (env: NodeJS.ProcessEnv = process.env, fallbackUser
     const users = list(env.CONSCIOUS_APP_USERS);
     if (!users.length && !fallbackUser) return undefined;
     return { port: Number(env.CONSCIOUS_APP_PORT || 8788), users: users.length ? users : [fallbackUser as string] };
+};
+
+/**
+ * The Telegram bot, when this install has one. Each Telegram user id listed is a user of their own
+ * (`telegram:<id>`), or, written `<id>=<user>`, that user: the same person as on WhatsApp or the app.
+ * The list may start empty: a sender who is not on it is logged with their id.
+ */
+export const loadTelegramConfig = (env: NodeJS.ProcessEnv = process.env): TelegramConfig | undefined => {
+    const botToken = env.TELEGRAM_BOT_TOKEN;
+    if (!botToken) return undefined;
+    if (!/^\d+:[\w-]+$/.test(botToken))
+        throw new Error("TELEGRAM_BOT_TOKEN should look like 123456789:AAH…, as @BotFather gives it");
+    const users = new Map<string, string>();
+    for (const entry of list(env.CONSCIOUS_TELEGRAM_USERS)) {
+        const [telegramId = "", userId] = entry.split("=").map((part) => part.trim());
+        // A username can change hands; the numeric id is the person.
+        if (!/^\d+$/.test(telegramId)) {
+            throw new Error(`CONSCIOUS_TELEGRAM_USERS takes numeric Telegram user ids, not "${telegramId}"`);
+        }
+        users.set(telegramId, userId || `telegram:${telegramId}`);
+    }
+    return { botToken, users };
 };
 
 const PLATFORMS: readonly PhotonPlatform[] = ["imessage", "whatsapp"];

@@ -4,9 +4,11 @@ import { imessage } from "@spectrum-ts/imessage";
 import { whatsappBusiness } from "@spectrum-ts/whatsapp-business";
 import { type AppChannel, startAppChannel, toAppTasks } from "./channels/app.js";
 import { ChatBook } from "./channels/chats.js";
-import { PhotonChannel, userIdOf } from "./channels/photon.js";
+import { PhotonChannel } from "./channels/photon.js";
+import { createTelegramApi, TELEGRAM, TelegramChannel } from "./channels/telegram.js";
+import { userIdOf } from "./channels/user-id.js";
 import { WhatsAppTyping } from "./channels/whatsapp-typing.js";
-import { loadAppConfig, loadConfig, loadPhotonConfig, type PhotonPlatform } from "./config.js";
+import { loadAppConfig, loadConfig, loadPhotonConfig, loadTelegramConfig, type PhotonPlatform } from "./config.js";
 import { createConscious } from "./create-conscious.js";
 import { modelSetupProblem } from "./engine/models.js";
 import { connectServers } from "./mcp/servers.js";
@@ -23,6 +25,8 @@ const photon = loadPhotonConfig();
 // Optional: the phone app next to WhatsApp and iMessage, for users listed in CONSCIOUS_APP_USERS.
 const appConfig = loadAppConfig();
 const app = appConfig && { ...appConfig, users: appConfig.users.map(userIdOf) };
+// Optional: a Telegram bot next to them, for users listed in CONSCIOUS_TELEGRAM_USERS.
+const telegram = loadTelegramConfig();
 const problem = await modelSetupProblem(config.model);
 if (problem) {
     console.error(problem);
@@ -33,14 +37,17 @@ const mcp = await connectServers(config.mcpServers);
 // The channels need the orchestrator and the orchestrator's notifications need the channels.
 let channel: PhotonChannel | undefined;
 let appChannel: AppChannel | undefined;
+let telegramChannel: TelegramChannel | undefined;
 const chats = new ChatBook(join(config.dataDir, "chats.json"));
 const { orchestrator, scheduler, background, sandboxes, vaultPage, vaultUpgrade, startVault } = createConscious(
     config,
-    // Conscious speaks first where the user last wrote: the app or their messaging chat.
+    // Conscious speaks first where the user last wrote: the app, Telegram or their messaging chat.
     (userId, text) => {
-        if (appChannel?.hasUser(userId) && appChannel.wroteHereSince(userId, chats.get(userId)?.lastInboundAt)) {
+        const chat = chats.get(userId);
+        if (appChannel?.hasUser(userId) && appChannel.wroteHereSince(userId, chat?.lastInboundAt)) {
             return appChannel.notify(userId, text);
         }
+        if (telegramChannel && chat?.platform === TELEGRAM) return telegramChannel.notify(userId, text);
         return channel ? channel.notify(userId, text) : Promise.resolve();
     },
     mcp.capabilities,
@@ -62,10 +69,11 @@ let spectrum: Awaited<ReturnType<typeof Spectrum>> | undefined;
 const whatsappTyping = photon.platforms.includes("whatsapp")
     ? new WhatsAppTyping(photon.projectId, photon.projectSecret)
     : undefined;
+const transcriber = config.transcription && createTranscriber(config.transcription);
 channel = new PhotonChannel(orchestrator, photon.allowedUsers, {
     chats,
     template: photon.whatsappTemplate,
-    transcriber: config.transcription && createTranscriber(config.transcription),
+    transcriber,
     showWhatsAppTyping: whatsappTyping?.show,
     openSpace: async (platform, spaceId) => {
         if (!spectrum) throw new Error("Photon is not connected yet");
@@ -73,6 +81,11 @@ channel = new PhotonChannel(orchestrator, photon.allowedUsers, {
         return (provider as typeof whatsappBusiness)(spectrum as never).space.get(spaceId);
     },
 });
+// A Telegram user listed as your number is you on WhatsApp and in the app too.
+telegramChannel =
+    telegram &&
+    new TelegramChannel(createTelegramApi(telegram.botToken), orchestrator, telegram.users, { chats, transcriber });
+const stopTelegram = new AbortController();
 const vaultServer = onePort ? undefined : startVault();
 if (!config.vault.publicUrl.startsWith("https://")) {
     console.warn(
@@ -96,6 +109,7 @@ console.log(
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
     process.on(signal, async () => {
+        stopTelegram.abort();
         scheduler.stopAll();
         vaultServer?.close();
         appServer?.server.close();
@@ -107,4 +121,6 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
     });
 }
 
+// Telegram asks for its messages on its own, beside Spectrum's stream.
+void telegramChannel?.listen(stopTelegram.signal);
 await channel.listen(spectrum.messages);
