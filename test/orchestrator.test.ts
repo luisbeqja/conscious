@@ -113,6 +113,50 @@ describe("Orchestrator", () => {
         expect((await createRegistry().available("me")).map((capability) => capability.id)).not.toContain("reactions");
     });
 
+    it("still asks for words when the agent did something, even after a reaction landed", async () => {
+        const { faux, runtime } = scriptedModel();
+        const at = new Date(Date.now() + 86_400_000).toISOString();
+        let reminder = "";
+        faux.setResponses([
+            fauxAssistantMessage(fauxToolCall("reminders_create_reminder", { text: "Find a place in Tenerife", at }), {
+                stopReason: "toolUse",
+            }),
+            // It sets the reminder, then would end without telling the user.
+            fauxAssistantMessage([]),
+            (context) => {
+                reminder = JSON.stringify(context.messages.at(-1));
+                return sends("Done, I'll remind you tomorrow 🏝️")[0] as ReturnType<typeof fauxAssistantMessage>;
+            },
+            fauxAssistantMessage([]),
+        ]);
+        const orchestrator = new Orchestrator({
+            registry: createRegistry(),
+            store: new InMemoryConversationStore(),
+            runtime,
+            budgets: { maxTurnsPerRun: 10, maxToolCallsPerRun: 10, maxBackgroundAgents: 1 },
+            timezone: "Europe/Rome",
+            scheduler,
+            background: new BackgroundAgents(
+                async () => "",
+                async () => {},
+                1,
+            ),
+            reactor: { choose: async () => "👍" },
+        });
+        const reactions: string[] = [];
+
+        const sent = await orchestrator.send("me", "remind me tomorrow to find a place in Tenerife", {
+            react: async (emoji) => {
+                reactions.push(emoji);
+                return true;
+            },
+        });
+
+        expect(reactions).toEqual(["👍"]);
+        expect(sent).toEqual(["Done, I'll remind you tomorrow 🏝️"]);
+        expect(reminder).toContain("You did something for them");
+    });
+
     it("keeps what the agent writes outside a message to itself, and reminds it once when it sent nothing", async () => {
         const { faux, runtime } = scriptedModel();
         let reminded = "";

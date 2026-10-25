@@ -156,7 +156,7 @@ If there is something the user should hear, send it with ${SEND_MESSAGE} in one 
  * For an agent about to stop without having sent anything: the one more turn it gets to send what it
  * forgot. What it wrote instead is quoted, so it cannot take that text for an answer that went out.
  */
-export const buildNothingSentNote = (forThe: "message" | "job", wrote: string): string => {
+export const buildNothingSentNote = (forThe: "message" | "job", wrote: string, acted = false): string => {
     const quote = wrote.length > 200 ? `${wrote.slice(0, 199)}…` : wrote;
     const what = wrote
         ? `Not delivered: the user did not see "${quote}". Text you write outside ${SEND_MESSAGE} never reaches them.`
@@ -164,7 +164,9 @@ export const buildNothingSentNote = (forThe: "message" | "job", wrote: string): 
     const next =
         forThe === "job"
             ? `Send them the result with ${SEND_MESSAGE} now, then finish with your notes.`
-            : `Send what they should read with ${SEND_MESSAGE} now. If silence really is the answer, end without writing anything.`;
+            : acted
+              ? `You did something for them, so tell them with ${SEND_MESSAGE} now, the way a friend would.`
+              : `Send what they should read with ${SEND_MESSAGE} now. If silence really is the answer, end without writing anything.`;
     return `<context>\n${what} ${next}\n</context>`;
 };
 
