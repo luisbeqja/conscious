@@ -32,6 +32,7 @@ Conscious is a personal assistant for daily life, not work, and it should feel l
 | Memory | Facts about the user and the people in their life, with birthdays. On the host's disk, or on the user's computer. |
 | Pacing | Quiet hours, a daily limit and a pause for the messages Conscious sends on its own. |
 | Composio | Optional: more everyday apps through Composio's hosted tool router, which holds each user's sign-ins. Work apps are refused. |
+| Shop | Shopping through Shop MCP: search, checkouts the user pays on the store's page, and their Shop account for addresses and orders. |
 | Plugins | Apps without a capability: bundled with Conscious or written by the agent on your install, run in a sandbox. |
 | Vault | Your secrets, saved through a private page and sealed. Only the broker reads them. |
 | Knowledge | Documents saved ahead of time and indexed, searched by words and by meaning: today the official pages of Italian public offices. |
@@ -105,6 +106,14 @@ A skill is a folder with a `SKILL.md` in the [AgentSkills](https://agentskills.i
 ## Composio
 
 With `COMPOSIO_API_KEY` set, the `composio` capability reaches apps Conscious has no tools for. Conscious opens one Composio session per user, under an opaque id (a hash of the user id), and keeps Composio's own connection-management tools out of it. The agent gets six tools: list apps, make a sign-in link (Composio's page), find tools for a task, and three run tools by effect. Each run tool looks up the target tool's tags first: `readOnlyHint` is a read, a `DRAFT` tool that is not destructive is a draft, anything else is a commit and waits for the user's yes. The API key stays on the host. Sign-in links send the user back to `/vault/connected` on the Vault server, a Conscious page, and `COMPOSIO_AUTH_CONFIGS` makes chosen apps sign in with the owner's own OAuth apps.
+
+## Shop
+
+Shopping goes through Shop MCP (shop.dev), Shopify's catalog and checkout for agents. Its server speaks MCP 2026-07-28, which has no session and no `initialize`, so the SDK's client cannot reach it: `src/shop/client.ts` sends each call as one POST that names its protocol version. It is not in the `mcp/` catalog either. Shop's 17 tools have schemas of about 17K tokens, and a search for five products returns about 28,000 characters, so the `shop` capability has eight tools of its own (about 2K tokens) and turns each answer into what the agent needs: one offer per product, prices from minor units, no store descriptions in a list.
+
+- **Search, products, lookup** run signed out. A photo is read from the user's computer and sent as its bytes.
+- **Checkouts** are drafts: one per store, no order placed, and the agent sends `continueUrl`, the store's page where the user pays. Shop replaces a checkout whole on update, so an update reads it fresh, changes only the lines, address, delivery option or codes asked for, and sends every other field back as it was. `complete_checkout` and the spend-request tools are not offered: paying waits for approvals in the chat.
+- **The account** (saved addresses, orders from any store) signs in with the OAuth device flow and Shop's public client, so nobody registers an app. The Vault page shows the code and links to Shop's page, and Conscious asks Shop until the user approves. The tokens live in the Vault under `shop`, which no plugin can ask for, and are refreshed before they expire. A token Shop refuses is renewed once, else dropped; a search then goes on signed out, and the account tools offer a new link.
 
 ## Knowledge: official Italian pages
 

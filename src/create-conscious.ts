@@ -15,6 +15,7 @@ import { createItalyCapability } from "./capabilities/italy/capability.js";
 import { createMailCapability, verifyMailbox } from "./capabilities/mail/capability.js";
 import { createMemoryCapability } from "./capabilities/memory/capability.js";
 import { createQuietCapability } from "./capabilities/quiet/capability.js";
+import { createShopCapability } from "./capabilities/shop/capability.js";
 import { createSpotifyCapability } from "./capabilities/spotify/capability.js";
 import type { Capability } from "./capabilities/types.js";
 import { createWebCapability } from "./capabilities/web/capability.js";
@@ -41,10 +42,13 @@ import { persistPlugins } from "./plugins/state-file.js";
 import { createE2BClient, E2BSandboxes } from "./sandbox/e2b.js";
 import { Pacing } from "./scheduler/pacing.js";
 import { Scheduler } from "./scheduler/scheduler.js";
+import { ShopClient } from "./shop/client.js";
+import { SHOP_CONNECTOR, ShopSignIn } from "./shop/sign-in.js";
 import { SkillLibrary } from "./skills/library.js";
 import { SPOTIFY_CONNECTOR, SpotifyOAuth } from "./spotify/oauth.js";
 import {
     CONNECTED_PATH,
+    type DeviceSignInProvider,
     type SignInProvider,
     signInCallbackPath,
     vaultHandler,
@@ -126,12 +130,17 @@ export const createConscious = (config: Config, notify: Notify, extra: readonly 
         .filter((entry) => entry.auth === "oauth")
         .map((entry) => new McpSignIn(entry, callback(`mcp-${entry.name}`), vault));
     const mcpUsers = new McpUserServers(mcpSignIns, vault);
-    const signIns = new Map<string, SignInProvider>(mcpSignIns.map((signIn) => [signIn.connector.id, signIn]));
+    const signIns = new Map<string, SignInProvider | DeviceSignInProvider>(
+        mcpSignIns.map((signIn) => [signIn.connector.id, signIn]),
+    );
     const spotify = config.spotify
         ? new SpotifyOAuth(config.spotify, callback(SPOTIFY_CONNECTOR.id), vault)
         : undefined;
+    // Shop needs no app of its own: the user approves Conscious on Shop's page with a code.
+    const shop = config.shop ? new ShopSignIn(vault) : undefined;
     if (google) signIns.set(GOOGLE_CONNECTOR.id, google);
     if (spotify) signIns.set(SPOTIFY_CONNECTOR.id, spotify);
+    if (shop) signIns.set(SHOP_CONNECTOR.id, shop);
     const builtIn = [
         createMemoryCapability(memory),
         createAgentsCapability(agents),
@@ -142,6 +151,7 @@ export const createConscious = (config: Config, notify: Notify, extra: readonly 
         ...(italy ? [createItalyCapability(italy)] : []),
         ...(google ? [createGoogleCapability(new GoogleApi(google), vault)] : []),
         ...(spotify ? [createSpotifyCapability(spotify, vault)] : []),
+        ...(shop ? [createShopCapability(new ShopClient(), shop, sandboxes)] : []),
         ...(config.composio
             ? [
                   createComposioCapability(
@@ -194,6 +204,7 @@ export const createConscious = (config: Config, notify: Notify, extra: readonly 
             MAIL_CONNECTOR,
             ...(google ? [GOOGLE_CONNECTOR] : []),
             ...(spotify ? [SPOTIFY_CONNECTOR] : []),
+            ...(shop ? [SHOP_CONNECTOR] : []),
             ...mcpSignIns.map((signIn) => signIn.connector),
         ],
     })

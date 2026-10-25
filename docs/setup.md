@@ -194,6 +194,14 @@ Like Google, each install brings its own Spotify app. Once:
 
 Spotify lets an app in development mode serve only a few listed users, and its owner needs Premium. That fits one household; more people need Spotify's review.
 
+## Shopping with Shop
+
+Ask "find me a ceramic coffee dripper under 40 euro" and Conscious searches [Shop](https://shop.dev), Shopify's catalog of products from millions of online stores, with live prices and stock. It shows two or three good options with their store, price and link, checks a size or colour before it recommends one, and searches by a photo you send when it has a computer. When you want one, it prepares the checkout at that store and sends you its page: you check the total and pay there. Conscious never pays or places an order itself.
+
+Search and checkout need no account and no setup. Sign in to your Shop account (ask "connect my Shop account", or Conscious offers it when it helps) and it also fills in your saved delivery address, and answers "where is my order?" for orders from any store Shop tracks, with the tracking link. The sign-in is a Vault link with a **Sign in with Shop** button: the page shows a code, you approve Conscious on Shop's own page, and Conscious tells you in the chat when it is connected. The sign-in stays in the Vault on your install.
+
+Searches and checkouts go from your install to Shopify (`mcp.shop.com`), the way flight searches go to Kiwi.com. `CONSCIOUS_SHOP=false` turns shopping off.
+
 ## Todoist, Strava, Notion and Dropbox
 
 Conscious connects to vendor-hosted MCP servers listed in [`mcp/`](../mcp/), from the host, and offers their tools like any capability. Kiwi.com flights and trivago hotels need no account and are on from the start.

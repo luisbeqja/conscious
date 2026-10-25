@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type RequestListener, type Server, type ServerResponse } from "node:http";
 import { GoogleSignInExpired } from "../google/oauth.js";
 import { authHeader, type Connector, type ConnectorField } from "../plugins/connectors.js";
-import type { Vault } from "./vault.js";
+import type { Vault, VaultLink } from "./vault.js";
 
 /** Whether a secret works, asked of the service itself before the Vault keeps it. */
 export type VerifySecret = (connector: Connector, secret: string) => Promise<boolean>;
@@ -19,8 +19,8 @@ export interface VaultServerOptions {
     verify: VerifySecret;
     /** Called once a secret is saved, to tell the user in the chat. */
     onConnected: (userId: string, connector: Connector) => Promise<void>;
-    /** Sign-in by redirect, by connector id. Each comes back to `/vault/oauth/<connector id>`. */
-    signIns?: ReadonlyMap<string, SignInProvider>;
+    /** Sign-in on the provider's page, by connector id. By redirect, each comes back to `/vault/oauth/<connector id>`. */
+    signIns?: ReadonlyMap<string, SignInProvider | DeviceSignInProvider>;
 }
 
 /** A provider the user signs in to on its own page. It comes back to the callback with a code. */
@@ -29,6 +29,15 @@ export interface SignInProvider {
     authUrl(state: string, userId: string): string | Promise<string>;
     /** What the Vault keeps: a refresh token, or whatever the provider needs to act again. */
     exchange(code: string, state: string, userId: string): Promise<string>;
+}
+
+/**
+ * A provider that does not come back to Conscious: the user approves on its page with a code, while
+ * Conscious asks the provider whether they have (the OAuth device flow, RFC 8628).
+ */
+export interface DeviceSignInProvider {
+    /** The provider's page and the code it shows; `approved` is what the Vault keeps, or undefined if they did not approve. */
+    start(userId: string): Promise<{ url: string; userCode: string; approved: Promise<string | undefined> }>;
 }
 
 export const signInCallbackPath = (connectorId: string) => `/vault/oauth/${connectorId}`;
@@ -75,6 +84,7 @@ input{width:100%;padding:12px;border:1px solid var(--line);border-radius:10px;ba
 button,.button{display:block;text-align:center;text-decoration:none;margin-top:14px;width:100%;padding:12px;border:0;border-radius:10px;background:var(--accent);color:#fff;font:inherit;font-weight:600}
 .bad{color:var(--bad)}.note{font-size:13px;margin-top:16px}
 .warn{border-left:3px solid var(--bad);padding-left:10px}.hosts b{color:var(--fg);font-weight:600}
+.code{color:var(--fg);font:600 28px/1.2 ui-monospace,monospace;letter-spacing:4px;text-align:center}
 </style></head><body><main><div class="card">${body}</div></main></body></html>`;
 
 const signInPage = (connector: Connector, code: string, error?: string) =>
@@ -86,6 +96,16 @@ const signInPage = (connector: Connector, code: string, error?: string) =>
 ${error ? `<p class="bad">${escapeHtml(error)}</p>` : ""}
 <p><a class="button" href="/vault/${escapeHtml(code)}/start">Sign in with ${escapeHtml(connector.signIn ?? connector.name)}</a></p>
 <p class="note">This link works once and expires in 15 minutes.</p>`,
+    );
+
+const codePage = (connector: Connector, url: string, userCode: string) =>
+    page(
+        `Connect ${connector.name}`,
+        `<h1>Connect ${escapeHtml(connector.name)}</h1>
+<p>${escapeHtml(connector.name)} may show you this code. Check that it is the same, then approve Conscious.</p>
+<p class="code">${escapeHtml(userCode)}</p>
+<p><a class="button" href="${escapeHtml(url)}">Continue to ${escapeHtml(connector.signIn ?? connector.name)}</a></p>
+<p class="note">Then go back to the chat: Conscious tells you there once ${escapeHtml(connector.name)} is connected.</p>`,
     );
 
 const form = (connector: Connector, error?: string) =>
@@ -174,7 +194,9 @@ export const vaultHandler =
         if (url.pathname === CONNECTED_PATH && request.method === "GET") return send(200, connectedPage(url));
         const callback = /^\/vault\/oauth\/([a-z0-9-]{2,40})$/.exec(url.pathname)?.[1];
         const callbackProvider = callback ? options.signIns?.get(callback) : undefined;
-        if (callback && callbackProvider) return signInCallback(options, callback, callbackProvider, url, send);
+        if (callback && callbackProvider && "exchange" in callbackProvider) {
+            return signInCallback(options, callback, callbackProvider, url, send);
+        }
         const match = /^\/vault\/([A-Za-z0-9_-]{16,64})(\/start)?$/.exec(url.pathname);
         if (!match?.[1]) return send(404, gone());
         const code = match[1];
@@ -186,6 +208,7 @@ export const vaultHandler =
             const provider = options.signIns?.get(connector.id);
             if (!provider || request.method !== "GET") return send(404, gone());
             if (!match[2]) return send(200, signInPage(connector, code));
+            if ("start" in provider) return startDeviceSignIn(options, provider, link, send);
             let location: string;
             try {
                 // The link's code travels as OAuth state, so the callback knows whose sign-in it is.
@@ -226,11 +249,11 @@ const save = async (
     connector: Connector,
     secret: string,
     code: string,
-    send: (status: number, html: string) => void,
+    send?: (status: number, html: string) => void,
 ) => {
     options.vault.set(userId, connector, secret);
     options.vault.consumeLink(code);
-    send(200, saved(connector));
+    send?.(200, saved(connector));
     await options.onConnected(userId, connector).catch((error: unknown) => {
         console.error("[vault] could not tell the user", error);
     });
@@ -263,4 +286,26 @@ const signInCallback = async (
         return send(400, signInPage(link.connector, state, `${message} Try again.`));
     }
     await save(options, link.userId, link.connector, secret, state, send);
+};
+
+/** The page shows the code and sends the user on to the provider; their answer arrives later, without them. */
+const startDeviceSignIn = async (
+    options: VaultServerOptions,
+    provider: DeviceSignInProvider,
+    link: VaultLink,
+    send: (status: number, html: string) => void,
+) => {
+    const { connector } = link;
+    let started: Awaited<ReturnType<DeviceSignInProvider["start"]>>;
+    try {
+        started = await provider.start(link.userId);
+    } catch (error) {
+        console.error(`[vault] could not start the ${connector.name} sign-in`, error);
+        return send(502, signInPage(connector, link.code, `Could not reach ${connector.name}. Try again.`));
+    }
+    void started.approved.then(
+        (secret) => (secret === undefined ? undefined : save(options, link.userId, connector, secret, link.code)),
+        (error: unknown) => console.error(`[vault] the ${connector.name} sign-in did not finish`, error),
+    );
+    send(200, codePage(connector, started.url, started.userCode));
 };

@@ -1,0 +1,8 @@
+- For something to buy (a present, a new charger, running shoes), search Shop before the web: it has the real price, stock and store.
+- Search in the user's words; a size, a colour or a price limit they gave goes in its own field. Always give the country it ships to, from what you know about them. For a photo they sent, search with `photo` when you have it, else describe the thing in `query`.
+- Show two or three good options, not ten: what it is, the store, the price with its currency, why it fits, and its url on its own line. Copy urls and ids exactly; never shorten or rebuild one.
+- A search shows one size or colour per product. Before you recommend a size, a colour or a quantity, check it with shop_get_product.
+- Tell the user every warning Shop gives. Shipping to their country does not mean it arrives by a date: say so when they have a deadline.
+- When they want to buy it, or the full price with delivery, make a checkout at that store (one per store) and send its continueUrl: they check and pay there. You cannot pay or place an order yourself.
+- With their Shop account connected, shop_update_checkout with addressId "preferred" fills in their saved address. Never type an address in yourself.
+- "Where is my order?" is shop_search_orders: orders from any store Shop tracks, with tracking. It needs their Shop account; if it is not connected, offer the Vault link (connector "shop").

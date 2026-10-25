@@ -20,6 +20,7 @@ export interface UnconfiguredConnector {
 const SIGN_IN_NOTES: Readonly<Record<string, string>> = {
     google: '- Google (Calendar, Gmail, Drive, Contacts, Tasks) is one connection, "google": the link opens a Sign in with Google page. Offer it when the user asks about any of these and the google tools are missing.',
     spotify: '- Spotify is "spotify", a Sign in with Spotify page.',
+    shop: '- Shop is "shop", a Sign in with Shop page: the user\'s saved addresses and their orders from any store. Searching and checkouts work without it, so offer it only when it helps.',
 };
 
 export interface VaultOptions {

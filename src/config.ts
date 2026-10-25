@@ -28,6 +28,8 @@ export interface Config {
     browser?: E2BBrowserOptions;
     /** MCP servers from the repo's catalog that this install connects to. */
     mcpServers: McpServerEntry[];
+    /** Shopping through Shop MCP (shop.dev). Needs no key, so it is on unless turned off. */
+    shop: boolean;
     /** Where web searches go. */
     search: SearchConfig;
     /** This install's Google OAuth client. Without it, the Google account is not offered. */
@@ -114,6 +116,7 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): Config => {
         sandbox: loadSandboxConfig(env),
         browser: loadBrowserConfig(env),
         mcpServers: selectServers(readCatalog(), env.CONSCIOUS_MCP_SERVERS),
+        shop: env.CONSCIOUS_SHOP !== "false",
         search: loadSearchConfig(env),
         google:
             env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET
