@@ -46,6 +46,13 @@ export interface Harness {
     lanes?: Lane[];
 }
 
+/** The agent a job belongs to: one the user already has, or a new one made for it. */
+export interface TaskAgent {
+    name: string;
+    /** For a new agent: one line on the kind of job it does. */
+    description?: string;
+}
+
 // Time to write the final answer once the deadline has passed, before the run is stopped.
 const GRACE_MS = 3 * 60_000;
 
@@ -56,6 +63,8 @@ export interface BackgroundTask {
     brief: string;
     effort: Effort;
     harness: Harness;
+    /** The agent doing the job, which keeps its notes once the job is done. None for a one-off. */
+    agent?: TaskAgent;
     /** The last messages of the chat when the task started, so the sub-agent knows what led to it. */
     recentChat?: string;
     status: TaskStatus;
@@ -81,6 +90,7 @@ export interface NewTask {
     brief: string;
     effort?: Effort;
     harness?: Harness;
+    agent?: TaskAgent;
     recentChat?: string;
 }
 
@@ -165,6 +175,13 @@ export class BackgroundAgents {
         if ((request.harness?.lanes?.length ?? 0) > MAX_LANES) {
             throw new Error(`At most ${MAX_LANES} parts run at once. Merge some of them.`);
         }
+        // An agent does one job at a time, so its notebook is never rewritten by two at once.
+        const busy = request.agent && this.running(userId).find((task) => task.agent?.name === request.agent?.name);
+        if (busy) {
+            throw new Error(
+                `The ${busy.agent?.name} agent is already working on "${busy.title}". Pass new details to that task with background_message_task, or wait until it is done.`,
+            );
+        }
         const task: BackgroundTask = {
             id: randomUUID().slice(0, 8),
             userId,
@@ -175,6 +192,7 @@ export class BackgroundAgents {
                 ...request.harness,
                 lanes: request.harness?.lanes?.map(({ title, brief }) => ({ title, brief })),
             },
+            agent: request.agent,
             recentChat: request.recentChat,
             status: "running",
             startedAt: new Date(),

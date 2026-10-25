@@ -17,6 +17,8 @@ export interface ToolContext {
     background?: BackgroundAgents;
     /** The background task this agent is working on. Only inside one. */
     task?: { id: string; tellUser(text: string): Promise<void> };
+    /** The notebook of the agent doing this job. Only for the agent that writes the job's answer. */
+    notebook?: { save(notes: string): Promise<void> };
     /** The last messages of the chat, handed to a background task so it knows what led to it. */
     recentChat?: string;
     /** Reacts to the message being answered; false when the chat cannot show it. Absent where there is none. */

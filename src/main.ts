@@ -31,7 +31,7 @@ const { orchestrator, scheduler, background, sandboxes, startVault } = createCon
 const COMMANDS: Record<string, () => Promise<void> | void> = {
     "/reset": async () => {
         await orchestrator.startFresh(USER);
-        console.log(dim("Starting fresh: the conversation, memory and reminders are gone."));
+        console.log(dim("Starting fresh: the conversation, memory, reminders and agents are gone."));
     },
     "/reminders": () => console.log(dim(JSON.stringify(scheduler.list(USER), null, 2))),
     "/tasks": () => console.log(dim(JSON.stringify(background.list(USER), null, 2))),

@@ -6,12 +6,13 @@ Conscious is a personal assistant for daily life, not work, and it should feel l
 
 1. **One orchestrator per user, many capability packs.** The orchestrator is the agent you chat with. Each area of life (reminders, calendar, email, travel, music) is a pack: tools plus a short `SKILL.md` on how to use them.
 2. **Long work goes to background agents.** The orchestrator designs a sub-agent for the job (a method, the packs it needs, how long it may take, and parts that run side by side) and answers you at once. You keep chatting: the orchestrator sees each task's progress and can pass it a change of plan. The sub-agent may text you a first find, then messages you its result. Tasks are saved in `.conscious/background.json`; a restart starts an interrupted one over, once. Depth is one: a sub-agent cannot start another.
-3. **Reminders are cron jobs.** One-off or recurring, read in your timezone, sent to you as a normal message. A scheduled check is a reminder with a job: when it fires, an agent does the job and messages you only if it found something. Both are saved in `.conscious/reminders.json` and re-armed at start.
-4. **Connectors bring in your life.** A connector is a link to one of your accounts. A pack that needs one is invisible until you connect it. Tokens never reach the model.
-5. **A computer for what no API covers.** A disposable sandbox with a browser. Not built yet.
-6. **Memory is not the transcript.** What Conscious knows about you and the people in your life is kept apart from the conversation, read into every prompt, and yours to see and delete.
-7. **Speaking first is rationed in code.** What Conscious sends on its own waits out the night and stops at a daily limit. A friend who texts too much is worse than one who never does.
-8. **Safety is code, not prompt.** Every tool is `read`, `draft` or `commit`. A `commit` (send, book, pay, delete) never runs without your explicit yes. Until approvals exist, commits are blocked outright.
+3. **Agents rest between jobs.** Each kind of job (flights, gift ideas) has an agent that is kept when its job ends: its method, a notebook of what it learned, and a log of its jobs. The next job of that kind wakes it with all three. It is files, not a process.
+4. **Reminders are cron jobs.** One-off or recurring, read in your timezone, sent to you as a normal message. A scheduled check is a reminder with a job: when it fires, an agent does the job and messages you only if it found something. Both are saved in `.conscious/reminders.json` and re-armed at start.
+5. **Connectors bring in your life.** A connector is a link to one of your accounts. A pack that needs one is invisible until you connect it. Tokens never reach the model.
+6. **A computer for what no API covers.** A disposable sandbox with a browser. Not built yet.
+7. **Memory is not the transcript.** What Conscious knows about you and the people in your life is kept apart from the conversation, read into every prompt, and yours to see and delete.
+8. **Speaking first is rationed in code.** What Conscious sends on its own waits out the night and stops at a daily limit. A friend who texts too much is worse than one who never does.
+9. **Safety is code, not prompt.** Every tool is `read`, `draft` or `commit`. A `commit` (send, book, pay, delete) never runs without your explicit yes. Until approvals exist, commits are blocked outright.
 
 ## Building blocks
 
@@ -21,6 +22,7 @@ Conscious is a personal assistant for daily life, not work, and it should feel l
 | Capability packs | Tools named `<id>_<verb>_<noun>` plus a `SKILL.md` on how to use them. |
 | Effects | Every tool is `read`, `draft` or `commit`. A commit will become a yes/no the user answers. |
 | Background agents | Sub-agents with a written brief and a harness designed for the job (instructions, packs, effort, parallel parts). They outlive the turn, can text an update, take a change of plan, and report to the user directly. |
+| Agents | One per kind of background job, kept between jobs as a folder: method, notebook, log. Woken by name. |
 | Budgets | Turns and tool calls are capped per message. |
 | Conversations | One conversation per user, no threads. |
 | Connectors | The user's own accounts, linked one by one. |
@@ -47,6 +49,18 @@ Conscious is a personal assistant for daily life, not work, and it should feel l
 - **Birthdays and follow-ups** are scheduled checks marked `unprompted`: a birthday arms one a week before and one on the day, and `reminders_follow_up` arms one after an event the user mentioned. Each runs the agent with memory, so the words fit what Conscious knows by then.
 - **Pacing** (`scheduler/pacing.ts`) runs before any reminder fires. A plain reminder the user set always goes. An unprompted one inside quiet hours is moved to their end, and past the daily limit it is dropped. While the user paused messages (`quiet_pause_messages`), unprompted ones and scheduled checks are dropped. The pause and the day's count are kept in `.conscious/pacing.json`.
 - **Bubbles.** On iMessage and WhatsApp, a reply of two to four short paragraphs goes out as that many messages, with a short pause between them.
+
+## Agents
+
+A background job usually comes back in another form: another flight, another present. So the sub-agent that did it is not thrown away. It becomes an agent of the user's, named for the kind of job, and it rests as a folder until the next job of that kind.
+
+- **What an agent is.** `agents/<name>/` on the user's computer, or `.conscious/agents/<hash>/<name>/` on the host without one (`src/agents/resting-agents.ts`). `AGENT.md` holds a one-line description, the capabilities it works with, its method and a count of jobs. `NOTES.md` is its notebook. `runs.md` has a line per job, and `runs/` the brief and the answer of each. No transcript is kept: what is worth keeping goes into the notebook.
+- **Made on its first job.** `background_start_task` takes `agent`, a name for the kind of job (`flights`, never `lisbon-flights`), and, for a new one, `agentDescription`. The `instructions` and `capabilities` the orchestrator designs become the agent's method and tools.
+- **Woken on the next.** The orchestrator's prompt lists the user's agents, most recently used first. A job given to one of them runs with its method, its notebook and its last jobs in the system prompt, and with its tools unless the orchestrator names others. Instructions written for that job are added on top. A fresh conversation every time: the agent remembers through what it wrote down, not by replaying its old transcript, so stale prices never come back and a small local model still fits.
+- **It writes its notebook.** Only the sub-agent that writes the answer gets `notebook_save_notes`, and its guidance asks it to rewrite the notebook once, just before answering: what worked, what did not, the user's preferences for this kind of job. Parts of a split job read the notebook but do not write it. After the job, the orchestrator adds the line to `runs.md`, done or not.
+- **The user's reaction reaches it.** "Booked the second one" arrives in the chat after the job ended, so the orchestrator passes it with `agents_add_note`; it is a dated line in the notebook that the agent sees on its next job.
+- **One job at a time.** A second job for a busy agent is refused, so two runs never rewrite one notebook.
+- **Yours to see and delete.** `agents_read_notes` shows what an agent knows, `agents_forget_agent` deletes one, and Start fresh deletes them all. Sub-agents never get these tools.
 
 ## Channels
 

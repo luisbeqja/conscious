@@ -1,5 +1,6 @@
 import { Type } from "typebox";
 import { MAX_LANES, MAX_UPDATES } from "../../agents/background-agents.js";
+import { AGENT_NAME } from "../../agents/resting-agents.js";
 import { promptFile } from "../../prompts/prompt-file.js";
 import { type Capability, defineTool, type ToolContext } from "../types.js";
 
@@ -20,10 +21,22 @@ const start = defineTool({
             description:
                 "Everything the sub-agent needs: the goal, what the user said, constraints, what a good answer looks like. It sees only the last few messages of this conversation.",
         }),
+        agent: Type.Optional(
+            Type.String({
+                description:
+                    "The agent for this job: the name of one under 'Your agents' when it is the same kind of job, or a new name for the kind of job, lowercase with dashes (flights, gift-ideas, apartment-search). It keeps a notebook between jobs.",
+            }),
+        ),
+        agentDescription: Type.Optional(
+            Type.String({
+                description:
+                    "Only for a new agent: one line on the kind of job it does, e.g. 'Finds and compares flights for the user'.",
+            }),
+        ),
         instructions: Type.Optional(
             Type.String({
                 description:
-                    "Design the sub-agent for this job: its method, which sources to trust, what to compare, the order of steps, and what the final answer must contain. Becomes part of its system prompt.",
+                    "Design the sub-agent for this job: its method, which sources to trust, what to compare, the order of steps, and what the final answer must contain. Becomes part of its system prompt. For a new agent this is its method for every job of this kind, so leave this job's dates, places and names to the brief; for an agent that has one, write only what is different this time.",
             }),
         ),
         capabilities: Type.Optional(
@@ -52,15 +65,26 @@ const start = defineTool({
         ),
     }),
     execute: async (params, context) => {
+        const name = params.agent?.trim().toLowerCase();
+        if (name !== undefined && !AGENT_NAME.test(name)) {
+            throw new Error("An agent's name is lowercase letters, digits and dashes, like flights or gift-ideas");
+        }
         const task = agents(context).spawn(context.userId, {
             title: params.title,
             brief: params.brief,
             effort: params.effort,
             harness: { instructions: params.instructions, capabilities: params.capabilities, lanes: params.lanes },
+            agent: name ? { name, description: params.agentDescription } : undefined,
             recentChat: context.recentChat,
         });
         return {
-            data: { id: task.id, status: task.status, effort: task.effort, parts: task.harness.lanes?.length ?? 0 },
+            data: {
+                id: task.id,
+                status: task.status,
+                effort: task.effort,
+                parts: task.harness.lanes?.length ?? 0,
+                agent: task.agent?.name,
+            },
         };
     },
 });

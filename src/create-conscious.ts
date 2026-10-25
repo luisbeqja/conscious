@@ -2,6 +2,8 @@ import { existsSync } from "node:fs";
 import { createServer } from "node:http";
 import { join } from "node:path";
 import { BackgroundAgents, type Notify } from "./agents/background-agents.js";
+import { AgentStore } from "./agents/resting-agents.js";
+import { createAgentsCapability } from "./capabilities/agents/capability.js";
 import { composioReaches, createComposioCapability } from "./capabilities/composio/capability.js";
 import { createGoogleCapability } from "./capabilities/google/capability.js";
 import { createRegistry } from "./capabilities/index.js";
@@ -58,6 +60,8 @@ export const createConscious = (config: Config, notify: Notify, extra: readonly 
     const memory: MemoryStore = sandboxes
         ? new SandboxMemoryStore(sandboxes)
         : new FileMemoryStore(join(config.dataDir, "memory"));
+    // The agents kept between background jobs live where memory does.
+    const agents = sandboxes ? AgentStore.onComputer(sandboxes) : AgentStore.onHost(join(config.dataDir, "agents"));
     // Background results reach the orchestrator their own way; everything else it hears about here.
     const sent = new SentLog();
     const say: Notify = (userId, text) => {
@@ -123,6 +127,7 @@ export const createConscious = (config: Config, notify: Notify, extra: readonly 
     if (spotify) signIns.set(SPOTIFY_CONNECTOR.id, spotify);
     const builtIn = [
         createMemoryCapability(memory),
+        createAgentsCapability(agents),
         createQuietCapability(pacing),
         web,
         createMailCapability(openImap, vault),
@@ -208,6 +213,7 @@ export const createConscious = (config: Config, notify: Notify, extra: readonly 
         memory,
         skills: config.sandbox ? new SkillLibrary({ internet: config.sandbox.internet }) : undefined,
         sent,
+        agents,
     });
     /** The Vault page. When a secret is saved, the user hears it in the chat. */
     const vaultPage = vaultHandler({

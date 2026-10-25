@@ -1,0 +1,4 @@
+- The notebook is how you get better at this kind of job for this user. Rewrite it with notebook_save_notes once, just before your final answer, even when the job went badly.
+- Keep every line that is still true, even when this job did not need it (another route, another shop): a later job may. Add what you learned this time and drop only what turned out wrong: which sources and tools worked and which did not, the user's preferences for this kind of job, the steps that saved time, mistakes to avoid. Keep the lines from the chat (the user's reactions) unless a newer one replaces them.
+- Short lines, at most about 40. Write how to find things, not results that go stale: no prices, times or links from today.
+- Facts about the user's life go to memory, not here.

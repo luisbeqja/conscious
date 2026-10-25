@@ -5,6 +5,8 @@ import {
     EFFORT,
     type Harness,
 } from "../agents/background-agents.js";
+import { AGENTS_DIR, type AgentStore, dayIn, renderAgentList } from "../agents/resting-agents.js";
+import { notebookCapability } from "../capabilities/agents/capability.js";
 import { taskCapability } from "../capabilities/background/capability.js";
 import type { CapabilityRegistry } from "../capabilities/registry.js";
 import type { Capability, ToolContext } from "../capabilities/types.js";
@@ -13,6 +15,7 @@ import type { ConversationStore } from "../conversations/store.js";
 import { type IncomingFile, type OutgoingFile, prepareFiles, withoutImages } from "../media/incoming.js";
 import { emptyMemory, isEmpty, type MemoryStore, renderMemory, SandboxMemoryStore } from "../memory/memory.js";
 import {
+    buildAgentSection,
     buildBackgroundPrompt,
     buildCheckBrief,
     buildLaneBrief,
@@ -48,6 +51,8 @@ export interface OrchestratorDeps {
     skills?: SkillLibrary;
     /** Messages Conscious sent on its own since the user last wrote, so the next answer knows about them. */
     sent?: SentLog;
+    /** The agents kept between background jobs, one per kind of job. */
+    agents?: AgentStore;
 }
 
 /** How one background run is set up and limited. */
@@ -57,8 +62,19 @@ interface RunOptions {
     budgets?: Budgets;
     harness?: Harness;
     task?: ToolContext["task"];
+    /** Who the agent is and what it kept, when an agent of the user's does the job. */
+    agent?: string;
+    /** Only for the run that writes the job's answer. */
+    notebook?: ToolContext["notebook"];
     onProgress?: (progress: RunProgress) => void;
     steering?: () => string[];
+}
+
+/** An agent woken for a job: its name, what it kept, and the design it works with. */
+interface Woken {
+    name: string;
+    section: string;
+    harness: Harness;
 }
 
 export class SentLog {
@@ -141,6 +157,7 @@ export class Orchestrator {
                 sent?.take(userId);
                 await store.save(userId, []);
                 await this.memory?.save(userId, emptyMemory());
+                await this.deps.agents?.forgetAll(userId);
                 if (sandboxes) await (await sandboxes.forUser(userId)).run(`rm -f ${OLDER_NOTES}`);
             });
         this.queues.set(userId, next);
@@ -178,7 +195,10 @@ export class Orchestrator {
             : { notes: [], images: [] };
         const result = await runAgent({
             runtime,
-            systemPrompt: buildSystemPrompt(registry.renderIndex(capabilities), await this.context(userId)),
+            systemPrompt: buildSystemPrompt(registry.renderIndex(capabilities), {
+                ...(await this.context(userId)),
+                agents: await this.agentList(userId),
+            }),
             tools,
             effects,
             history,
@@ -206,14 +226,16 @@ export class Orchestrator {
      * sub-agent of its own at the same time, then one more puts their findings together.
      */
     runBackgroundTask = async (task: BackgroundTask, signal: AbortSignal): Promise<string> => {
-        const { background } = this.deps;
+        const { background, agents } = this.deps;
         const effort = EFFORT[task.effort];
         const deadline = deadlineOf(task);
+        const woken = await this.wake(task);
         const options = (): RunOptions => {
             let read = task.messages.length;
             return {
                 signal,
-                harness: task.harness,
+                harness: woken?.harness ?? task.harness,
+                agent: woken?.section,
                 task: { id: task.id, tellUser: (text) => background.tellUser(task.id, text) },
                 onProgress: (progress) => {
                     if (progress.type === "tool") background.progress(task.id, progress.name);
@@ -234,25 +256,106 @@ export class Orchestrator {
         const lanes = task.harness.lanes ?? [];
         // The parts stop early enough to leave time for putting them together.
         const lanesDeadline = task.startedAt.getTime() + (deadline - task.startedAt.getTime()) * 0.75;
-        await Promise.all(
-            lanes.map(async (lane, index) => {
-                lane.status = "running";
-                try {
-                    lane.result = await this.runAlone(
-                        task.userId,
-                        `background-${task.id}-${index + 1}`,
-                        buildLaneBrief(task, lane),
-                        { ...options(), deadline: lanesDeadline },
-                    );
-                    lane.status = "done";
-                } catch (error) {
-                    lane.status = "failed";
-                    lane.result = error instanceof Error ? error.message : String(error);
-                }
-            }),
-        );
-        return this.runAlone(task.userId, `background-${task.id}`, buildTaskBrief(task), options());
+        try {
+            await Promise.all(
+                lanes.map(async (lane, index) => {
+                    lane.status = "running";
+                    try {
+                        lane.result = await this.runAlone(
+                            task.userId,
+                            `background-${task.id}-${index + 1}`,
+                            buildLaneBrief(task, lane),
+                            { ...options(), deadline: lanesDeadline },
+                        );
+                        lane.status = "done";
+                    } catch (error) {
+                        lane.status = "failed";
+                        lane.result = error instanceof Error ? error.message : String(error);
+                    }
+                }),
+            );
+            // Only the agent that writes the answer rewrites the notebook: the parts saw only their part.
+            const result = await this.runAlone(task.userId, `background-${task.id}`, buildTaskBrief(task), {
+                ...options(),
+                notebook:
+                    woken && agents ? { save: (notes) => agents.saveNotes(task.userId, woken.name, notes) } : undefined,
+            });
+            await this.logRun(task, woken, "done", result);
+            return result;
+        } catch (error) {
+            const reason =
+                task.status === "cancelled"
+                    ? "cancelled"
+                    : `did not finish: ${error instanceof Error ? error.message : String(error)}`;
+            await this.logRun(task, woken, reason);
+            throw error;
+        }
     };
+
+    /**
+     * The agent a job belongs to, woken with what it kept from its earlier jobs, or made now from
+     * the design the orchestrator wrote for it. A computer that cannot be reached runs the job
+     * without one rather than not at all.
+     */
+    private async wake(task: BackgroundTask): Promise<Woken | undefined> {
+        const { agents, timezone } = this.deps;
+        if (!agents || !task.agent) return undefined;
+        const { userId } = task;
+        try {
+            const existing = await agents.load(userId, task.agent.name);
+            const agent =
+                existing ??
+                (await agents.create(userId, {
+                    name: task.agent.name,
+                    description: task.agent.description?.trim() || task.title,
+                    capabilities: task.harness.capabilities ?? [],
+                    method: task.harness.instructions?.trim() ?? "",
+                    created: dayIn(timezone),
+                }));
+            const capabilities = task.harness.capabilities?.length ? task.harness.capabilities : agent.capabilities;
+            const [notes, runs] = await Promise.all([
+                agents.notes(userId, agent.name),
+                agents.runs(userId, agent.name),
+            ]);
+            // Its earlier answers are files it can open only with the computer's tools.
+            const canOpen = agents.onComputer && (!capabilities.length || capabilities.includes("computer"));
+            const instructions = task.harness.instructions?.trim();
+            return {
+                name: agent.name,
+                section: buildAgentSection(
+                    agent,
+                    notes,
+                    runs,
+                    canOpen ? `${AGENTS_DIR}/${agent.name}/runs/` : undefined,
+                ),
+                harness: {
+                    ...task.harness,
+                    capabilities,
+                    // The agent's method is in its section; what the orchestrator wrote is added only when it differs.
+                    instructions: instructions && instructions !== agent.method ? instructions : undefined,
+                },
+            };
+        } catch (error) {
+            console.error(`[agents] could not wake ${task.agent.name} for ${userId}`, error);
+            return undefined;
+        }
+    }
+
+    /** Writes the job down in the agent's log. Never fails the job. */
+    private async logRun(task: BackgroundTask, woken: Woken | undefined, status: string, answer?: string) {
+        const { agents, timezone } = this.deps;
+        if (!agents || !woken) return;
+        await agents
+            .logRun(task.userId, woken.name, {
+                date: dayIn(timezone),
+                taskId: task.id,
+                title: task.title,
+                brief: task.brief,
+                status,
+                answer,
+            })
+            .catch((error) => console.error(`[agents] could not log ${task.id} for ${woken.name}`, error));
+    }
 
     /**
      * A scheduled check firing: an agent does the job on its own. Returns what to send the user,
@@ -276,18 +379,28 @@ export class Orchestrator {
                 (capability) =>
                     capability.id !== "background" &&
                     capability.id !== "reactions" &&
+                    // The agents are the orchestrator's to manage; a sub-agent keeps only its own notebook.
+                    capability.id !== "agents" &&
                     // Memory stays: the sub-agent is still Conscious, and knows the user.
                     (!chosen.size || chosen.has(capability.id) || capability.id === "memory"),
             ),
             ...(limits.task ? [taskCapability] : []),
+            ...(limits.notebook ? [notebookCapability] : []),
         ];
-        const { tools, effects } = toolsFor(capabilities, { userId, timezone, scheduler, task: limits.task });
+        const { tools, effects } = toolsFor(capabilities, {
+            userId,
+            timezone,
+            scheduler,
+            task: limits.task,
+            notebook: limits.notebook,
+        });
         const result = await runAgent({
             runtime,
             systemPrompt: buildBackgroundPrompt(
                 registry.renderIndex(capabilities),
                 await this.context(userId),
                 limits.harness?.instructions,
+                limits.agent,
             ),
             tools,
             effects,
@@ -299,9 +412,22 @@ export class Orchestrator {
             deadline: limits.deadline,
             onProgress: limits.onProgress,
             steering: limits.steering,
+            lastWords: limits.notebook ? new Set(["notebook_save_notes"]) : undefined,
         });
         if (result.status === "failed" || !result.text) throw new Error("the sub-agent did not finish");
         return result.text;
+    }
+
+    /** The agents the orchestrator can give a job to. A computer that cannot be reached lists none, for one message. */
+    private async agentList(userId: string): Promise<string | undefined> {
+        const { agents } = this.deps;
+        if (!agents) return undefined;
+        try {
+            return renderAgentList(await agents.list(userId));
+        } catch (error) {
+            console.error(`[orchestrator] could not list the agents for ${userId}`, error);
+            return "(Your computer could not be reached, so the list is unavailable for this message.)";
+        }
     }
 
     /** A computer that cannot be reached costs the user their memory and skills for one message, not the answer. */

@@ -1,0 +1,4 @@
+- Your agents are listed under "Your agents": one per kind of background job, each with a notebook of what it learned.
+- `agents_add_note` when the user reacts to an agent's work after the job: what they chose, what was off, what to do differently. Use their words. A fact about their life goes to memory instead.
+- `agents_read_notes` when the user asks what you know about how they like a kind of job done, or how an agent works.
+- `agents_forget_agent` only when the user asks you to forget a kind of job. Say what you forgot in one line.

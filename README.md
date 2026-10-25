@@ -21,7 +21,7 @@ you remind me to call mum tomorrow at 9
 conscious [reminders_create_reminder] done, tomorrow 9:00 📞
 ```
 
-Reminders and finished background tasks print on their own, above the prompt. Commands: `/reminders`, `/tasks`, `/reset` (start fresh: forget the conversation, memory and reminders), `/exit`.
+Reminders and finished background tasks print on their own, above the prompt. Commands: `/reminders`, `/tasks`, `/reset` (start fresh: forget the conversation, memory, reminders and agents), `/exit`.
 
 Reminders, scheduled checks and the conversation are saved in `.conscious/`, so a restart keeps them. A one-off reminder that came due while Conscious was off is sent, marked late, when it starts again (up to 12 hours late).
 
@@ -35,6 +35,7 @@ Ask for something that takes a while ("find me a ticket to Lisbon") and Consciou
 - **It keeps you posted.** It can text you a first good find before it is done, and the result comes as a normal message. Ask "how is it going?" and Conscious knows how far it got. The phone app shows each running job under the header.
 - **Change of plan.** "Only morning flights" while it runs is passed on to the job, no need to start over.
 - **Restarts.** Jobs are saved in `.conscious/background.json`; one a restart or a deploy cut off starts over once.
+- **Agents that stay.** Each kind of job has an agent: the first flight search makes a `flights` agent, and when the job is done it is kept, asleep, with a notebook of what it learned (which sources worked, that you fly from Milan, that you prefer direct). Tell Conscious what you picked ("booked the second one") and it goes into that notebook too. A month later, "a flight to Tokyo" wakes the same agent, which starts from its notes instead of from nothing. An agent is only files: its method (`AGENT.md`), its notebook (`NOTES.md`) and a line per job (`runs.md`, with each job's brief and answer in `runs/`), on the computer in `agents/<name>/`, or in `.conscious/agents/` without one. Nothing runs while it sleeps. Ask "what does the flights agent know?" to see a notebook, and "forget how you book flights" to delete one.
 
 ## A friend, not a coworker
 
@@ -103,7 +104,7 @@ Phone app on http://192.168.1.20:8788
 
 Then run the app (see [`mobile/README.md`](mobile/README.md)) and enter that address and code. `pnpm app` talks as `me`, the same user as `pnpm chat`.
 
-*Start fresh* in the app's ⋯ menu does what `/reset` does: it clears the chat, forgets the memory and drops the reminders, so the next message is a first meeting again. Files on the computer stay.
+*Start fresh* in the app's ⋯ menu does what `/reset` does: it clears the chat, forgets the memory and the agents, and drops the reminders, so the next message is a first meeting again. Files on the computer stay.
 
 To have the app next to WhatsApp and iMessage, set `CONSCIOUS_APP_USERS` to your own number and run `pnpm photon`: the app and your messaging chat are then one conversation. Reminders go to whichever you wrote from last. Each user listed gets an access code the first time; codes are kept in `.conscious/app-codes.json`, and deleting a line there and restarting gives that user a new one.
 
@@ -111,7 +112,7 @@ The app server runs on `CONSCIOUS_APP_PORT` (8788). On your home network the pho
 
 ## Give it a computer
 
-Conscious can have a computer of its own: one [E2B](https://e2b.dev) sandbox per user. Everything it knows about you lives there: its memory (`memory/memory.json`, read into every conversation), the files it keeps for you (`files/`), and the conversation itself (`.conscious/conversation.json`). It also gets a shell and file tools that run there, never on your machine.
+Conscious can have a computer of its own: one [E2B](https://e2b.dev) sandbox per user. Everything it knows about you lives there: its memory (`memory/memory.json`, read into every conversation), its agents and their notebooks (`agents/`), the files it keeps for you (`files/`), and the conversation itself (`.conscious/conversation.json`). It also gets a shell and file tools that run there, never on your machine.
 
 ```bash
 CONSCIOUS_SANDBOX=e2b

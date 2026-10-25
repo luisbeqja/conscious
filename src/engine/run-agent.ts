@@ -20,6 +20,8 @@ export interface AgentRun {
     deadline?: number;
     /** New instructions that arrived during the run, read after each turn. */
     steering?: () => string[];
+    /** Tools that still run past the deadline and the tool budget, like an agent's notebook. */
+    lastWords?: ReadonlySet<string>;
     /** Live progress, for a terminal or a typing indicator. Never stored. */
     onProgress?: (progress: RunProgress) => void;
 }
@@ -74,18 +76,23 @@ export const runAgent = async (run: AgentRun): Promise<AgentRunResult> => {
                     reason: "This acts on the user's behalf and needs their explicit yes, which is not built yet. Tell them what you would do instead.",
                 };
             }
+            // What the agent learned is worth keeping most when the job ran long.
+            if (run.lastWords?.has(toolCall.name)) return undefined;
+            const save = run.lastWords?.size
+                ? ` If you have not saved your notebook, save it now with ${[...run.lastWords].join(" or ")}.`
+                : "";
             if (run.deadline && Date.now() > run.deadline) {
                 status = "budget_exhausted";
                 return {
                     block: true,
-                    reason: "Time is up for this job. Stop using tools and write your final answer with what you have.",
+                    reason: `Time is up for this job. Stop using tools and write your final answer with what you have.${save}`,
                 };
             }
             if (++toolCalls > run.budgets.maxToolCallsPerRun) {
                 status = "budget_exhausted";
                 return {
                     block: true,
-                    reason: "The tool budget for this message is used up. Answer with what you have.",
+                    reason: `The tool budget for this message is used up. Answer with what you have.${save}`,
                 };
             }
             return undefined;
