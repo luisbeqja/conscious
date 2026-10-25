@@ -1,9 +1,12 @@
 import { join } from "node:path";
 import { ChatBook } from "./channels/chats.js";
 import { createTelegramApi, TelegramChannel } from "./channels/telegram.js";
+import { userIdOf } from "./channels/user-id.js";
 import { loadConfig, loadTelegramConfig } from "./config.js";
 import { createConscious } from "./create-conscious.js";
 import { modelSetupProblem } from "./engine/models.js";
+import { inviteCommands } from "./invites/commands.js";
+import { Invites } from "./invites/invites.js";
 import { connectServers } from "./mcp/servers.js";
 import { createTranscriber } from "./media/transcribe.js";
 
@@ -23,10 +26,31 @@ const { orchestrator, scheduler, background, sandboxes, startVault } = createCon
     (userId, text) => notify(userId, text),
     mcp.capabilities,
 );
-const channel = new TelegramChannel(createTelegramApi(telegram.botToken), orchestrator, telegram.users, {
-    chats: new ChatBook(join(config.dataDir, "chats.json")),
-    transcriber: config.transcription && createTranscriber(config.transcription),
-});
+// Friends the users on CONSCIOUS_TELEGRAM_USERS invite with /invite.
+const invites = new Invites(join(config.dataDir, "invites.json"));
+const owners = new Set([...telegram.users.values()].map(userIdOf));
+const channel: TelegramChannel = new TelegramChannel(
+    createTelegramApi(telegram.botToken),
+    orchestrator,
+    telegram.users,
+    {
+        chats: new ChatBook(join(config.dataDir, "chats.json")),
+        transcriber: config.transcription && createTranscriber(config.transcription),
+        invites,
+        command: inviteCommands({
+            invites,
+            isOwner: (userId) => owners.has(userId),
+            telegramLink: (code) => channel.link(code),
+        }),
+        onJoined: (guest) => {
+            channel
+                .notify(guest.invitedBy, `${guest.userId} just joined Conscious on Telegram ✅`)
+                .catch((error: unknown) => {
+                    console.error(`[telegram] could not tell ${guest.invitedBy} that ${guest.userId} joined`, error);
+                });
+        },
+    },
+);
 notify = channel.notify;
 const vaultServer = startVault();
 scheduler.start();

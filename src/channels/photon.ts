@@ -1,6 +1,7 @@
 import type { ContentInput, Message, Space } from "@spectrum-ts/core";
 import { attachment } from "@spectrum-ts/core";
 import { whatsappTemplate } from "@spectrum-ts/whatsapp-business";
+import type { Command } from "../invites/commands.js";
 import type { IncomingFile, OutgoingFile } from "../media/incoming.js";
 import type { Transcriber } from "../media/transcribe.js";
 import { bubblePauseMs, bubbles } from "./bubbles.js";
@@ -47,6 +48,10 @@ export interface PhotonChannelOptions {
     template?: WhatsAppTemplate;
     /** Turns voice notes into text. Without it, Conscious says it cannot listen yet. */
     transcriber?: Transcriber;
+    /** Friends invited with /invite, answered like the senders on the allow list. */
+    guests?: { allows(userId: string): boolean };
+    /** The owner's commands, answered here without the agent. */
+    command?: Command;
     /** Shows "typing…" on WhatsApp for a message id. Spectrum's own indicator only reaches iMessage. */
     showWhatsAppTyping?: (messageId: string) => Promise<void>;
     now?: () => Date;
@@ -99,7 +104,7 @@ export class PhotonChannel {
     async handle(space: Space, message: Message): Promise<void> {
         const userId = message.sender?.id ? userIdOf(message.sender.id) : undefined;
         if (message.direction !== "inbound" || !userId) return;
-        if (!this.allowedUsers.has(userId)) {
+        if (!this.allowedUsers.has(userId) && !this.options.guests?.allows(userId)) {
             // Without this line, a typo in CONSCIOUS_ALLOWED_USERS looks like Conscious being down.
             console.warn(`[photon] ignored ${message.platform} message from ${userId}: not in CONSCIOUS_ALLOWED_USERS`);
             return;
@@ -123,6 +128,8 @@ export class PhotonChannel {
             return;
         }
         const { text, files } = incoming;
+        const reply = files.length ? undefined : this.options.command?.(userId, text);
+        if (reply !== undefined) return this.sendBubbles(space, reply);
         // Each message goes out the moment the agent sends it, as short bubbles.
         const say = (reply: string) => this.sendBubbles(space, reply);
         const react = async (emoji: string) => (await message.react(emoji)) !== undefined;

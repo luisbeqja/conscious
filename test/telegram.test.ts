@@ -9,6 +9,8 @@ import {
     type TelegramMessage,
     telegramHtml,
 } from "../src/channels/telegram.js";
+import { inviteCommands } from "../src/invites/commands.js";
+import { Invites } from "../src/invites/invites.js";
 import type { IncomingFile, OutgoingFile } from "../src/media/incoming.js";
 
 type Handler = (params: Record<string, unknown>) => unknown;
@@ -254,6 +256,102 @@ describe("TelegramChannel", () => {
 
         expect(calls.map((call) => call.method)).toEqual(["getMe"]);
         error.mockRestore();
+    });
+});
+
+describe("TelegramChannel invites", () => {
+    const friend = (text: string | undefined, extra: Partial<TelegramMessage> = {}) =>
+        message(text, { from: { id: 222, username: "marco" }, chat: { id: 222, type: "private" }, ...extra });
+    const shared = (phone: string, userId = 222) =>
+        friend(undefined, { contact: { phone_number: phone, user_id: userId } });
+
+    const setup = () => {
+        const invites = new Invites();
+        const { code } = invites.create("+39444", "+39333");
+        const { api, of, sent } = fakeApi();
+        const orchestrator = echo();
+        const joined: string[] = [];
+        const channel = new TelegramChannel(api, orchestrator, users, {
+            invites,
+            onJoined: (guest) => joined.push(`${guest.userId} by ${guest.invitedBy}`),
+        });
+        return { invites, code, api, of, sent, orchestrator, joined, channel };
+    };
+
+    it("lets a friend in once they share the number the invite was made for, then says hello", async () => {
+        const { code, of, sent, orchestrator, joined, channel } = setup();
+
+        await channel.handle(friend(`/start ${code}`));
+        expect(of("sendMessage")[0]?.reply_markup).toMatchObject({
+            keyboard: [[{ request_contact: true }]],
+        });
+        await channel.handle(shared("39444"));
+        await channel.handle(friend("what can you do?"));
+
+        expect(sent()).toEqual([
+            expect.stringContaining("You've been invited to Conscious"),
+            "You're in ✅",
+            "you said: Hi!",
+            "you said: what can you do?",
+        ]);
+        expect(of("sendMessage")[1]?.reply_markup).toEqual({ remove_keyboard: true });
+        expect(orchestrator.calls.map(([userId, text]) => [userId, text])).toEqual([
+            ["+39444", "Hi!"],
+            ["+39444", "what can you do?"],
+        ]);
+        expect(joined).toEqual(["+39444 by +39333"]);
+    });
+
+    it("refuses another number, a contact passed on from someone else, and a spent link", async () => {
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+        const { invites, code, sent, orchestrator, channel } = setup();
+
+        await channel.handle(friend(`/start ${code}`));
+        await channel.handle(shared("39555"));
+        await channel.handle(shared("39444", 999));
+        await channel.handle(friend("hello?"));
+        await channel.handle(friend("/start inv-notacode"));
+
+        expect(sent().slice(1)).toEqual([
+            "That isn't the number this invite was made for. Ask for an invite for your own number.",
+            "That isn't the number this invite was made for. Ask for an invite for your own number.",
+            "This invite link has expired or was already used. Ask for a new one.",
+        ]);
+        expect(orchestrator.calls).toEqual([]);
+        expect(invites.telegramUser("222")).toBeUndefined();
+        warn.mockRestore();
+    });
+
+    it("answers the owner's /invite with a link to this bot, without the agent", async () => {
+        const invites = new Invites();
+        const { api, calls, sent } = fakeApi({
+            getMe: () => ({ username: "conscious_bot" }),
+            getUpdates: () => {
+                stop.abort();
+                return [];
+            },
+        });
+        const stop = new AbortController();
+        const orchestrator = echo();
+        const log = vi.spyOn(console, "log").mockImplementation(() => {});
+        const channel: TelegramChannel = new TelegramChannel(api, orchestrator, users, {
+            invites,
+            command: inviteCommands({
+                invites,
+                isOwner: (userId) => userId === "+39333",
+                telegramLink: (code) => channel.link(code),
+            }),
+        });
+        await channel.listen(stop.signal);
+
+        await channel.handle(message("/invite +39 444 123 4567"));
+
+        expect(sent()).toContainEqual(
+            expect.stringMatching(/^https:\/\/t\.me\/conscious_bot\?start=inv-[a-z2-9]{10}$/),
+        );
+        expect(orchestrator.calls).toEqual([]);
+        expect(calls.some((call) => call.method === "sendChatAction")).toBe(false);
+        log.mockRestore();
     });
 });
 

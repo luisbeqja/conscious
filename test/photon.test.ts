@@ -180,6 +180,21 @@ describe("PhotonChannel", () => {
         expect(sent).toEqual([]);
     });
 
+    it("answers a friend invited with /invite, and the owner's commands without the agent", async () => {
+        const orchestrator = echo();
+        const channel = new PhotonChannel(orchestrator, new Set(["+39333"]), {
+            guests: { allows: (userId) => userId === "+39444" },
+            command: (_userId, text) => (text.startsWith("/invite") ? "Invite for +39555 ✅" : undefined),
+        });
+        const { space, sent } = fakeSpace("chat-1");
+
+        await channel.handle(space, inbound("m1", "39444", "ciao", "whatsapp_business"));
+        await channel.handle(space, inbound("m2", "+39333", "/invite +39555"));
+
+        expect(orchestrator.calls).toEqual([["+39444", "ciao"]]);
+        expect(sent).toEqual(["you said: ciao", "Invite for +39555 ✅"]);
+    });
+
     it("answers a redelivered message once", async () => {
         const orchestrator = echo();
         const channel = new PhotonChannel(orchestrator, new Set(["+39333"]));
