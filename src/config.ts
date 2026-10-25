@@ -19,6 +19,8 @@ export interface Config {
     dataDir: string;
     vault: VaultConfig;
     model: ModelConfig;
+    /** The model that picks emoji reactions, apart from the answers. Unset: nothing reacts. */
+    reactions?: ModelConfig;
     budgets: Budgets;
     /** How often Conscious may write first. */
     pacing: PacingConfig;
@@ -106,17 +108,23 @@ const checkKeys = (env: NodeJS.ProcessEnv): void => {
 export const loadConfig = (env: NodeJS.ProcessEnv = process.env): Config => {
     checkKeys(env);
     const dataDir = env.CONSCIOUS_DATA_DIR || join(process.cwd(), ".conscious");
+    const model: ModelConfig = {
+        provider: env.CONSCIOUS_MODEL_PROVIDER || "anthropic",
+        id: env.CONSCIOUS_MODEL || "claude-sonnet-5",
+        baseUrl: env.CONSCIOUS_MODEL_BASE_URL || undefined,
+        apiKey: env.CONSCIOUS_MODEL_API_KEY || undefined,
+    };
     return {
         timezone: env.CONSCIOUS_TIMEZONE || Intl.DateTimeFormat().resolvedOptions().timeZone,
         pluginsDir: env.CONSCIOUS_PLUGINS_DIR || join(process.cwd(), "plugins"),
         dataDir,
         vault: loadVaultConfig(env),
-        model: {
-            provider: env.CONSCIOUS_MODEL_PROVIDER || "anthropic",
-            id: env.CONSCIOUS_MODEL || "claude-sonnet-5",
-            baseUrl: env.CONSCIOUS_MODEL_BASE_URL || undefined,
-            apiKey: env.CONSCIOUS_MODEL_API_KEY || undefined,
-        },
+        model,
+        // Same provider; a smaller model of it is quicker, and "none" turns reactions off.
+        reactions:
+            env.CONSCIOUS_REACTIONS_MODEL === "none"
+                ? undefined
+                : { ...model, id: env.CONSCIOUS_REACTIONS_MODEL || model.id },
         budgets: { maxTurnsPerRun: 20, maxToolCallsPerRun: 40, maxBackgroundAgents: 3 },
         pacing: {
             quietHours: parseQuietHours(env.CONSCIOUS_QUIET_HOURS || "22-8"),

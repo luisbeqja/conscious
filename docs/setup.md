@@ -311,6 +311,7 @@ src/
 ├─ config.ts             environment → typed config
 ├─ engine/
 │  ├─ orchestrator.ts    the agent you talk to: one message at a time per user
+│  ├─ reactions.ts       the emoji on a message: a small model of its own decides, beside the answer
 │  ├─ run-agent.ts       one pi-agent-core loop + policy (budgets, commits held)
 │  ├─ tool-adapter.ts    capability tool → pi tool
 │  └─ models.ts          the model you chose: any pi-ai provider, or a local server
@@ -324,7 +325,6 @@ src/
 │  ├─ quiet/             give the user space: pause what Conscious would send on its own
 │  ├─ chat/              chat_send_message: the only way any agent's words reach the user
 │  ├─ background/
-│  ├─ reactions/         an emoji on the user's message, before an answer or instead of one
 │  ├─ computer/          shell and files in the user's sandbox
 │  ├─ skills/            the agent saves its own skills, with undo
 │  ├─ italy/             official Italian pages: search, read, with their source address

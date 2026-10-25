@@ -73,13 +73,11 @@ describe("Orchestrator", () => {
         expect((await store.load("me")).filter((message) => message.role === "user")).toHaveLength(2);
     });
 
-    it("reacts to the message, and a reaction alone is a whole answer", async () => {
+    it("lets the reaction model put an emoji on the message, and a reaction alone is a whole answer", async () => {
         const { faux, runtime } = scriptedModel();
-        faux.setResponses([
-            ...sends("Anytime!"),
-            fauxAssistantMessage(fauxToolCall("reactions_react_message", { emoji: "❤️" }), { stopReason: "toolUse" }),
-            fauxAssistantMessage([]),
-        ]);
+        // The agent answers the first message and ends the second without a word.
+        faux.setResponses([...sends("Anytime!"), fauxAssistantMessage([])]);
+        const seen: string[] = [];
         const orchestrator = new Orchestrator({
             registry: createRegistry(),
             store: new InMemoryConversationStore(),
@@ -92,6 +90,12 @@ describe("Orchestrator", () => {
                 async () => {},
                 1,
             ),
+            reactor: {
+                choose: async (recentChat) => {
+                    seen.push(recentChat);
+                    return recentChat.endsWith("thanks again") ? "❤️" : undefined;
+                },
+            },
         });
         const reactions: string[] = [];
         const react = async (emoji: string) => {
@@ -100,9 +104,13 @@ describe("Orchestrator", () => {
         };
 
         expect(await orchestrator.send("me", "thanks", { react })).toEqual(["Anytime!"]);
-        // A reaction alone is the whole answer: nothing is sent, and the agent is not asked for more.
+        // The reaction landed, so ending without a word is the answer, and the agent is not asked for more.
         expect(await orchestrator.send("me", "thanks again", { react })).toEqual([]);
         expect(reactions).toEqual(["❤️"]);
+        // The reaction model reads the chat so far, ending with the message it reacts to.
+        expect(seen.at(-1)).toBe("User: thanks\nYou: Anytime!\nUser: thanks again");
+        // The agent itself has no reaction tool any more.
+        expect((await createRegistry().available("me")).map((capability) => capability.id)).not.toContain("reactions");
     });
 
     it("keeps what the agent writes outside a message to itself, and reminds it once when it sent nothing", async () => {
