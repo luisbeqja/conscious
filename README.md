@@ -130,6 +130,15 @@ No secrets go in: the sandbox starts with an empty environment, and account toke
 
 To check a setup before you text it, run `pnpm computer:check`. It starts a throwaway computer with your `.env`, checks that internet matches the setting, lists the programs skills rely on and the skills that show up, then deletes it.
 
+## Give it a browser
+
+With `CONSCIOUS_BROWSER=e2b` (and a computer), Conscious gets a real Chrome of its own, on a second E2B computer per user: an E2B desktop. It opens pages, clicks and types, scrolls, takes screenshots it can look at, finds the pictures on a page, and saves pictures and files (behind a login too) to `files/browser/` on the user's computer, from where it can send them in the chat.
+
+- **You sign in, never Conscious.** When a job needs a site you use (an airline, a shop, GitHub), Conscious sends a private link that shows its browser on that site's sign-in page. You sign in on your phone, 2FA included, and the browser stays signed in for next time. It never sees or types a password, and refuses to type into password and card fields.
+- **It stops before the last click.** A click that pays, buys, books, orders, sends, posts, deletes, transfers or signs up (in English, Italian, Spanish, Portuguese, French and German), or that submits a form with card details, is refused like any other commit until approvals in the chat exist. Conscious gets everything ready and tells you what is left to click.
+- **Private by construction.** The browser computer's addresses open only with a token Conscious holds, so nobody else can drive or watch it. The sign-in link goes through Conscious's own server (the Vault's), lasts 15 minutes, and a new one closes the old.
+- **Cost.** The desktop computer is bigger than the one for files (E2B gives it 8 CPUs and 8 GB, about $0.53 an hour while it runs). It pauses after `CONSCIOUS_BROWSER_IDLE_MINUTES` (5) and E2B bills nothing while it is paused; its tabs and sign-ins survive.
+
 ## Skills
 
 Skills are instructions for jobs that come up often, in the [AgentSkills](https://agentskills.io) format. They live on the user's computer, in `skills/`: the repo's [`skills/`](skills/) folder is copied in when a computer starts, next to the skills the agent wrote for that user. The system prompt lists the ones that can run there, and the agent reads a skill's `SKILL.md` before it uses it.

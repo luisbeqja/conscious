@@ -9,7 +9,7 @@ Conscious is a personal assistant for daily life, not work, and it should feel l
 3. **Agents rest between jobs.** Each kind of job (flights, gift ideas) has an agent that is kept when its job ends: its method, a notebook of what it learned, and a log of its jobs. The next job of that kind wakes it with all three. It is files, not a process.
 4. **Reminders are cron jobs.** One-off or recurring, read in your timezone, sent to you as a normal message. A scheduled check is a reminder with a job: when it fires, an agent does the job and messages you only if it found something. Both are saved in `.conscious/reminders.json` and re-armed at start.
 5. **Connectors bring in your life.** A connector is a link to one of your accounts. A pack that needs one is invisible until you connect it. Tokens never reach the model.
-6. **A computer for what no API covers.** A disposable sandbox with a browser. Not built yet.
+6. **A computer for what no API covers.** Each user has a sandbox for files and a shell, and a second one with a real Chrome for sites with no API, kept signed in to the sites the user signed in to themselves.
 7. **Memory is not the transcript.** What Conscious knows about you and the people in your life is kept apart from the conversation, read into every prompt, and yours to see and delete.
 8. **Speaking first is rationed in code.** What Conscious sends on its own waits out the night and stops at a daily limit. A friend who texts too much is worse than one who never does.
 9. **Safety is code, not prompt.** Every tool is `read`, `draft` or `commit`. A `commit` (send, book, pay, delete) never runs without your explicit yes. Until approvals exist, commits are blocked outright.
@@ -22,6 +22,7 @@ Conscious is a personal assistant for daily life, not work, and it should feel l
 | Capability packs | Tools named `<id>_<verb>_<noun>` plus a `SKILL.md` on how to use them. |
 | Effects | Every tool is `read`, `draft` or `commit`. A commit will become a yes/no the user answers. |
 | Background agents | Sub-agents with a written brief and a harness designed for the job (instructions, packs, effort, parallel parts). They outlive the turn, can text an update, take a change of plan, and report to the user directly. |
+| Browser | A Chrome per user on an E2B desktop, driven over CDP with Playwright. The user signs in through a live view; commits are refused. |
 | Agents | One per kind of background job, kept between jobs as a folder: method, notebook, log. Woken by name. |
 | Budgets | Turns and tool calls are capped per message. |
 | Conversations | One conversation per user, no threads. |
@@ -61,6 +62,16 @@ A background job usually comes back in another form: another flight, another pre
 - **The user's reaction reaches it.** "Booked the second one" arrives in the chat after the job ended, so the orchestrator passes it with `agents_add_note`; it is a dated line in the notebook that the agent sees on its next job.
 - **One job at a time.** A second job for a busy agent is refused, so two runs never rewrite one notebook.
 - **Yours to see and delete.** `agents_read_notes` shows what an agent knows, `agents_forget_agent` deletes one, and Start fresh deletes them all. Sub-agents never get these tools.
+
+## The browser
+
+`CONSCIOUS_BROWSER=e2b` gives each user a Chrome on an E2B desktop computer of its own (`src/browser/`), next to their files computer. It is found again by a hash of the user's id, pauses when idle, and resumes with its tabs and cookies.
+
+- **Driven from the host.** Conscious runs Playwright and connects to Chrome over CDP (`connectOverCDP`). The computer is created with private URLs (`allowPublicTraffic: false`): each request needs the traffic token only the host holds. Chrome refuses control from any host but localhost, so the computer's network masks the `Host` header as `localhost:<port>`.
+- **Pages as trees.** The agent reads a page as Playwright's AI snapshot (`ariaSnapshot({ mode: "ai" })`), elements with refs like `[ref=e12]`, in parts of 10,000 characters, and clicks or types by ref (`getByRef`). Every step returns the page again.
+- **Pictures.** A screenshot is a JPEG the model sees (tools can now return images, dropped for models that cannot read them) and a file in `files/browser/` on the user's computer. `browser_find_images` lists a page's pictures, the one it shares first; `browser_save_file` fetches with the browser's cookies.
+- **Sign-in through a live view.** `browser_ask_user_to_sign_in` opens the site's sign-in page and starts the desktop's VNC stream with a fresh password. The link is a code on the Vault's server (`/browser/<code>/…`) that relays noVNC's page and socket to the computer, adding the token. It lasts 15 minutes, and a new one for the user closes the old. With the app and the Vault on one port, the app's server routes sockets by path: `/app/socket` to the app, the rest to the live views.
+- **Commits in a browser.** Before a click, the tool reads the element: a button whose label pays, buys, books, orders, sends, posts, deletes, transfers or signs up, in six languages, or a submit in a form with card fields, is refused; plain links are not. Typing into password and card fields is refused; Enter and Space are not keys the agent can press. A heuristic, written down as such, until approvals exist.
 
 ## Channels
 
@@ -140,6 +151,5 @@ Secrets never pass through the chat. When a plugin needs an account you have not
 3. **More sign-in on the Vault page.** Open banking (EU PSD2 aggregators).
 4. **An egress proxy for the computer**, so skills can reach only the hosts the user approved, with the Vault adding tokens on the way out instead of the computer holding them.
 5. **Memory, better.** Today it is `memory/MEMORY.md` in the sandbox, written by the agent and read into every prompt. Next: search over older notes when the index outgrows the prompt.
-6. **A browser in the sandbox** for booking, forms and price checks, with internet scoped so reads and commits stay apart.
-7. **Tracing** with Langfuse, one trace per message, sub-agents as child agents.
-8. **A stronger plugin sandbox:** run plugin calls in a container or microVM with no network, for installs with many users.
+6. **Tracing** with Langfuse, one trace per message, sub-agents as child agents.
+7. **A stronger plugin sandbox:** run plugin calls in a container or microVM with no network, for installs with many users.

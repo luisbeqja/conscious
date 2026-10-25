@@ -16,14 +16,20 @@ const mcp = await connectServers(config.mcpServers);
 
 // The channel needs the orchestrator and the orchestrator's notifications need the channel.
 let notify: (userId: string, text: string) => Promise<void> = async () => {};
-const { orchestrator, scheduler, background, sandboxes, vaultPage, startVault } = createConscious(
+const { orchestrator, scheduler, background, sandboxes, vaultPage, vaultUpgrade, startVault } = createConscious(
     config,
     (userId, text) => notify(userId, text),
     mcp.capabilities,
 );
 // On one port (a host that gives the service a single address), the app's server serves the Vault too.
 const onePort = app.port === config.vault.port;
-const { channel, server } = startAppChannel(orchestrator, app, config.dataDir, onePort ? vaultPage : undefined);
+const { channel, server } = startAppChannel(
+    orchestrator,
+    app,
+    config.dataDir,
+    onePort ? vaultPage : undefined,
+    onePort ? vaultUpgrade : undefined,
+);
 notify = channel.notify;
 const vaultServer = onePort ? undefined : startVault();
 scheduler.start();

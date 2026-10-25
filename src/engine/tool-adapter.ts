@@ -15,6 +15,13 @@ export const adaptTool = (tool: RegisteredTool, context: ToolContext): AgentTool
         if (text.length > MAX_RESULT_CHARS) {
             throw new Error(`Result too large (${text.length} characters). Ask for less.`);
         }
-        return { content: [{ type: "text" as const, text }], details: {} };
+        const images = context.seesImages ? (output.images ?? []) : [];
+        return {
+            content: [
+                { type: "text" as const, text },
+                ...images.map((image) => ({ type: "image" as const, data: image.data, mimeType: image.mimeType })),
+            ],
+            details: {},
+        };
     },
 });

@@ -186,6 +186,7 @@ export class Orchestrator {
             recentChat: renderRecentChat(history, text),
             react,
             sendFile: options.sendFile,
+            seesImages: runtime.model.input.includes("image"),
         });
         const files = options.files?.length
             ? await prepareFiles(options.files, {
@@ -393,6 +394,7 @@ export class Orchestrator {
             scheduler,
             task: limits.task,
             notebook: limits.notebook,
+            seesImages: runtime.model.input.includes("image"),
         });
         const result = await runAgent({
             runtime,

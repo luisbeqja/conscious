@@ -25,6 +25,8 @@ export interface ToolContext {
     react?: (emoji: string) => Promise<boolean>;
     /** Sends a file into the user's chat. Only while answering a message on a channel that can. */
     sendFile?: (file: OutgoingFile) => Promise<void>;
+    /** The model reads images, so a tool may show it one (a screenshot). */
+    seesImages?: boolean;
     signal?: AbortSignal;
 }
 
@@ -32,6 +34,8 @@ export interface ToolOutput {
     data: unknown;
     /** A rule that applies to this result only, read by the model beside the data. */
     guidance?: string;
+    /** Pictures for the model to look at, base64. Dropped when the model cannot read images. */
+    images?: { data: string; mimeType: string }[];
 }
 
 export interface RegisteredTool<TParams extends TSchema = TSchema> {

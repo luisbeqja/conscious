@@ -3,7 +3,12 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type RequestListener, type Server, type ServerResponse } from "node:http";
 import { networkInterfaces } from "node:os";
 import { dirname, join } from "node:path";
+import type { Duplex } from "node:stream";
 import { type WebSocket, WebSocketServer } from "ws";
+
+/** Takes a socket upgrade the app does not handle; false when nothing did, so it is refused. */
+export type UpgradeListener = (request: IncomingMessage, socket: Duplex, head: Buffer) => boolean;
+
 import type { BackgroundTask } from "../agents/background-agents.js";
 import type { AppConfig } from "../config.js";
 import type { SendOptions } from "../engine/orchestrator.js";
@@ -126,13 +131,21 @@ export class AppChannel {
 
     /**
      * The app's HTTP server: the socket at `/app/socket`, files at `/app/files/<id>`. Other paths
-     * go to `others`, when the app shares its port (the Vault, on a host with one address).
+     * go to `others`, when the app shares its port (the Vault, on a host with one address), and
+     * other sockets to `othersUpgrade` (the live views of the users' browsers).
      */
-    createServer(others?: RequestListener): Server {
+    createServer(others?: RequestListener, othersUpgrade?: UpgradeListener): Server {
         const server = createServer((request, response) =>
             others && !request.url?.startsWith("/app/") ? others(request, response) : this.serveHttp(request, response),
         );
-        const sockets = new WebSocketServer({ server, path: "/app/socket", maxPayload: MAX_PAYLOAD_BYTES });
+        const sockets = new WebSocketServer({ noServer: true, maxPayload: MAX_PAYLOAD_BYTES });
+        server.on("upgrade", (request, socket, head) => {
+            if (request.url?.split("?")[0] === "/app/socket") {
+                sockets.handleUpgrade(request, socket, head, (ws) => sockets.emit("connection", ws, request));
+            } else if (!othersUpgrade?.(request, socket, head)) {
+                socket.destroy();
+            }
+        });
         sockets.on("connection", (socket) => this.accept(socket));
         const alive = new WeakSet<WebSocket>();
         sockets.on("connection", (socket) => {
@@ -348,11 +361,12 @@ export const startAppChannel = (
     app: AppConfig,
     dataDir: string,
     others?: RequestListener,
+    othersUpgrade?: UpgradeListener,
 ) => {
     const codesFile = join(dataDir, "app-codes.json");
     const { codes, created } = loadOrCreateAppCodes(codesFile, app.users);
     const channel = new AppChannel(orchestrator, codes, new AppLog(join(dataDir, "app")));
-    const server = channel.createServer(others);
+    const server = channel.createServer(others, othersUpgrade);
     server.listen(app.port);
     const addresses = localAddresses(app.port);
     console.log(`Phone app on ${addresses[0] ?? `http://localhost:${app.port}`}`);

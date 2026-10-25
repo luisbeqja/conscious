@@ -34,7 +34,7 @@ const mcp = await connectServers(config.mcpServers);
 let channel: PhotonChannel | undefined;
 let appChannel: AppChannel | undefined;
 const chats = new ChatBook(join(config.dataDir, "chats.json"));
-const { orchestrator, scheduler, background, sandboxes, vaultPage, startVault } = createConscious(
+const { orchestrator, scheduler, background, sandboxes, vaultPage, vaultUpgrade, startVault } = createConscious(
     config,
     // Conscious speaks first where the user last wrote: the app or their messaging chat.
     (userId, text) => {
@@ -47,7 +47,15 @@ const { orchestrator, scheduler, background, sandboxes, vaultPage, startVault } 
 );
 // On one port (a host that gives the service a single address), the app's server serves the Vault too.
 const onePort = app?.port === config.vault.port;
-const appServer = app && startAppChannel(orchestrator, app, config.dataDir, onePort ? vaultPage : undefined);
+const appServer =
+    app &&
+    startAppChannel(
+        orchestrator,
+        app,
+        config.dataDir,
+        onePort ? vaultPage : undefined,
+        onePort ? vaultUpgrade : undefined,
+    );
 appChannel = appServer?.channel;
 // Spectrum is connected below; a chat is only reopened when a reminder fires, by which time it is.
 let spectrum: Awaited<ReturnType<typeof Spectrum>> | undefined;

@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import type { E2BBrowserOptions } from "./browser/browser.js";
 import type { ComposioConfig } from "./composio/client.js";
 import type { ModelConfig } from "./engine/models.js";
 import type { GoogleClient } from "./google/oauth.js";
@@ -23,6 +24,8 @@ export interface Config {
     pacing: PacingConfig;
     /** Unset means no computer: memory and the conversation live in this process only. */
     sandbox?: E2BOptions;
+    /** A real browser per user, on an E2B desktop computer. Needs `sandbox` for the files it saves. */
+    browser?: E2BBrowserOptions;
     /** MCP servers from the repo's catalog that this install connects to. */
     mcpServers: McpServerEntry[];
     /** Where web searches go. */
@@ -109,6 +112,7 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): Config => {
             maxUnpromptedPerDay: Number(env.CONSCIOUS_MAX_UNPROMPTED || 3),
         },
         sandbox: loadSandboxConfig(env),
+        browser: loadBrowserConfig(env),
         mcpServers: selectServers(readCatalog(), env.CONSCIOUS_MCP_SERVERS),
         search: loadSearchConfig(env),
         google:
@@ -239,6 +243,22 @@ const loadSandboxConfig = (env: NodeJS.ProcessEnv): E2BOptions | undefined => {
         template: env.CONSCIOUS_SANDBOX_TEMPLATE || "base",
         idleMs: Number(env.CONSCIOUS_SANDBOX_IDLE_MINUTES || 10) * 60_000,
         internet: env.CONSCIOUS_SANDBOX_INTERNET === "true",
+    };
+};
+
+const loadBrowserConfig = (env: NodeJS.ProcessEnv): E2BBrowserOptions | undefined => {
+    const backend = env.CONSCIOUS_BROWSER || "none";
+    if (backend === "none") return undefined;
+    if (backend !== "e2b") throw new Error(`CONSCIOUS_BROWSER must be "e2b" or "none", not "${backend}"`);
+    // Screenshots and saved files land on the user's computer.
+    if ((env.CONSCIOUS_SANDBOX || "none") !== "e2b")
+        throw new Error("CONSCIOUS_BROWSER=e2b needs CONSCIOUS_SANDBOX=e2b");
+    return {
+        apiKey: required(env, "E2B_API_KEY"),
+        domain: env.E2B_DOMAIN || undefined,
+        proxy: env.HTTPS_PROXY || env.https_proxy || undefined,
+        template: env.CONSCIOUS_BROWSER_TEMPLATE || "desktop",
+        idleMs: Number(env.CONSCIOUS_BROWSER_IDLE_MINUTES || 5) * 60_000,
     };
 };
 
