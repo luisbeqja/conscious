@@ -111,6 +111,8 @@ def validate_skill(skill_path):
         "platforms",
         "required_environment_variables",
         "required_credential_files",
+        "author",
+        "authors",
     }
 
     unexpected_keys = set(frontmatter.keys()) - allowed_properties

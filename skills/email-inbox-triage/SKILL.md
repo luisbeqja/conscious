@@ -2,6 +2,7 @@
 name: email-inbox-triage
 description: "Triage an inbox: prioritize threads, draft replies safely."
 version: 0.2.0
+author: Ben Barclay (benbarclay), Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
 metadata:

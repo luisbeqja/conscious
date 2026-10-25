@@ -1,3 +1,9 @@
 {
+    "source": {
+        "repo": "https://github.com/openclaw/openclaw",
+        "path": "skills/weather",
+        "commit": "c5650f3a5e59d6523c913a8ebfff2b787cf58435",
+        "license": "MIT"
+    },
     "internet": true
 }

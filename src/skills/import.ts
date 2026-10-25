@@ -1,11 +1,11 @@
 import { execFileSync } from "node:child_process";
-import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SIDECAR } from "./library.js";
-import { parseSkillFile } from "./skill-file.js";
+import { parseSkillFile, type SkillSidecar } from "./skill-file.js";
 
-/** Licenses that let us copy a skill into an MIT project. */
+/** Licenses that let us copy a skill into an MIT project, as long as the license travels with it. */
 const LICENSES: ReadonlyArray<{ id: string; test: RegExp }> = [
     { id: "MIT", test: /Permission is hereby granted, free of charge/ },
     { id: "Apache-2.0", test: /Apache License,?\s+Version 2\.0/ },
@@ -23,6 +23,8 @@ export interface ImportRequest {
     commit: string;
     /** The repo's `skills/` folder. */
     skillsDir: string;
+    /** Where copies of upstream licenses are kept, one file per project. */
+    licensesDir: string;
     name?: string;
     internet?: boolean;
     /** Replace a skill that is already there, for a bump to a newer commit. */
@@ -31,7 +33,20 @@ export interface ImportRequest {
 
 const git = (cwd: string, ...args: string[]) => execFileSync("git", args, { cwd, stdio: "pipe" }).toString();
 
-/** Copies one skill folder from another project at a pinned commit. */
+const LICENSE_FILE = /^licen[cs]e(\.md|\.txt)?$/i;
+
+/** `https://github.com/NousResearch/hermes-agent` → `nousresearch-hermes-agent`, the name of its file in `licenses/`. */
+export const repoSlug = (repo: string): string =>
+    repo
+        .replace(/\.git$/, "")
+        .split(/[/:]/)
+        .filter(Boolean)
+        .slice(-2)
+        .join("-")
+        .toLowerCase()
+        .replace(/[^a-z0-9-]/g, "-");
+
+/** Copies one skill folder from another project at a pinned commit, and records where it came from. */
 export const importSkill = (request: ImportRequest): { name: string; license: string } => {
     if (!/^[0-9a-f]{40}$/.test(request.commit)) throw new Error("--commit must be a full 40-character commit SHA");
     const checkout = mkdtempSync(join(tmpdir(), "conscious-import-"));
@@ -49,7 +64,7 @@ export const importSkill = (request: ImportRequest): { name: string; license: st
         if (!info) throw new Error(`${request.path}/SKILL.md has no valid name and description`);
         const name = request.name ?? info.name;
 
-        const repoLicenseFile = readdirSync(checkout).find((file) => /^licen[cs]e(\.md|\.txt)?$/i.test(file));
+        const repoLicenseFile = readdirSync(checkout).find((file) => LICENSE_FILE.test(file));
         const repoLicense = repoLicenseFile ? readFileSync(join(checkout, repoLicenseFile), "utf8") : "";
         const declared = /^license:\s*["']?([\w.-]+)/m.exec(readFileSync(skillFile, "utf8"))?.[1];
         const license = declared ?? detectLicense(repoLicense);
@@ -58,6 +73,9 @@ export const importSkill = (request: ImportRequest): { name: string; license: st
                 `Cannot copy ${request.path}: its license (${license ?? "none found"}) is not MIT or Apache-2.0`,
             );
         }
+        if (!repoLicense && !readdirSync(source).some((file) => LICENSE_FILE.test(file))) {
+            throw new Error(`Cannot copy ${request.path}: there is no license text to keep with it`);
+        }
 
         const target = join(request.skillsDir, name);
         if (existsSync(target)) {
@@ -65,7 +83,15 @@ export const importSkill = (request: ImportRequest): { name: string; license: st
             rmSync(target, { recursive: true });
         }
         cpSync(source, target, { recursive: true });
-        if (request.internet) writeFileSync(join(target, SIDECAR), `${JSON.stringify({ internet: true }, null, 4)}\n`);
+        const sidecar: SkillSidecar = {
+            source: { repo: request.repo, path: request.path, commit: request.commit, license },
+            ...(request.internet ? { internet: true } : {}),
+        };
+        writeFileSync(join(target, SIDECAR), `${JSON.stringify(sidecar, null, 4)}\n`);
+        if (repoLicense) {
+            mkdirSync(request.licensesDir, { recursive: true });
+            writeFileSync(join(request.licensesDir, `${repoSlug(request.repo)}.txt`), repoLicense);
+        }
         return { name, license };
     } finally {
         rmSync(checkout, { recursive: true, force: true });

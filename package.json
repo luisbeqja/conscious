@@ -5,6 +5,14 @@
   "license": "MIT",
   "type": "module",
   "description": "Conscious: a personal life assistant you text on iMessage and WhatsApp",
+  "homepage": "https://github.com/luisbeqja/conscious#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/luisbeqja/conscious.git"
+  },
+  "bugs": {
+    "url": "https://github.com/luisbeqja/conscious/issues"
+  },
   "engines": {
     "node": ">=22.19.0"
   },

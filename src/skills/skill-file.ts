@@ -2,6 +2,8 @@ import { parse } from "yaml";
 
 /** `conscious.json` next to a skill's `SKILL.md`: what Conscious knows that the skill itself does not say. */
 export interface SkillSidecar {
+    /** The project a copied skill came from. Its license is in `licenses/` and the copy in THIRD_PARTY_NOTICES.md. */
+    source?: { repo: string; path: string; commit: string; license: string };
     /** The skill fetches from the web, so it is hidden on a computer without internet. */
     internet?: boolean;
     /** The skill keeps files, so it is hidden on installs without a computer even when it has no scripts. */

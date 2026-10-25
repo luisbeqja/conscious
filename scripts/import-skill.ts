@@ -27,5 +27,8 @@ const imported = importSkill({
     internet: values.internet,
     replace: values.replace,
     skillsDir: "skills",
+    licensesDir: "licenses",
 });
-console.log(`Copied skills/${imported.name} (${imported.license}). Review it, then commit it.`);
+console.log(
+    `Copied skills/${imported.name} (${imported.license}). Add it to THIRD_PARTY_NOTICES.md, review it, then commit it.`,
+);
