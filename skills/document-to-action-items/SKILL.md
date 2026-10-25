@@ -2,6 +2,7 @@
 name: document-to-action-items
 description: "Life paperwork (contracts, letters, forms): what to do, by when, cited."
 version: 0.1.0
+author: Ben Barclay (benbarclay), Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
 metadata:

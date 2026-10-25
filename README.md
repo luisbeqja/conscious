@@ -51,8 +51,8 @@ Models, Photon, the phone app, the computer, the browser, sign-ins and hosting: 
 
 ## Contribute
 
-To add a plugin for everyone who runs Conscious, open a pull request with its folder in `plugins/` (see [`plugins/README.md`](plugins/README.md)).
+Issues and pull requests are welcome: see [`CONTRIBUTING.md`](CONTRIBUTING.md). To add a plugin for everyone who runs Conscious, open a pull request with its folder in `plugins/` (see [`plugins/README.md`](plugins/README.md)). Report security issues privately, as [`SECURITY.md`](SECURITY.md) says.
 
 ## License
 
-[MIT](LICENSE).
+[MIT](LICENSE). Most bundled skills and the MCP manifests are adapted from [Hermes Agent](https://github.com/NousResearch/hermes-agent) and [OpenClaw](https://github.com/openclaw/openclaw), under their own licenses: see [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).

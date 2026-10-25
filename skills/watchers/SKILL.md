@@ -2,6 +2,7 @@
 name: watchers
 description: Poll RSS feeds and JSON APIs with watermark dedup.
 version: 1.0.0
+author: Hermes Agent
 license: MIT
 platforms: [linux, macos]
 metadata:

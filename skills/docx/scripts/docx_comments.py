@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# MIT License. Part of the Hermes docx skill.
 """List, add, and delete comments in a .docx.
 
 Subcommands:

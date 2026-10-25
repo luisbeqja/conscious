@@ -2,6 +2,7 @@
 name: docx
 description: Create, read, edit, template, and review Word .docx files.
 version: 1.1.0
+author: Nous Research
 license: MIT
 platforms: [linux, macos, windows]
 metadata:

@@ -5,7 +5,7 @@ Every folder here is one skill in the [AgentSkills](https://agentskills.io) form
 ```
 <name>/
 ├─ SKILL.md         frontmatter (name, description, requirements) and the instructions
-├─ conscious.json   optional: whether the skill needs the internet
+├─ conscious.json   optional: where a copied skill came from, whether it needs the internet
 └─ scripts/ …       optional: files the instructions use
 ```
 
@@ -17,4 +17,4 @@ A skill is hidden from the agent when it cannot run on the computer: a program i
 pnpm skills:import https://github.com/<owner>/<repo> skills/<name> --commit <40-char sha> --internet
 ```
 
-It copies the folder exactly as it is at that commit, and checks its license. Only MIT and Apache-2.0 skills are accepted. Pass `--internet` when the skill fetches from the web. To move to a newer upstream version, run it again with the new commit and `--replace`, and review the diff like any other change.
+It copies the folder exactly as it is at that commit and checks its license: only MIT and Apache-2.0 skills are accepted. It records the source, commit and license in `conscious.json` and keeps the project's license in [`licenses/`](../licenses/). Add a row for the skill to [`THIRD_PARTY_NOTICES.md`](../THIRD_PARTY_NOTICES.md); `pnpm test` fails until every copied skill has one. Keep the upstream `author` and license lines when you adapt it. Pass `--internet` when the skill fetches from the web. To move to a newer upstream version, run it again with the new commit and `--replace`, and review the diff like any other change.
