@@ -68,6 +68,9 @@ describe("loadConfig", () => {
             loadTelegramConfig({ TELEGRAM_BOT_TOKEN: "123456:AAH", CONSCIOUS_TELEGRAM_USERS: "@luis" }),
         ).toThrow('numeric Telegram user ids, not "@luis"');
         expect(() => loadTelegramConfig({ TELEGRAM_BOT_TOKEN: "AAH-no-id" })).toThrow("TELEGRAM_BOT_TOKEN");
+        // A token copied with masking dots stops only Telegram, which loads its settings on its own.
+        expect(() => loadConfig({ TELEGRAM_BOT_TOKEN: "123456:AAH•••", CONSCIOUS_MCP_SERVERS: "none" })).not.toThrow();
+        expect(() => loadTelegramConfig({ TELEGRAM_BOT_TOKEN: "123456:AAH•••" })).toThrow("TELEGRAM_BOT_TOKEN");
     });
 
     it("stops at start on a key copied with masking dots", () => {

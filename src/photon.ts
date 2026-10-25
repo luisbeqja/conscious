@@ -8,7 +8,14 @@ import { PhotonChannel } from "./channels/photon.js";
 import { createTelegramApi, TELEGRAM, TelegramChannel } from "./channels/telegram.js";
 import { userIdOf } from "./channels/user-id.js";
 import { WhatsAppTyping } from "./channels/whatsapp-typing.js";
-import { loadAppConfig, loadConfig, loadPhotonConfig, loadTelegramConfig, type PhotonPlatform } from "./config.js";
+import {
+    loadAppConfig,
+    loadConfig,
+    loadPhotonConfig,
+    loadTelegramConfig,
+    type PhotonPlatform,
+    type TelegramConfig,
+} from "./config.js";
 import { createConscious } from "./create-conscious.js";
 import { modelSetupProblem } from "./engine/models.js";
 import { connectServers } from "./mcp/servers.js";
@@ -26,7 +33,13 @@ const photon = loadPhotonConfig();
 const appConfig = loadAppConfig();
 const app = appConfig && { ...appConfig, users: appConfig.users.map(userIdOf) };
 // Optional: a Telegram bot next to them, for users listed in CONSCIOUS_TELEGRAM_USERS.
-const telegram = loadTelegramConfig();
+// A mistake in its settings turns Telegram off, never WhatsApp with it.
+let telegram: TelegramConfig | undefined;
+try {
+    telegram = loadTelegramConfig();
+} catch (error) {
+    console.error(`[telegram] ${error instanceof Error ? error.message : error}; Telegram is off until it is fixed`);
+}
 const problem = await modelSetupProblem(config.model);
 if (problem) {
     console.error(problem);

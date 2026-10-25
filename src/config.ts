@@ -93,6 +93,8 @@ export interface Budgets {
 const checkKeys = (env: NodeJS.ProcessEnv): void => {
     for (const [name, value] of Object.entries(env)) {
         if (!/(_KEY|_SECRET|_TOKEN)$/.test(name) || !value) continue;
+        // Checked with the rest of Telegram's settings, so a bad bot token turns off only Telegram.
+        if (name === "TELEGRAM_BOT_TOKEN") continue;
         const bad = [...value].findIndex((char) => char.charCodeAt(0) > 126);
         if (bad >= 0) {
             throw new Error(`${name} has a "${[...value][bad]}" at position ${bad + 1}; paste the full key again`);
