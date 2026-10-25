@@ -97,6 +97,16 @@ Conscious asks Telegram for its messages (long polling), so like Photon it runs 
 
 With `pnpm photon`, a `TELEGRAM_BOT_TOKEN` adds the bot next to WhatsApp and iMessage. List yourself as `123456789=+393331234567`, your Telegram id and then your number as in `CONSCIOUS_ALLOWED_USERS`, and Telegram, WhatsApp and the app are one conversation; reminders go to whichever you wrote from last. An id alone is a user of its own, `telegram:123456789`. With `pnpm telegram`, `123456789=me` makes you the same user as `pnpm chat`.
 
+### Invite friends
+
+Whoever is listed in the settings (`CONSCIOUS_ALLOWED_USERS`, `CONSCIOUS_TELEGRAM_USERS`, `CONSCIOUS_APP_USERS`) owns the install and can invite people from Telegram or WhatsApp:
+
+- `/invite +39 333 123 4567` answers with a link to the bot. It works once, for 7 days. The number can text Conscious on WhatsApp at once.
+- Your friend taps the link, presses Start, then taps *Share my phone number*. Telegram vouches for the number, so a forwarded link is no use to anyone else. You get a message when they join.
+- `/invites` lists who you invited; `/uninvite +39 333 123 4567` takes their access back. What they saved stays, in case you invite them again.
+
+Each friend is a user of their own, with their own memory and computer, on your keys and accounts: the model, E2B, transcription and Composio are billed to you. Invites are kept in `.conscious/invites.json`.
+
 ## Use the phone app
 
 `mobile/` is Conscious's own app for iPhone and Android: one chat, answers written out as they come, what it is doing while it works ("Searching the web…"), its reactions, photos both ways, and reminders that arrive while you are away. No messaging account or Meta approval is involved: the app talks straight to your Conscious.
@@ -296,6 +306,7 @@ src/
 ├─ channels/photon.ts    Spectrum messages → orchestrator, replies (as short bubbles) and notifications back
 ├─ channels/app.ts       the phone app's WebSocket: streamed replies, reactions, files
 ├─ channels/telegram.ts  the Telegram Bot API, long polled: replies as bubbles, reactions, files, notifications
+├─ invites/              /invite links for friends, and who was invited
 ├─ create-conscious.ts   composition root: which implementation sits behind each seam
 ├─ config.ts             environment → typed config
 ├─ engine/

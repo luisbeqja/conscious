@@ -18,6 +18,8 @@ import {
 } from "./config.js";
 import { createConscious } from "./create-conscious.js";
 import { modelSetupProblem } from "./engine/models.js";
+import { inviteCommands } from "./invites/commands.js";
+import { Invites } from "./invites/invites.js";
 import { connectServers } from "./mcp/servers.js";
 import { createTranscriber } from "./media/transcribe.js";
 
@@ -52,19 +54,31 @@ let channel: PhotonChannel | undefined;
 let appChannel: AppChannel | undefined;
 let telegramChannel: TelegramChannel | undefined;
 const chats = new ChatBook(join(config.dataDir, "chats.json"));
+// Conscious speaks first where the user last wrote: the app, Telegram or their messaging chat.
+const notify = (userId: string, text: string): Promise<void> => {
+    const chat = chats.get(userId);
+    if (appChannel?.hasUser(userId) && appChannel.wroteHereSince(userId, chat?.lastInboundAt)) {
+        return appChannel.notify(userId, text);
+    }
+    if (telegramChannel && chat?.platform === TELEGRAM) return telegramChannel.notify(userId, text);
+    return channel ? channel.notify(userId, text) : Promise.resolve();
+};
 const { orchestrator, scheduler, background, sandboxes, vaultPage, vaultUpgrade, startVault } = createConscious(
     config,
-    // Conscious speaks first where the user last wrote: the app, Telegram or their messaging chat.
-    (userId, text) => {
-        const chat = chats.get(userId);
-        if (appChannel?.hasUser(userId) && appChannel.wroteHereSince(userId, chat?.lastInboundAt)) {
-            return appChannel.notify(userId, text);
-        }
-        if (telegramChannel && chat?.platform === TELEGRAM) return telegramChannel.notify(userId, text);
-        return channel ? channel.notify(userId, text) : Promise.resolve();
-    },
+    notify,
     mcp.capabilities,
 );
+// Friends the owners invite with /invite. The owners are everyone listed in the settings.
+const invites = new Invites(join(config.dataDir, "invites.json"));
+const owners = new Set(
+    [...photon.allowedUsers, ...(telegram?.users.values() ?? []), ...(app?.users ?? [])].map(userIdOf),
+);
+const command = inviteCommands({
+    invites,
+    isOwner: (userId) => owners.has(userId),
+    telegramLink: (code) => telegramChannel?.link(code),
+    whatsapp: photon.platforms.includes("whatsapp"),
+});
 // On one port (a host that gives the service a single address), the app's server serves the Vault too.
 const onePort = app?.port === config.vault.port;
 const appServer =
@@ -87,6 +101,8 @@ channel = new PhotonChannel(orchestrator, photon.allowedUsers, {
     chats,
     template: photon.whatsappTemplate,
     transcriber,
+    guests: invites,
+    command,
     showWhatsAppTyping: whatsappTyping?.show,
     openSpace: async (platform, spaceId) => {
         if (!spectrum) throw new Error("Photon is not connected yet");
@@ -97,7 +113,17 @@ channel = new PhotonChannel(orchestrator, photon.allowedUsers, {
 // A Telegram user listed as your number is you on WhatsApp and in the app too.
 telegramChannel =
     telegram &&
-    new TelegramChannel(createTelegramApi(telegram.botToken), orchestrator, telegram.users, { chats, transcriber });
+    new TelegramChannel(createTelegramApi(telegram.botToken), orchestrator, telegram.users, {
+        chats,
+        transcriber,
+        invites,
+        command,
+        onJoined: (guest) => {
+            notify(guest.invitedBy, `${guest.userId} just joined Conscious on Telegram ✅`).catch((error: unknown) => {
+                console.error(`[telegram] could not tell ${guest.invitedBy} that ${guest.userId} joined`, error);
+            });
+        },
+    });
 const stopTelegram = new AbortController();
 const vaultServer = onePort ? undefined : startVault();
 if (!config.vault.publicUrl.startsWith("https://")) {

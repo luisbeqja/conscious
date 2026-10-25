@@ -1,3 +1,5 @@
+import type { Command } from "../invites/commands.js";
+import type { Guest, Invites } from "../invites/invites.js";
 import type { IncomingFile, OutgoingFile } from "../media/incoming.js";
 import type { Transcriber } from "../media/transcribe.js";
 import { bubblePauseMs, bubbles } from "./bubbles.js";
@@ -21,6 +23,15 @@ const MAX_MESSAGE_CHARS = 4_096;
 /** What sendPhoto takes, up to 10 MB; any other file goes as a document. */
 const PHOTOS = new Set(["image/jpeg", "image/png"]);
 const MAX_PHOTO_BYTES = 10_000_000;
+/** What an invite link sends: /start and the invite's code. */
+const INVITE_START = /^\/start (inv-[a-z0-9]+)$/;
+/** A button that shares the user's own number, which Telegram vouches for. */
+const SHARE_NUMBER = {
+    keyboard: [[{ text: "📱 Share my phone number", request_contact: true }]],
+    resize_keyboard: true,
+    one_time_keyboard: true,
+};
+const NO_KEYBOARD = { remove_keyboard: true };
 
 interface TelegramFile {
     file_id: string;
@@ -43,6 +54,8 @@ export interface TelegramMessage {
     photo?: TelegramFile[];
     video?: TelegramFile;
     sticker?: { emoji?: string };
+    /** A shared contact. `user_id` is the sender's own id when it is their own number. */
+    contact?: { phone_number: string; user_id?: number };
 }
 
 interface TelegramUpdate {
@@ -154,6 +167,12 @@ export interface TelegramChannelOptions {
     now?: () => Date;
     /** Waits between two bubbles of one reply, and before asking Telegram again after an error. */
     pause?: (ms: number) => Promise<void>;
+    /** Friends invited with /invite, who join through a link and are answered like listed users. */
+    invites?: Invites;
+    /** The owner's commands, answered here without the agent. */
+    command?: Command;
+    /** Hears that an invited friend joined, to tell whoever invited them. */
+    onJoined?: (guest: Guest) => void;
 }
 
 /**
@@ -166,6 +185,7 @@ export class TelegramChannel {
     private readonly chats: ChatBook;
     private readonly now: () => Date;
     private readonly pause: (ms: number) => Promise<void>;
+    private username?: string;
 
     /** `users` maps each Telegram user id to the user they are, written as on the other channels. */
     constructor(
@@ -192,6 +212,7 @@ export class TelegramChannel {
                     // getUpdates gets nothing while the bot has a webhook, such as one another tool set.
                     await this.api.call("deleteWebhook", {}, signal);
                     console.log(`[telegram] listening as @${me.username}`);
+                    this.username = me.username;
                     started = true;
                 }
                 const updates = await this.api.call<TelegramUpdate[]>(
@@ -225,11 +246,17 @@ export class TelegramChannel {
         }
     }
 
+    /** The link that opens this bot and sends /start with `payload`, once the bot is running. */
+    link = (payload: string): string | undefined =>
+        this.username ? `https://t.me/${this.username}?start=${payload}` : undefined;
+
     async handle(message: TelegramMessage): Promise<void> {
         const { from } = message;
         if (!from) return;
-        const userId = this.users.get(String(from.id));
+        const telegramId = String(from.id);
+        const userId = this.users.get(telegramId) ?? this.options.invites?.telegramUser(telegramId);
         if (!userId) {
+            if (message.chat.type === "private" && (await this.join(message, telegramId))) return;
             // Telegram's apps do not show the id, so this line is where to find it for the list.
             console.warn(
                 `[telegram] ignored a message from ${from.id}${from.username ? ` (@${from.username})` : ""}: not in CONSCIOUS_TELEGRAM_USERS`,
@@ -245,6 +272,8 @@ export class TelegramChannel {
         }
         const chatId = String(message.chat.id);
         this.chats.wrote(userId, { platform: TELEGRAM, spaceId: chatId, lastInboundAt: this.now() });
+        const reply = message.text === undefined ? undefined : this.options.command?.(userId, message.text);
+        if (reply !== undefined) return this.sendBubbles(chatId, reply);
 
         const stopTyping = this.startTyping(chatId);
         try {
@@ -252,6 +281,50 @@ export class TelegramChannel {
         } finally {
             stopTyping();
         }
+    }
+
+    /**
+     * Someone new coming through an invite link: the link opens the bot with /start and the
+     * invite's code, then they share their number, so the link works only for the person it
+     * was made for, even if it is forwarded. False when the message has nothing to do with an invite.
+     */
+    private async join(message: TelegramMessage, telegramId: string): Promise<boolean> {
+        const { invites } = this.options;
+        if (!invites) return false;
+        const chatId = String(message.chat.id);
+        const code = message.text?.match(INVITE_START)?.[1];
+        if (code) {
+            if (!invites.claim(code, telegramId)) {
+                await this.sendText(chatId, "This invite link has expired or was already used. Ask for a new one.");
+                return true;
+            }
+            await this.sendText(
+                chatId,
+                "Hi! You've been invited to Conscious 👋\n\nTap the button below to share your phone number, so I know this invite is yours.",
+                { reply_markup: SHARE_NUMBER },
+            );
+            return true;
+        }
+        const { contact } = message;
+        const invite = contact && invites.claimedBy(telegramId);
+        if (!contact || !invite) return false;
+        // A contact card passed on from someone else has another user_id, or none.
+        const own = String(contact.user_id) === telegramId;
+        const guest =
+            own && userIdOf(contact.phone_number) === invite.userId && invites.redeem(invite.code, telegramId);
+        if (!guest) {
+            await this.sendText(
+                chatId,
+                "That isn't the number this invite was made for. Ask for an invite for your own number.",
+                { reply_markup: NO_KEYBOARD },
+            );
+            return true;
+        }
+        await this.sendText(chatId, "You're in ✅", { reply_markup: NO_KEYBOARD });
+        this.options.onJoined?.(guest);
+        // Then the first meeting, as if they had said hello.
+        await this.handle({ ...message, contact: undefined, text: "Hi!" });
+        return true;
     }
 
     /** How Conscious speaks first: in the user's chat with the bot, found again after a restart. */
@@ -314,14 +387,20 @@ export class TelegramChannel {
         }
     }
 
-    private async sendText(chatId: string, text: string): Promise<void> {
+    /** `extra` adds Bot API parameters, such as a keyboard, to each message sent. */
+    private async sendText(chatId: string, text: string, extra: Record<string, unknown> = {}): Promise<void> {
         for (const piece of pieces(text)) {
             try {
-                await this.api.call("sendMessage", { chat_id: chatId, text: telegramHtml(piece), parse_mode: "HTML" });
+                await this.api.call("sendMessage", {
+                    chat_id: chatId,
+                    text: telegramHtml(piece),
+                    parse_mode: "HTML",
+                    ...extra,
+                });
             } catch (error) {
                 // If Telegram cannot read the formatting, the words still go, without it.
                 if (!(error instanceof TelegramError && /can't parse entities/i.test(error.message))) throw error;
-                await this.api.call("sendMessage", { chat_id: chatId, text: piece });
+                await this.api.call("sendMessage", { chat_id: chatId, text: piece, ...extra });
             }
         }
     }
