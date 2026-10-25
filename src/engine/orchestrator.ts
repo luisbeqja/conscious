@@ -230,6 +230,8 @@ export class Orchestrator {
         const history = withSentReplies(await store.load(userId));
         // Started first, so it usually lands before the agent could end without a word.
         let reacted = false;
+        // Whether the agent did anything for the user besides talking: that always needs telling.
+        let acted = false;
         const reacting = this.reactTo(userId, text || "(a photo or a file)", history, options).then((done) => {
             reacted = done;
         });
@@ -269,12 +271,16 @@ export class Orchestrator {
             images: files.images,
             budgets,
             sessionId: userId,
-            onProgress: options.onProgress,
-            // A reaction is an answer too, when it landed in time; otherwise the agent is asked for words.
+            onProgress: (progress) => {
+                if (progress.type === "tool") acted = true;
+                options.onProgress?.(progress);
+            },
+            // A reaction that landed in time answers a message that needed no words, not one the agent
+            // did something for (a reminder set, a search run): then it is asked for words.
             beforeStop: remindOnce(
                 `the answer to ${userId}`,
-                () => !sent.length && !reacted,
-                (wrote) => buildNothingSentNote("message", wrote),
+                () => !sent.length && (!reacted || acted),
+                (wrote) => buildNothingSentNote("message", wrote, acted),
             ),
         });
         await reacting;

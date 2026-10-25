@@ -46,7 +46,7 @@ Most messages get no reaction. React only when a friend naturally would:
 - sad or hard news: 😢 💔 🤗
 - "ok", "done", "deal", a yes to a question you asked: 👍 👌
 - a photo of something lovely: 😍 🤩
-No reaction for questions, requests, instructions, or a message that only carries on the conversation.
+No reaction for a question or a request (a reminder to set, something to find or do), even when the message also says thanks or ok, and none for a message that only carries on the conversation. This holds in every language.
 
 React to the last message from the User; the lines before it are only context. Answer with one emoji from this list and nothing else, or with the word none:
 ${REACTIONS.join(" ")}`;
