@@ -40,7 +40,7 @@ Ask for something that takes a while ("find me a ticket to Lisbon") and Consciou
 - **It remembers the people you care about.** A birthday in memory becomes a nudge a week before, with a present idea, and another on the morning of the day.
 - **It follows up.** Mention an interview, a doctor's visit or a first date, and it asks how it went afterwards, once.
 - **It knows when to be quiet.** What it sends on its own waits out the night (`CONSCIOUS_QUIET_HOURS`, 22-8 by default) and stops at a few a day (`CONSCIOUS_MAX_UNPROMPTED`, 3). Tell it "leave me alone this week" and it holds those and scheduled checks until then. Reminders you set yourself always come.
-- **It texts like a person.** Short messages, often two or three bubbles instead of one block, reactions when a reaction is enough, and no assistant phrases.
+- **It texts like a person.** Short messages, often two or three bubbles instead of one block, reactions when a reaction is enough, and no assistant phrases. It talks to you only through one tool, `chat_send_message`, so you get its messages, never its thinking.
 - **It stays out of your job.** No work apps, no work skills: ask about work and it helps only with the personal side.
 
 ## Choose your model
@@ -297,6 +297,7 @@ src/
 │  ├─ memory/            remember, people and birthdays, forget
 │  ├─ reminders/         reminders, follow-ups and scheduled checks
 │  ├─ quiet/             give the user space: pause what Conscious would send on its own
+│  ├─ chat/              chat_send_message: the only way any agent's words reach the user
 │  ├─ background/
 │  ├─ reactions/         an emoji on the user's message, before an answer or instead of one
 │  ├─ computer/          shell and files in the user's sandbox

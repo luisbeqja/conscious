@@ -89,7 +89,7 @@ const saveNotes = defineTool({
 /** What only an agent writing a job's answer gets: its notebook, rewritten before it answers. */
 export const notebookCapability: Capability = {
     id: "notebook",
-    summary: "Your notebook for this kind of job. Rewrite it once, just before your final answer.",
+    summary: "Your notebook for this kind of job. Rewrite it once, just before you finish.",
     skill: promptFile(import.meta.url, "NOTEBOOK.md"),
     tools: [saveNotes],
 };

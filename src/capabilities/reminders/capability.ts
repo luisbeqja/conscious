@@ -78,7 +78,7 @@ const followUp = defineTool({
             `Earlier the user told you about ${params.about}, and it has happened by now.`,
             params.context ? `What you knew then: ${params.context}` : "",
             "Ask them how it went in one short, warm message, the way a friend who remembered would. No advice, no list of questions.",
-            "If you remember that they already told you how it went, answer NOTHING.",
+            "If you remember that they already told you how it went, send nothing.",
         ]
             .filter(Boolean)
             .join(" ");

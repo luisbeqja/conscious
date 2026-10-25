@@ -24,6 +24,7 @@ Conscious is open source and built in Europe. You run it yourself, on your own m
 ```
 
 - **Orchestrator.** One agent per user, the one you chat with. It runs on [`pi-agent-core`](https://github.com/earendil-works/pi), answers one message at a time, and loads only the tools that user can use. The same loop runs every sub-agent.
+- **One way to talk.** Every agent, the one you chat with, a job's or a check's, reaches you only through one tool, `chat_send_message`, each message the moment it is ready. What it writes outside the tool stays private: you get its messages, never its thinking.
 - **Sub-agents made for each job.** For a long job ("find me a ticket to Lisbon") the orchestrator writes a harness for it: a method, the tools it needs, a time budget (10, 30 or 60 minutes) and up to five parts that run side by side, merged by a last agent. It answers you at once and you keep chatting. The job can text you a first find, takes a change of plan while it runs ("only morning flights"), and sends the result as a normal message. Jobs survive a restart.
 - **Agents that rest.** When a job ends, its agent is kept as a folder: its method, a notebook of what it learned, and a log of its jobs. The next job of the same kind ("a flight to Tokyo") wakes it with its notes. Nothing runs while it sleeps.
 - **Memory.** Facts about you and the people in your life, with birthdays, kept apart from the chat and read into every prompt. You can see and delete any line.

@@ -36,12 +36,12 @@ const armBirthday = (person: Person, context: ToolContext): string[] => {
         add(
             `${person.name}'s birthday in a week`,
             `0 18 ${before.getUTCDate()} ${before.getUTCMonth() + 1} *`,
-            `${who} has a birthday in a week. Tell the user in one or two short messages, like a friend would, and suggest one or two present or plan ideas that fit what you remember about ${person.name}. Offer to set a reminder to get it. If you remember that the user no longer sees ${person.name}, answer NOTHING.`,
+            `${who} has a birthday in a week. Tell the user in a short message, like a friend would, and suggest one or two present or plan ideas that fit what you remember about ${person.name}. Offer to set a reminder to get it. If you remember that the user no longer sees ${person.name}, send nothing.`,
         ),
         add(
             `${person.name}'s birthday`,
             `0 9 ${day} ${month} *`,
-            `Today is ${who}'s birthday.${age} Remind the user in one short, warm message, and nudge them to call or write to ${person.name}. If you remember that the user no longer sees ${person.name}, answer NOTHING.`,
+            `Today is ${who}'s birthday.${age} Remind the user in one short, warm message, and nudge them to call or write to ${person.name}. If you remember that the user no longer sees ${person.name}, send nothing.`,
         ),
     ];
 };

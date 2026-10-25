@@ -1,4 +1,4 @@
-import { createModels, fauxAssistantMessage, fauxProvider, fauxText, fauxToolCall } from "@earendil-works/pi-ai";
+import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
@@ -168,7 +168,11 @@ describe("MCP tools in a conversation", () => {
         faux.setResponses([
             fauxAssistantMessage(fauxToolCall("trips_search_flight", { to: "Lisbon" }), { stopReason: "toolUse" }),
             fauxAssistantMessage(fauxToolCall("trips_book_flight", {}), { stopReason: "toolUse" }),
-            fauxAssistantMessage(fauxText("FR123 is the one; I need your yes to book.")),
+            fauxAssistantMessage(
+                fauxToolCall("chat_send_message", { text: "FR123 is the one; I need your yes to book." }),
+                { stopReason: "toolUse" },
+            ),
+            fauxAssistantMessage([]),
         ]);
 
         await orchestrator.send("me", "find and book me a flight to Lisbon");

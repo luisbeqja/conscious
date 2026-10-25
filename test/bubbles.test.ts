@@ -28,9 +28,11 @@ describe("bubbles", () => {
             },
             responding: async <T>(fn: () => Promise<T>) => fn(),
         } as unknown as Space;
-        const channel = new PhotonChannel({ send: async () => "Ohh nice!\n\nHow did it go?" }, new Set(["+39333"]), {
-            pause: async (ms) => void pauses.push(ms),
-        });
+        const channel = new PhotonChannel(
+            { send: async (_userId, _text, options) => options.say("Ohh nice!\n\nHow did it go?") },
+            new Set(["+39333"]),
+            { pause: async (ms) => void pauses.push(ms) },
+        );
         const message = {
             id: "m1",
             platform: "iMessage",

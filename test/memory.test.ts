@@ -5,7 +5,6 @@ import {
     createModels,
     fauxAssistantMessage,
     fauxProvider,
-    fauxText,
     fauxToolCall,
     getCurrentSystemPrompt,
 } from "@earendil-works/pi-ai";
@@ -113,11 +112,15 @@ describe("memory", () => {
                     stopReason: "toolUse",
                 });
             },
-            fauxAssistantMessage(fauxText("Lu it is 😄")),
+            fauxAssistantMessage(fauxToolCall("chat_send_message", { text: "Lu it is 😄" }), { stopReason: "toolUse" }),
+            fauxAssistantMessage([]),
             (ctx) => {
                 prompts.push(getCurrentSystemPrompt(ctx.messages) ?? "");
-                return fauxAssistantMessage(fauxText("Hey Lu"));
+                return fauxAssistantMessage(fauxToolCall("chat_send_message", { text: "Hey Lu" }), {
+                    stopReason: "toolUse",
+                });
             },
+            fauxAssistantMessage([]),
         ]);
         const memory = new InMemoryMemoryStore();
         const orchestrator = new Orchestrator({

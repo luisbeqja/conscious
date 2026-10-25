@@ -28,13 +28,16 @@ const inbound = (id: string, sender: string, text: string, platform = "iMessage"
         content: { type: "text", text },
     }) as unknown as Message;
 
+/** What a channel hands the orchestrator with each message. */
+type Say = { say: (text: string) => Promise<void> };
+
 const echo = () => {
     const calls: [string, string][] = [];
     return {
         calls,
-        send: async (userId: string, text: string) => {
+        send: async (userId: string, text: string, options: Say) => {
             calls.push([userId, text]);
-            return `you said: ${text}`;
+            await options.say(`you said: ${text}`);
         },
     };
 };
@@ -52,17 +55,42 @@ describe("PhotonChannel", () => {
         expect(respondingCalls()).toBe(1);
     });
 
+    it("sends each message the moment the agent sends it, before the answer is done", async () => {
+        let finish: () => void = () => {};
+        const finished = new Promise<void>((resolve) => {
+            finish = resolve;
+        });
+        const orchestrator = {
+            send: async (_userId: string, _text: string, options: Say) => {
+                await options.say("On it 👀");
+                await finished;
+                await options.say("Tuesday is free all afternoon.");
+            },
+        };
+        const channel = new PhotonChannel(orchestrator, new Set(["+39333"]));
+        const { space, sent } = fakeSpace("chat-1");
+
+        const handled = channel.handle(space, inbound("m1", "+39333", "am I free on tuesday?"));
+        await vi.waitFor(() => expect(sent).toEqual(["On it 👀"]));
+        finish();
+        await handled;
+        expect(sent).toEqual(["On it 👀", "Tuesday is free all afternoon."]);
+    });
+
     describe("WhatsApp typing", () => {
         afterEach(() => vi.useRealTimers());
 
         it("shows typing on WhatsApp while the answer is written, again every 20 seconds, then stops", async () => {
             vi.useFakeTimers();
             const shown: string[] = [];
-            let finish: (reply: string) => void = () => {};
+            let finish: (reply: string) => Promise<void> = async () => {};
             const orchestrator = {
-                send: () =>
-                    new Promise<string>((resolve) => {
-                        finish = resolve;
+                send: (_userId: string, _text: string, options: Say) =>
+                    new Promise<void>((resolve) => {
+                        finish = async (reply) => {
+                            await options.say(reply);
+                            resolve();
+                        };
                     }),
             };
             const channel = new PhotonChannel(orchestrator, new Set(["+39333"]), {
@@ -76,7 +104,7 @@ describe("PhotonChannel", () => {
             await vi.advanceTimersByTimeAsync(45_000);
             expect(shown).toEqual(["wamid.1", "wamid.1", "wamid.1"]);
 
-            finish("Here's a plan.");
+            await finish("Here's a plan.");
             await handled;
             await vi.advanceTimersByTimeAsync(60_000);
             expect(shown).toHaveLength(3);
@@ -124,7 +152,6 @@ describe("PhotonChannel", () => {
         const orchestrator = {
             send: async (_userId: string, _text: string, options: { react: (emoji: string) => Promise<boolean> }) => {
                 expect(await options.react("❤️")).toBe(true);
-                return "";
             },
         };
         const channel = new PhotonChannel(orchestrator, new Set(["+39333"]));
@@ -219,14 +246,14 @@ describe("PhotonChannel", () => {
             send: async (
                 _userId: string,
                 _text: string,
-                options: {
+                options: Say & {
                     files?: { name: string; mimeType: string; data: Uint8Array }[];
                     sendFile?: (file: { name: string; mimeType: string; data: Uint8Array }) => Promise<void>;
                 },
             ) => {
                 got.push(options);
                 await options.sendFile?.({ name: "plan.pdf", mimeType: "application/pdf", data: new Uint8Array([1]) });
-                return "Here's your plan.";
+                await options.say("Here's your plan.");
             },
         };
         const channel = new PhotonChannel(orchestrator as never, new Set(["+39333"]));

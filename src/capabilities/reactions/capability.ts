@@ -6,7 +6,7 @@ const react = defineTool({
     name: "reactions_react_message",
     label: "React to the message",
     description:
-        "Put an emoji reaction on the message the user just sent. Reacting again replaces the reaction. A reaction can be the whole answer: then end with no text.",
+        "Put an emoji reaction on the message the user just sent. Reacting again replaces the reaction. A reaction can be the whole answer: then send nothing.",
     effect: "draft",
     parameters: Type.Object({
         emoji: Type.String({ description: "One emoji, e.g. 👍 ❤️ 😂 👀 🙏" }),

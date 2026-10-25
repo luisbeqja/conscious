@@ -90,13 +90,16 @@ export const createConscious = (config: Config, notify: Notify, extra: readonly 
                 scheduler.add({ ...again, at: pace.to });
                 return console.log(`[pacing] ${id} waits until ${pace.to.toISOString()}, out of quiet hours`);
             }
-            const text = !reminder.check
-                ? late
-                    ? `${reminder.text}\n\n(Sorry this is late, I was offline when it was due.)`
-                    : reminder.text
-                : await orchestrator.runCheck(reminder);
-            if (!text) return;
-            await say(reminder.userId, text);
+            if (reminder.check) {
+                // The check's agent messages the user itself, and only when it found something.
+                const sent = await orchestrator.runCheck(reminder, (text) => say(reminder.userId, text));
+                if (!sent.length) return;
+            } else {
+                await say(
+                    reminder.userId,
+                    late ? `${reminder.text}\n\n(Sorry this is late, I was offline when it was due.)` : reminder.text,
+                );
+            }
             pacing.record(reminder);
         },
         { file: join(config.dataDir, "reminders.json") },

@@ -46,6 +46,9 @@ const call =
     (name: string, args: Parameters<typeof fauxToolCall>[1]): Reply =>
     () =>
         fauxAssistantMessage(fauxToolCall(name, args), { stopReason: "toolUse" });
+/** The model sending the user a message; `done` is the turn after it, which ends the run. */
+const send = (value: string): Reply => call("chat_send_message", { text: value });
+const done: Reply = () => fauxAssistantMessage([]);
 
 const webCapability: Capability = {
     id: "web",
@@ -102,24 +105,55 @@ describe("a background task while the chat goes on", () => {
                 brief: "Find the best flight to Lisbon for next week.",
                 effort: "long",
             }),
-            text("On it! I'll text you the best ticket as soon as I have it."),
-            text("Sunny, 24°C most of next week."),
+            send("On it! I'll text you the best ticket as soon as I have it."),
+            done,
+            send("Sunny, 24°C most of next week."),
+            done,
         );
         scripts.background.push(async () => {
             await held;
-            return fauxAssistantMessage(fauxText("Found it: TAP on Tuesday, €89 return."));
-        });
+            return fauxAssistantMessage(
+                fauxToolCall("chat_send_message", { text: "Found it: TAP on Tuesday, €89 return." }),
+                { stopReason: "toolUse" },
+            );
+        }, text("Sent TAP. Ryanair was €95 with a bag."));
 
-        const ack = await orchestrator.send("me", "can you find me a ticket for Lisbon?");
+        const [ack] = await orchestrator.send("me", "can you find me a ticket for Lisbon?");
         expect(ack).toContain("On it");
         expect(background.running("me")).toHaveLength(1);
 
-        expect(await orchestrator.send("me", "by the way, what's the weather in Lisbon next week?")).toContain("Sunny");
+        const [weather] = await orchestrator.send("me", "by the way, what's the weather in Lisbon next week?");
+        expect(weather).toContain("Sunny");
         expect(seen.main.at(-1)).toContain("Still running in the background");
 
         release();
-        await vi.waitFor(() => expect(sent).toEqual(["Found it: TAP on Tuesday, €89 return."]));
+        await vi.waitFor(() => expect(background.running("me")).toHaveLength(0));
+        // It sent its result itself; its notes are for the chat, never for the user.
+        expect(sent).toEqual(["Found it: TAP on Tuesday, €89 return."]);
+        expect(background.list("me")[0]?.result).toBe("Sent TAP. Ryanair was €95 with a bag.");
         expect(seen.background[0]).toContain("can you find me a ticket for Lisbon?");
+
+        scripts.main.push(send("Ryanair was €95 with a bag."), done);
+        await orchestrator.send("me", "and Ryanair?");
+        expect(seen.main.at(-1)).toContain(
+            'it sent the user: \\"Found it: TAP on Tuesday, €89 return.\\"; its notes for you: Sent TAP.',
+        );
+    });
+
+    it("fails a job whose agent never sends the user its result, after reminding it once", async () => {
+        const { scripts, seen, sent, background, orchestrator } = setUp();
+        scripts.main.push(
+            call("background_start_task", { title: "Find a ticket to Lisbon", brief: "Best flight to Lisbon." }),
+            send("On it!"),
+            done,
+        );
+        scripts.background.push(text("TAP, €89 return."), text("TAP, €89 return."));
+
+        await orchestrator.send("me", "find me a ticket for Lisbon");
+        await vi.waitFor(() => expect(sent).toHaveLength(1));
+        expect(seen.background.at(-1)).toContain('Not delivered: the user did not see \\"TAP, €89 return.\\"');
+        expect(sent[0]).toBe('I couldn\'t finish "Find a ticket to Lisbon": I lost the answer before sending it');
+        expect(background.list("me")[0]?.status).toBe("failed");
     });
 
     it("texts the user a first find while it keeps looking, and the chat knows about it", async () => {
@@ -130,20 +164,28 @@ describe("a background task while the chat goes on", () => {
         });
         scripts.main.push(
             call("background_start_task", { title: "Find a ticket to Lisbon", brief: "Best flight to Lisbon." }),
-            text("On it!"),
-            text("Still checking Ryanair, the TAP one is the best so far."),
+            send("On it!"),
+            done,
+            send("Still checking Ryanair, the TAP one is the best so far."),
+            done,
         );
         scripts.background.push(
-            call("task_tell_user", { text: "First find: TAP, €89 return. Still checking the others." }),
+            send("First find: TAP, €89 return. Still checking the others."),
             async () => {
                 await held;
-                return fauxAssistantMessage(fauxText("TAP stays the best: €89 return on Tuesday."));
+                return fauxAssistantMessage(
+                    fauxToolCall("chat_send_message", { text: "TAP stays the best: €89 return on Tuesday." }),
+                    { stopReason: "toolUse" },
+                );
             },
+            done,
         );
 
         await orchestrator.send("me", "find me a ticket for Lisbon");
         await vi.waitFor(() => expect(sent).toEqual(["First find: TAP, €89 return. Still checking the others."]));
-        expect(background.running("me")[0]?.steps).toBe(1);
+        expect(background.running("me")[0]?.updates).toEqual([
+            "First find: TAP, €89 return. Still checking the others.",
+        ]);
 
         await orchestrator.send("me", "how is it going?");
         expect(seen.main.at(-1)).toContain("it already texted the user");
@@ -153,14 +195,15 @@ describe("a background task while the chat goes on", () => {
     });
 
     it("passes a change of plan to the running task", async () => {
-        const { scripts, seen, sent, orchestrator } = setUp();
+        const { scripts, seen, sent, background, orchestrator } = setUp();
         let release: () => void = () => {};
         const held = new Promise<void>((resolve) => {
             release = resolve;
         });
         scripts.main.push(
             call("background_start_task", { title: "Find a ticket to Lisbon", brief: "Best flight to Lisbon." }),
-            text("On it!"),
+            send("On it!"),
+            done,
             (messages) => {
                 const id = /\(([0-9a-f]{8})\)/.exec(JSON.stringify(messages.at(-1)))?.[1] ?? "";
                 return fauxAssistantMessage(
@@ -168,22 +211,28 @@ describe("a background task while the chat goes on", () => {
                     { stopReason: "toolUse" },
                 );
             },
-            text("Got it, mornings only."),
+            send("Got it, mornings only."),
+            done,
         );
-        scripts.background.push(async () => {
-            await held;
-            return fauxAssistantMessage(fauxToolCall("reminders_list_reminders", {}), { stopReason: "toolUse" });
-        }, text("TAP at 7:05 on Tuesday, €95 return."));
+        scripts.background.push(
+            async () => {
+                await held;
+                return fauxAssistantMessage(fauxToolCall("reminders_list_reminders", {}), { stopReason: "toolUse" });
+            },
+            send("TAP at 7:05 on Tuesday, €95 return."),
+            done,
+        );
 
         await orchestrator.send("me", "find me a ticket for Lisbon");
-        expect(await orchestrator.send("me", "oh, only morning flights please")).toBe("Got it, mornings only.");
+        expect(await orchestrator.send("me", "oh, only morning flights please")).toEqual(["Got it, mornings only."]);
         release();
-        await vi.waitFor(() => expect(sent).toEqual(["TAP at 7:05 on Tuesday, €95 return."]));
+        await vi.waitFor(() => expect(background.running("me")).toHaveLength(0));
+        expect(sent).toEqual(["TAP at 7:05 on Tuesday, €95 return."]);
         expect(seen.background.at(-1)).toContain("Only morning flights.");
     });
 
     it("runs the sub-agent it designed: its method, its tools, and parts side by side", async () => {
-        const { scripts, seen, sent, orchestrator } = setUp();
+        const { scripts, seen, sent, background, orchestrator } = setUp();
         scripts.main.push(
             call("background_start_task", {
                 title: "Find a ticket to Lisbon",
@@ -195,16 +244,19 @@ describe("a background task while the chat goes on", () => {
                     { title: "From Bergamo", brief: "Flights from Bergamo." },
                 ],
             }),
-            text("On it, checking Milan and Bergamo at the same time."),
+            send("On it, checking Milan and Bergamo at the same time."),
+            done,
         );
         const part = (messages: readonly Message[]) => {
             const lane = JSON.stringify(messages).includes('Your part, \\"From Milan\\"') ? "Milan" : "Bergamo";
             return fauxAssistantMessage(fauxText(`${lane}: €${lane === "Milan" ? 120 : 89}`));
         };
-        scripts.background.push(part, part, text("Bergamo wins: €89 return, direct."));
+        // The parts hand their findings to the last agent, which sends the user the result.
+        scripts.background.push(part, part, send("Bergamo wins: €89 return, direct."), done);
 
         await orchestrator.send("me", "find me a ticket for Lisbon");
-        await vi.waitFor(() => expect(sent).toEqual(["Bergamo wins: €89 return, direct."]));
+        await vi.waitFor(() => expect(background.running("me")).toHaveLength(0));
+        expect(sent).toEqual(["Bergamo wins: €89 return, direct."]);
 
         const merge = seen.background.at(-1) ?? "";
         expect(merge).toContain("Milan: €120");

@@ -5,7 +5,7 @@ import {
     createModels,
     fauxAssistantMessage,
     fauxProvider,
-    fauxText,
+    fauxToolCall,
     getCurrentSystemPrompt,
 } from "@earendil-works/pi-ai";
 import { afterEach, describe, expect, it } from "vitest";
@@ -254,8 +254,11 @@ describe("skills in the prompt", () => {
         faux.setResponses([
             (context) => {
                 prompt = getCurrentSystemPrompt(context.messages) ?? "";
-                return fauxAssistantMessage(fauxText("Sunny."));
+                return fauxAssistantMessage(fauxToolCall("chat_send_message", { text: "Sunny." }), {
+                    stopReason: "toolUse",
+                });
             },
+            fauxAssistantMessage([]),
         ]);
 
         await orchestrator.send("me", "weather in Rome?");

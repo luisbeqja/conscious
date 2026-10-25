@@ -4,6 +4,7 @@ import type { SandboxProvider } from "../sandbox/sandbox.js";
 import { readHostSkills } from "../skills/host.js";
 import type { Vault } from "../vault/vault.js";
 import { backgroundCapability } from "./background/capability.js";
+import { chatCapability } from "./chat/capability.js";
 import { createComputerCapability } from "./computer/capability.js";
 import { createPluginsCapability } from "./plugins/capability.js";
 import { reactionsCapability } from "./reactions/capability.js";
@@ -33,6 +34,7 @@ export const createRegistry = (
     plugins?: PluginOptions,
 ): CapabilityRegistry => {
     const registry = new CapabilityRegistry()
+        .register(chatCapability)
         .register(remindersCapability)
         .register(backgroundCapability)
         .register(reactionsCapability);

@@ -1,5 +1,5 @@
 import { Type } from "typebox";
-import { MAX_LANES, MAX_UPDATES } from "../../agents/background-agents.js";
+import { MAX_LANES } from "../../agents/background-agents.js";
 import { AGENT_NAME } from "../../agents/resting-agents.js";
 import { promptFile } from "../../prompts/prompt-file.js";
 import { type Capability, defineTool, type ToolContext } from "../types.js";
@@ -13,7 +13,7 @@ const start = defineTool({
     name: "background_start_task",
     label: "Start a background task",
     description:
-        "Hand a longer job to a sub-agent that works while you keep talking. It messages the user itself when done.",
+        "Hand a longer job to a sub-agent that works while you keep talking. It messages the user itself: its result, and an update if one is worth it.",
     effect: "draft",
     parameters: Type.Object({
         title: Type.String({ description: "A few words the user would recognise, e.g. 'Compare flights to Lisbon'." }),
@@ -36,13 +36,13 @@ const start = defineTool({
         instructions: Type.Optional(
             Type.String({
                 description:
-                    "Design the sub-agent for this job: its method, which sources to trust, what to compare, the order of steps, and what the final answer must contain. Becomes part of its system prompt. For a new agent this is its method for every job of this kind, so leave this job's dates, places and names to the brief; for an agent that has one, write only what is different this time.",
+                    "Design the sub-agent for this job: its method, which sources to trust, what to compare, the order of steps, and what the result it sends must contain. Becomes part of its system prompt. For a new agent this is its method for every job of this kind, so leave this job's dates, places and names to the brief; for an agent that has one, write only what is different this time.",
             }),
         ),
         capabilities: Type.Optional(
             Type.Array(Type.String(), {
                 description:
-                    "The ids of the capabilities it needs, from your index (e.g. web, a flights or hotels server). Leave out for all. Memory is always included.",
+                    "The ids of the capabilities it needs, from your index (e.g. web, a flights or hotels server). Leave out for all. Memory and chat are always included.",
             }),
         ),
         lanes: Type.Optional(
@@ -131,25 +131,4 @@ export const backgroundCapability: Capability = {
     summary: "Run longer jobs (research, planning, comparing options) in the background while the chat goes on.",
     skill: promptFile(import.meta.url, "SKILL.md"),
     tools: [start, list, message, cancel],
-};
-
-const tellUser = defineTool({
-    name: "task_tell_user",
-    label: "Text the user an update",
-    description: `Send the user a short message now, while you keep working: a first good find, or that it will take longer. At most ${MAX_UPDATES} per job; your final answer is sent anyway.`,
-    effect: "draft",
-    parameters: Type.Object({ text: Type.String({ description: "One or two short lines, the way a friend texts." }) }),
-    execute: async (params, context) => {
-        if (!context.task) throw new Error("Only a background task can send updates.");
-        await context.task.tellUser(params.text);
-        return { data: { sent: true } };
-    },
-});
-
-/** What only a background agent gets: a way to speak before its job is done. */
-export const taskCapability: Capability = {
-    id: "task",
-    summary: "You are working on a job in the background. You can text the user an update while you work.",
-    skill: promptFile(import.meta.url, "TASK.md"),
-    tools: [tellUser],
 };

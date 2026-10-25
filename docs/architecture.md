@@ -21,6 +21,7 @@ Conscious is a personal assistant for daily life, not work, and it should feel l
 | The loop | `pi-agent-core`, behind `engine/run-agent.ts`. One loop, used by the orchestrator and every sub-agent. |
 | Capability packs | Tools named `<id>_<verb>_<noun>` plus a `SKILL.md` on how to use them. |
 | Effects | Every tool is `read`, `draft` or `commit`. A commit will become a yes/no the user answers. |
+| Messages | `chat_send_message` is the only way any agent reaches the user, whatever the channel. What an agent writes outside it stays private. |
 | Background agents | Sub-agents with a written brief and a harness designed for the job (instructions, packs, effort, parallel parts). They outlive the turn, can text an update, take a change of plan, and report to the user directly. |
 | Browser | A Chrome per user on an E2B desktop, driven over CDP with Playwright. The user signs in through a live view; commits are refused. |
 | Agents | One per kind of background job, kept between jobs as a folder: method, notebook, log. Woken by name. |
@@ -41,8 +42,18 @@ Conscious is a personal assistant for daily life, not work, and it should feel l
 
 1. The terminal, the phone app, or Photon (iMessage and WhatsApp), hands the orchestrator your text. It waits behind any message still being answered for you.
 2. The orchestrator loads the conversation, builds the turn (the time in your timezone, background tasks that finished or are still running, your text), and runs the loop with the packs available to you.
-3. The answer streams back as it is written, tool calls shown as they start, and the conversation is saved.
-4. Reminders and finished background tasks reach you through `notify`, the one way Conscious speaks first.
+3. The agent answers with `chat_send_message`, once or a few times: each message goes out the moment it is sent, on the channel you wrote from, and the app shows it as it is written. Tool calls show as they start.
+4. The conversation is saved as what was said and done: your message, the tools used, the messages sent.
+5. Reminders, scheduled checks and background tasks reach you through `notify`, the way Conscious speaks first.
+
+## Talking to the user
+
+Every agent, the one you chat with, a background job's or a scheduled check's, speaks through one tool, `chat_send_message`. The text it writes outside the tool is never shown, so it can think aloud, keep notes and stay silent without a word of it reaching you.
+
+- **Where it goes.** The channel decides: the chat you wrote from while answering you (as bubbles on iMessage and WhatsApp), and wherever you last wrote for a job or a check. Messages of one turn go out in the order they were written, and one run sends at most five.
+- **Its own text is private.** A background job finishes with notes that only the orchestrator reads, to answer what you ask next; a part of a split job finishes with findings for the agent that merges them. A check that found nothing sends nothing.
+- **Forgetting the tool.** An agent about to end without sending anything is reminded once, with what it wrote quoted as not delivered. After that, silence is its choice. A job that still sends nothing is reported as not finished; an answer that broke before saying anything gets a short apology.
+- **The transcript teaches by example.** Replies from before the tool were plain text, and a model copies its own past turns, so they are shown as sent messages. For the same reason an answer is saved without the text nobody saw.
 
 ## Memory and speaking first
 
@@ -50,7 +61,7 @@ Conscious is a personal assistant for daily life, not work, and it should feel l
 - **The first meeting.** While memory is empty, the system prompt adds `prompts/first-meeting.md`: say hi, ask their name, offer to look them up online. The look-up is a background task with a brief written from the memory skill: public pages only, no addresses, money or health, and it asks when two people share a name. Nothing it finds is saved until the user confirms it.
 - **Birthdays and follow-ups** are scheduled checks marked `unprompted`: a birthday arms one a week before and one on the day, and `reminders_follow_up` arms one after an event the user mentioned. Each runs the agent with memory, so the words fit what Conscious knows by then.
 - **Pacing** (`scheduler/pacing.ts`) runs before any reminder fires. A plain reminder the user set always goes. An unprompted one inside quiet hours is moved to their end, and past the daily limit it is dropped. While the user paused messages (`quiet_pause_messages`), unprompted ones and scheduled checks are dropped. The pause and the day's count are kept in `.conscious/pacing.json`.
-- **Bubbles.** On iMessage and WhatsApp, a reply of two to four short paragraphs goes out as that many messages, with a short pause between them.
+- **Bubbles.** On iMessage and WhatsApp, a message of two to four short paragraphs goes out as that many bubbles, with a short pause between them.
 
 ## Agents
 

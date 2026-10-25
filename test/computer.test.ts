@@ -2,7 +2,6 @@ import {
     createModels,
     fauxAssistantMessage,
     fauxProvider,
-    fauxText,
     fauxToolCall,
     getCurrentSystemPrompt,
 } from "@earendil-works/pi-ai";
@@ -14,6 +13,12 @@ import type { ModelRuntime } from "../src/engine/models.js";
 import { Orchestrator } from "../src/engine/orchestrator.js";
 import { Scheduler } from "../src/scheduler/scheduler.js";
 import { FakeSandboxes } from "./fake-sandbox.js";
+
+/** The model sending the user a message, then stopping. */
+const sends = (text: string) => [
+    fauxAssistantMessage(fauxToolCall("chat_send_message", { text }), { stopReason: "toolUse" }),
+    fauxAssistantMessage([]),
+];
 
 const setup = () => {
     const faux = fauxProvider();
@@ -61,11 +66,14 @@ describe("Conscious's computer", () => {
                     { stopReason: "toolUse" },
                 );
             },
-            fauxAssistantMessage(fauxText("Noted, Anna's birthday is 3 May.")),
+            ...sends("Noted, Anna's birthday is 3 May."),
             (context) => {
                 prompts.push(getCurrentSystemPrompt(context.messages) ?? "");
-                return fauxAssistantMessage(fauxText("3 May."));
+                return fauxAssistantMessage(fauxToolCall("chat_send_message", { text: "3 May." }), {
+                    stopReason: "toolUse",
+                });
             },
+            fauxAssistantMessage([]),
         ]);
 
         await app.orchestrator.send("me", "my sister Anna's birthday is 3 May");
@@ -81,11 +89,13 @@ describe("Conscious's computer", () => {
     it("keeps the conversation in the user's sandbox, apart from other users", async () => {
         const app = setup();
         scheduler = app.scheduler;
-        app.faux.setResponses([fauxAssistantMessage(fauxText("Hi!"))]);
+        app.faux.setResponses(sends("Hi!"));
         await app.orchestrator.send("me", "hello");
 
         const saved = (await app.sandboxes.forUser("me")).files.get("/home/user/.conscious/conversation.json");
-        expect(JSON.parse(saved ?? "[]")).toHaveLength(2);
+        // Their message, the call that sent "Hi!", and its result.
+        expect(JSON.parse(saved ?? "[]")).toHaveLength(3);
+        expect(saved).toContain("Hi!");
         expect((await app.sandboxes.forUser("someone-else")).files.size).toBe(0);
     });
 
@@ -107,8 +117,11 @@ describe("Conscious's computer", () => {
                 if (last?.role === "toolResult") {
                     toolResult = last.content.flatMap((block) => (block.type === "text" ? [block.text] : [])).join("");
                 }
-                return fauxAssistantMessage(fauxText("Done."));
+                return fauxAssistantMessage(fauxToolCall("chat_send_message", { text: "Done." }), {
+                    stopReason: "toolUse",
+                });
             },
+            fauxAssistantMessage([]),
         ]);
 
         await app.orchestrator.send("me", "run big.py");

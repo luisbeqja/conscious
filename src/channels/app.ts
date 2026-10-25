@@ -17,7 +17,7 @@ import { type AppEntry, type AppFile, AppLog } from "./app-log.js";
 
 /** The parts of the orchestrator the app needs. */
 export interface AppAnswerer {
-    send(userId: string, text: string, options: SendOptions): Promise<string>;
+    send(userId: string, text: string, options: SendOptions): Promise<unknown>;
     /** Forgets the user: conversation, memory, reminders. */
     startFresh(userId: string): Promise<void>;
 }
@@ -299,8 +299,10 @@ export class AppChannel {
         this.running.set(userId, (this.running.get(userId) ?? 0) + 1);
         this.broadcast(userId, { type: "typing", active: true });
         try {
-            const reply = await this.orchestrator.send(userId, text, {
+            await this.orchestrator.send(userId, text, {
                 files: incoming,
+                // A message being written streams into the draft; once sent it is an entry like any other.
+                say: (reply) => this.notify(userId, reply),
                 onProgress: (progress) =>
                     this.broadcast(
                         userId,
@@ -319,13 +321,6 @@ export class AppChannel {
                     this.broadcast(userId, { type: "entry", entry: sent });
                 },
             });
-            // Empty when a reaction was the whole answer.
-            if (reply) {
-                this.broadcast(userId, {
-                    type: "entry",
-                    entry: this.log.add(userId, { role: "assistant", text: reply }),
-                });
-            }
         } finally {
             const left = (this.running.get(userId) ?? 1) - 1;
             this.running.set(userId, left);

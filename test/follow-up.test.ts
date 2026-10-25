@@ -20,6 +20,6 @@ describe("follow-ups", () => {
         expect(followUp).toMatchObject({ text: "How did the Bending Spoons interview go?", at: new Date(at) });
         expect(followUp?.cron).toBeUndefined();
         expect(followUp?.check).toContain("dream job");
-        expect(followUp?.check).toContain("NOTHING");
+        expect(followUp?.check).toContain("send nothing");
     });
 });

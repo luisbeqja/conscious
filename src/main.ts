@@ -61,24 +61,23 @@ for await (const input of terminal) {
         terminal.prompt();
         continue;
     }
-    stdout.write(`${bold("conscious")} `);
-    let streamed = false;
-    const reply = await orchestrator.send(USER, line, {
+    // Steps and reactions lead the line; each message the agent sends ends one.
+    let open = false;
+    const write = (text: string, end = false) => {
+        stdout.write(`${open ? "" : `${bold("conscious")} `}${text}${end ? "\n" : ""}`);
+        open = !end;
+    };
+    await orchestrator.send(USER, line, {
+        say: async (text) => write(text, true),
         onProgress: (progress) => {
-            if (progress.type === "text") {
-                streamed = true;
-                stdout.write(progress.delta);
-            } else {
-                stdout.write(dim(`[${progress.name}] `));
-            }
+            if (progress.type === "tool") write(dim(`[${progress.name}] `));
         },
         react: async (emoji) => {
-            stdout.write(`${emoji} `);
+            write(`${emoji} `);
             return true;
         },
     });
-    // A failed run streams nothing; its fallback still has to be shown.
-    stdout.write(streamed ? "\n\n" : `${reply}\n\n`);
+    stdout.write(open ? "\n\n" : "\n");
     terminal.prompt();
 }
 terminal.close();

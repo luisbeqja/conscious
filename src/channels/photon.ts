@@ -12,11 +12,13 @@ export interface Answerer {
         userId: string,
         text: string,
         options: {
+            /** Every message of the answer comes through here, as the agent sends it. */
+            say: (text: string) => Promise<void>;
             react: (emoji: string) => Promise<boolean>;
             files?: IncomingFile[];
             sendFile?: (file: OutgoingFile) => Promise<void>;
         },
-    ): Promise<string>;
+    ): Promise<unknown>;
 }
 
 const SEEN_LIMIT = 1000;
@@ -130,14 +132,14 @@ export class PhotonChannel {
             return;
         }
         const { text, files } = incoming;
-        // `responding` shows the typing indicator on iMessage; WhatsApp's is kept up by `handle`.
+        // Each message goes out the moment the agent sends it, as short bubbles.
+        const say = (reply: string) => this.sendBubbles(space, reply);
         const react = async (emoji: string) => (await message.react(emoji)) !== undefined;
         const sendFile = async (file: OutgoingFile) => {
             await space.send(attachment(Buffer.from(file.data), { name: file.name, mimeType: file.mimeType }));
         };
-        const reply = await space.responding(() => this.orchestrator.send(userId, text, { react, files, sendFile }));
-        // Empty when a reaction was the whole answer.
-        if (reply) await this.sendBubbles(space, reply);
+        // `responding` shows the typing indicator on iMessage; WhatsApp's is kept up by `handle`.
+        await space.responding(() => this.orchestrator.send(userId, text, { say, react, files, sendFile }));
     }
 
     /**

@@ -9,6 +9,7 @@ export const adaptTool = (tool: RegisteredTool, context: ToolContext): AgentTool
     label: tool.label,
     description: tool.description,
     parameters: tool.parameters,
+    ...(tool.sequential && { executionMode: "sequential" as const }),
     execute: async (_toolCallId, params, signal) => {
         const output = await tool.execute(params as never, { ...context, signal });
         const text = JSON.stringify({ data: output.data, guidance: output.guidance });

@@ -1,6 +1,7 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { BackgroundTask, Lane } from "../agents/background-agents.js";
 import { MAX_NOTES_CHARS, type RestingAgent } from "../agents/resting-agents.js";
+import { SEND_MESSAGE } from "../capabilities/chat/capability.js";
 import { promptFile } from "./prompt-file.js";
 
 const SYSTEM = promptFile(import.meta.url, "system.md");
@@ -81,26 +82,28 @@ export const buildAgentSection = (
     return parts.join("\n\n");
 };
 
-const textOf = (message: AgentMessage): string => {
-    if (message.role !== "user" && message.role !== "assistant") return "";
-    const text =
-        typeof message.content === "string"
-            ? message.content
-            : message.content.flatMap((block) => (block.type === "text" ? [block.text] : [])).join("\n");
-    return text.replace(/^<context>[\s\S]*?<\/context>\s*/, "").trim();
+/** What the user saw of one message in the conversation: their words, or what Conscious sent them. */
+const shownOf = (message: AgentMessage): string[] => {
+    if (message.role === "user") {
+        const text =
+            typeof message.content === "string"
+                ? message.content
+                : message.content.flatMap((block) => (block.type === "text" ? [block.text] : [])).join("\n");
+        const said = text.replace(/^<context>[\s\S]*?<\/context>\s*/, "").trim();
+        return said ? [`User: ${said.slice(0, 600)}`] : [];
+    }
+    if (message.role !== "assistant") return [];
+    // Conscious's own text was never shown; only its messages were.
+    return message.content.flatMap((block) =>
+        block.type === "toolCall" && block.name === SEND_MESSAGE && typeof block.arguments.text === "string"
+            ? [`You: ${block.arguments.text.slice(0, 600)}`]
+            : [],
+    );
 };
 
 /** The end of the conversation as plain lines, for a background agent that cannot see it. */
 export const renderRecentChat = (history: readonly AgentMessage[], latest: string, limit = 12): string =>
-    [
-        ...history.flatMap((message) => {
-            const text = textOf(message);
-            return text ? [`${message.role === "user" ? "User" : "You"}: ${text.slice(0, 600)}`] : [];
-        }),
-        `User: ${latest}`,
-    ]
-        .slice(-limit)
-        .join("\n");
+    [...history.flatMap(shownOf), `User: ${latest}`].slice(-limit).join("\n");
 
 const withChat = (brief: string, task: BackgroundTask): string => {
     const parts = [brief];
@@ -126,7 +129,7 @@ export const buildTaskBrief = (task: BackgroundTask): string => {
         .map((lane) => `## ${lane.title} (${lane.status === "done" ? "done" : "failed"})\n${lane.result ?? ""}`)
         .join("\n\n");
     return withChat(
-        `${task.brief}\n\nThis job was split into parts that other agents already worked on. Here is what they found. Check what matters, fill gaps only if you must, and write the final answer.\n\n${found}`,
+        `${task.brief}\n\nThis job was split into parts that other agents already worked on. Here is what they found. Check what matters, fill gaps only if you must, and send the user the result.\n\n${found}`,
         task,
     );
 };
@@ -134,7 +137,7 @@ export const buildTaskBrief = (task: BackgroundTask): string => {
 /** One part of a split job. Its answer goes to the agent that puts the parts together, not to the user. */
 export const buildLaneBrief = (task: BackgroundTask, lane: Lane): string =>
     withChat(
-        `You are doing one part of a bigger job, while other agents do the other parts at the same time.\n\nThe whole job: ${task.brief}\n\nYour part, "${lane.title}": ${lane.brief}\n\nYour final answer is not sent to the user. It goes to the agent that puts all parts together, so write dense findings: names, prices, times, links, and what you could not check. Do not text the user unless something is urgent.`,
+        `You are doing one part of a bigger job, while other agents do the other parts at the same time.\n\nThe whole job: ${task.brief}\n\nYour part, "${lane.title}": ${lane.brief}\n\nYour final text goes to the agent that puts all parts together, not to the user, so write dense findings: names, prices, times, links, and what you could not check. Do not message the user unless something is urgent.`,
         task,
     );
 
@@ -142,17 +145,28 @@ export const buildLaneBrief = (task: BackgroundTask, lane: Lane): string =>
 export const buildSteeringMessage = (text: string): string =>
     `The user added this while you work, passed on from the chat. It wins over the brief where they differ:\n${text}`;
 
-/** What a scheduled check's agent answers when there is nothing to tell the user. */
-const NOTHING = "NOTHING";
-
-export const isNothing = (text: string): boolean => text.trim().replace(/[.*_]/g, "").toUpperCase() === NOTHING;
-
 export const buildCheckBrief = (title: string, job: string): string =>
     `This is a scheduled check the user set up: "${title}". It runs on its own, so the user is not waiting for it.
 
 ${job}
 
-If there is something the user should hear, your final answer is that message, written the way a friend would text it, not as a report. If there is nothing new or worth a message, answer exactly ${NOTHING} and nothing else: the user then gets no message.`;
+If there is something the user should hear, send it with ${SEND_MESSAGE} in one message, written the way a friend would text it, not as a report. If there is nothing new or worth a message, send nothing: the user then gets no message.`;
+
+/**
+ * For an agent about to stop without having sent anything: the one more turn it gets to send what it
+ * forgot. What it wrote instead is quoted, so it cannot take that text for an answer that went out.
+ */
+export const buildNothingSentNote = (forThe: "message" | "job", wrote: string): string => {
+    const quote = wrote.length > 200 ? `${wrote.slice(0, 199)}…` : wrote;
+    const what = wrote
+        ? `Not delivered: the user did not see "${quote}". Text you write outside ${SEND_MESSAGE} never reaches them.`
+        : `You have sent the user nothing for this ${forThe}, and only ${SEND_MESSAGE} reaches them.`;
+    const next =
+        forThe === "job"
+            ? `Send them the result with ${SEND_MESSAGE} now, then finish with your notes.`
+            : `Send what they should read with ${SEND_MESSAGE} now. If a reaction or silence really is the answer, react or end without writing anything.`;
+    return `<context>\n${what} ${next}\n</context>`;
+};
 
 const byAgent = (task: BackgroundTask): string => (task.agent ? ` by the ${task.agent.name} agent` : "");
 
@@ -170,6 +184,14 @@ const describeRunning = (task: BackgroundTask, now: Date): string => {
     }
     const told = task.updates.map((update) => `"${update}"`).join(", ");
     if (told) parts.push(`it already texted the user: ${told}`);
+    return parts.join("; ");
+};
+
+const describeFinished = (task: BackgroundTask): string => {
+    const parts = [`Background task "${task.title}"${byAgent(task)} ${task.status}`];
+    if (task.updates.length) parts.push(`it sent the user: ${task.updates.map((update) => `"${update}"`).join(", ")}`);
+    if (task.status === "done") parts.push(`its notes for you: ${task.result || "(none)"}`);
+    if (task.status === "failed") parts.push(`the user was told it did not finish: ${task.result}`);
     return parts.join("; ");
 };
 
@@ -192,11 +214,7 @@ export const buildUserTurn = (
 ): string => {
     const lines = [`Now: ${formatNow(context.now, context.timezone)}`];
     for (const text of context.sent ?? []) lines.push(`You messaged the user on your own: ${text}`);
-    for (const task of context.finished) {
-        lines.push(
-            `Background task "${task.title}"${byAgent(task)} ${task.status}; the user was sent: ${task.result ?? "(nothing)"}`,
-        );
-    }
+    for (const task of context.finished) lines.push(describeFinished(task));
     for (const task of context.running) lines.push(describeRunning(task, context.now));
     lines.push(...(context.files ?? []));
     return `<context>\n${lines.join("\n")}\n</context>\n\n${text}`;

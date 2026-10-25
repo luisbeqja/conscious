@@ -5,19 +5,48 @@ import { describe, expect, it, vi } from "vitest";
 import { BackgroundAgents } from "../src/agents/background-agents.js";
 
 describe("BackgroundAgents", () => {
-    it("messages the user when a task finishes and reports it to the orchestrator once", async () => {
+    it("lets a task message the user, keeps its notes, and reports it to the orchestrator once", async () => {
         const sent: string[] = [];
-        const agents = new BackgroundAgents(
-            async (task) => `done: ${task.title}`,
+        const agents: BackgroundAgents = new BackgroundAgents(
+            async (task) => {
+                await agents.tellUser(task.id, `found: ${task.title}`);
+                return "Dr Rossi, Via Torino; the other two had no slot this month.";
+            },
             async (_userId, text) => {
                 sent.push(text);
             },
             2,
         );
         agents.spawn("u1", { title: "Find a dentist", brief: "near Milan centre" });
-        await vi.waitFor(() => expect(sent).toEqual(["done: Find a dentist"]));
-        expect(agents.takeUnreported("u1")).toHaveLength(1);
+        await vi.waitFor(() => expect(agents.running("u1")).toHaveLength(0));
+        // Only what it sent reaches the user; its notes are for the orchestrator.
+        expect(sent).toEqual(["found: Find a dentist"]);
+        expect(agents.takeUnreported("u1")).toEqual([
+            expect.objectContaining({
+                status: "done",
+                updates: ["found: Find a dentist"],
+                result: expect.stringContaining("Dr Rossi"),
+            }),
+        ]);
         expect(agents.takeUnreported("u1")).toHaveLength(0);
+    });
+
+    it("lets one job send only a few messages", async () => {
+        const refused: string[] = [];
+        const agents: BackgroundAgents = new BackgroundAgents(
+            async (task) => {
+                for (const update of ["one", "two", "three", "four", "five"]) {
+                    await agents.tellUser(task.id, update).catch((error: Error) => refused.push(error.message));
+                }
+                return "";
+            },
+            async () => {},
+            1,
+        );
+        const task = agents.spawn("u1", { title: "a", brief: "b" });
+        await vi.waitFor(() => expect(task.status).toBe("done"));
+        expect(task.updates).toEqual(["one", "two", "three", "four"]);
+        expect(refused).toEqual([expect.stringContaining("already sent 4 messages")]);
     });
 
     it("caps running tasks per user and lets only the owner cancel", async () => {
@@ -65,10 +94,11 @@ describe("BackgroundAgents", () => {
 
         const briefs: string[] = [];
         const sent: string[] = [];
-        const second = new BackgroundAgents(
+        const second: BackgroundAgents = new BackgroundAgents(
             async (resumed) => {
                 briefs.push(`${resumed.brief} / ${resumed.messages.join()} / ${resumed.restarts}`);
-                return "TAP, 7:05";
+                await second.tellUser(resumed.id, "TAP, 7:05");
+                return "";
             },
             async (_userId, text) => {
                 sent.push(text);

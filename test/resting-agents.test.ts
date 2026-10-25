@@ -47,7 +47,8 @@ describe("AgentStore", () => {
             title: "Flights to Lisbon",
             brief: "Lisbon, next week, carry-on only",
             status: "done",
-            answer: "TAP, €149 direct from MXP",
+            sent: ["TAP, €149 direct from MXP"],
+            notes: "Ryanair was cheaper but no bag",
         });
 
         const sandbox = await sandboxes.forUser("me");
@@ -59,7 +60,7 @@ describe("AgentStore", () => {
             "- 2026-10-23 · Flights to Lisbon · done · runs/2026-10-23-ab12cd34.md",
         ]);
         expect(sandbox.files.get("/home/user/agents/flights/runs/2026-10-23-ab12cd34.md")).toContain(
-            "TAP, €149 direct from MXP",
+            "## Sent to the user\n\nTAP, €149 direct from MXP\n\n## Notes\n\nRyanair was cheaper but no bag",
         );
         const listed = await store.list("me");
         expect(listed).toEqual([{ ...flights, jobs: 1, last: "2026-10-23" }]);
@@ -83,6 +84,7 @@ describe("AgentStore", () => {
             title: "A present",
             brief: "b",
             status: "done",
+            sent: [],
         });
         expect((await store.list("me")).map((agent) => agent.name)).toEqual(["gift-ideas", "flights"]);
         expect(renderAgentList([])).toBe("None yet.");
@@ -145,6 +147,9 @@ const call =
     (name: string, args: Parameters<typeof fauxToolCall>[1]): Reply =>
     () =>
         fauxAssistantMessage(fauxToolCall(name, args), { stopReason: "toolUse" });
+/** The model sending the user a message; `done` is the turn after it, which ends the run. */
+const send = (value: string): Reply => call("chat_send_message", { text: value });
+const done: Reply = () => fauxAssistantMessage([]);
 
 const webCapability: Capability = {
     id: "web",
@@ -208,13 +213,13 @@ describe("an agent across jobs", () => {
             background,
             agents: store,
         });
-        return { scripts, prompts, tools, sent, orchestrator };
+        return { scripts, prompts, tools, sent, background, orchestrator };
     };
 
     it("makes an agent for a new kind of job, keeps its notebook, and wakes it for the next one", async () => {
         const sandboxes = new FakeSandboxes();
         const store = AgentStore.onComputer(sandboxes);
-        const { scripts, prompts, tools, sent, orchestrator } = setUp(store);
+        const { scripts, prompts, tools, sent, background, orchestrator } = setUp(store);
         const today = dayIn(timezone);
 
         // October: no agent yet, so the orchestrator designs one for flights.
@@ -227,14 +232,18 @@ describe("an agent across jobs", () => {
                 instructions: "Compare the total price with bags. Check direct and one-stop.",
                 capabilities: ["web"],
             }),
-            text("On it, I'll text you the best ones."),
+            send("On it, I'll text you the best ones."),
+            done,
         );
         scripts.background.push(
             call("notebook_save_notes", { notes: "- flies from MXP or BGY\n- carry-on only" }),
-            text("Two good ones: €119 with a stop, or €149 direct from MXP."),
+            send("Two good ones: €119 with a stop, or €149 direct from MXP."),
+            text("Easyjet had nothing direct."),
         );
-        expect(await orchestrator.send("me", "find me a flight to Lisbon next week")).toContain("On it");
-        await vi.waitFor(() => expect(sent).toEqual(["Two good ones: €119 with a stop, or €149 direct from MXP."]));
+        const [ack] = await orchestrator.send("me", "find me a flight to Lisbon next week");
+        expect(ack).toContain("On it");
+        await vi.waitFor(() => expect(background.running("me")).toHaveLength(0));
+        expect(sent).toEqual(["Two good ones: €119 with a stop, or €149 direct from MXP."]);
 
         const first = prompts.background[0] ?? "";
         expect(first).toContain("# You are the user's flights agent");
@@ -253,7 +262,8 @@ describe("an agent across jobs", () => {
         // The user tells Conscious what they picked: it goes into the agent's notebook.
         scripts.main.push(
             call("agents_add_note", { agent: "flights", note: "Booked the second one: direct, 30 € more" }),
-            text("Nice ✈️"),
+            send("Nice ✈️"),
+            done,
         );
         await orchestrator.send("me", "booked the second one!");
         expect(prompts.main.at(-2)).toContain(
@@ -271,11 +281,13 @@ describe("an agent across jobs", () => {
                 brief: "A flight to Tokyo around 12 December.",
                 agent: "flights",
             }),
-            text("On it."),
+            send("On it."),
+            done,
         );
-        scripts.background.push(text("Direct from MXP on 12 Dec, €612."));
+        scripts.background.push(send("Direct from MXP on 12 Dec, €612."), done);
         await orchestrator.send("me", "now a flight to Tokyo in December?");
-        await vi.waitFor(() => expect(sent).toHaveLength(2));
+        await vi.waitFor(() => expect(background.running("me")).toHaveLength(0));
+        expect(sent).toHaveLength(2);
 
         const second = prompts.background.at(-1) ?? "";
         expect(second).toContain("You have done this kind of job for them 1 time");

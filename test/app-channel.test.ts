@@ -15,7 +15,7 @@ afterEach(() => {
 });
 
 const start = async (
-    answer: (text: string, options: SendOptions) => Promise<string>,
+    answer: (text: string, options: SendOptions) => Promise<unknown>,
     others?: RequestListener,
     startFresh: (userId: string) => Promise<void> = async () => {},
 ) => {
@@ -56,7 +56,7 @@ const phone = async (url: string, code: string) => {
 
 describe("AppChannel", () => {
     it("shows running background tasks on open phones and on the next one to connect", async () => {
-        const { channel, url } = await start(async () => "");
+        const { channel, url } = await start(async () => {});
         const first = await phone(url, "abcd-efgh");
         await first.waitFor("ready");
         const task = {
@@ -118,7 +118,7 @@ describe("AppChannel", () => {
             options.onProgress?.({ type: "tool", name: "web_search" });
             options.onProgress?.({ type: "text", delta: "Sunny " });
             await options.react?.("👍");
-            return `Sunny for ${text}`;
+            await options.say?.(`Sunny for ${text}`);
         });
         const app = await phone(url, "ABCD-EFGH ");
         expect((await app.waitFor("ready")).history).toEqual([]);
@@ -142,7 +142,7 @@ describe("AppChannel", () => {
     it("starts fresh: Conscious forgets the user and every open phone shows an empty chat", async () => {
         const forgotten: string[] = [];
         const { url, log } = await start(
-            async (text) => `hi ${text}`,
+            async (text, options) => options.say?.(`hi ${text}`),
             undefined,
             async (userId) => void forgotten.push(userId),
         );
@@ -163,7 +163,7 @@ describe("AppChannel", () => {
     });
 
     it("closes a socket with a wrong code", async () => {
-        const { url } = await start(async () => "");
+        const { url } = await start(async () => {});
         const socket = new WebSocket(url);
         await new Promise((resolve) => socket.once("open", resolve));
         socket.send(JSON.stringify({ type: "auth", code: "nope" }));
@@ -172,7 +172,7 @@ describe("AppChannel", () => {
     });
 
     it("keeps a notification for when the app opens, and serves files only to their owner", async () => {
-        const { channel, log, port, url } = await start(async () => "");
+        const { channel, log, port, url } = await start(async () => {});
         await channel.notify("me", "Time to leave for the airport");
         const file = log.storeFile("me", "ticket.pdf", "application/pdf", new Uint8Array([1, 2, 3]));
 
@@ -193,7 +193,7 @@ describe("AppChannel", () => {
 
     it("shares its port: paths outside /app/ go to the other handler, the app keeps its own", async () => {
         const { port, url } = await start(
-            async () => "",
+            async () => {},
             (request, response) => response.writeHead(200).end(`vault ${request.url}`),
         );
         expect(await (await fetch(`http://localhost:${port}/vault/abc`)).text()).toBe("vault /vault/abc");
@@ -215,7 +215,7 @@ describe("AppChannel", () => {
     });
 
     it("sends notifications where the user last wrote", async () => {
-        const { channel, log } = await start(async () => "");
+        const { channel, log } = await start(async () => {});
         expect(channel.wroteHereSince("me", undefined)).toBe(false);
         log.add("me", { role: "user", text: "hi", at: new Date("2026-10-22T10:00:00Z") });
         expect(channel.wroteHereSince("me", new Date("2026-10-22T09:00:00Z"))).toBe(true);

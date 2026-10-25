@@ -20,8 +20,8 @@ export const EFFORT: Record<Effort, EffortBudget> = {
     deep: { maxTurns: 120, maxToolCalls: 250, minutes: 60 },
 };
 
-/** Messages a sub-agent may send the user before its result, so a long job is not silent but never chatty. */
-export const MAX_UPDATES = 3;
+/** Messages a sub-agent may send in one job: its result and an update or two. Not silent, never chatty. */
+export const MAX_MESSAGES = 4;
 
 /** Parts of one job that run side by side, each in a sub-agent of its own. */
 export const MAX_LANES = 5;
@@ -53,7 +53,7 @@ export interface TaskAgent {
     description?: string;
 }
 
-// Time to write the final answer once the deadline has passed, before the run is stopped.
+// Time to send the result once the deadline has passed, before the run is stopped.
 const GRACE_MS = 3 * 60_000;
 
 export interface BackgroundTask {
@@ -77,7 +77,7 @@ export interface BackgroundTask {
     lastStep?: string;
     /** What the user added after it started, passed on by the orchestrator. */
     messages: string[];
-    /** What it told the user while working, before its result. */
+    /** What it sent the user, in order: updates while it worked, then its result. */
     updates: string[];
     /** How many times a restart of Conscious made it start over. */
     restarts: number;
@@ -94,7 +94,7 @@ export interface NewTask {
     recentChat?: string;
 }
 
-/** Does the job and returns what to tell the user. Runs a sub-agent with its own loop and tools. */
+/** Does the job, messaging the user itself, and returns its notes for the orchestrator. A sub-agent's own loop. */
 export type TaskRunner = (task: BackgroundTask, signal: AbortSignal) => Promise<string>;
 export type Notify = (userId: string, text: string) => Promise<void>;
 
@@ -107,7 +107,7 @@ export const deadlineOf = (task: BackgroundTask): number =>
 
 /**
  * Sub-agents that work while the conversation goes on. The orchestrator hands one a brief and
- * answers the user at once; the sub-agent messages the user itself when it is done.
+ * answers the user at once; the sub-agent messages the user itself, with its result.
  * Depth is one: a sub-agent's tools never include spawning another.
  */
 export class BackgroundAgents {
@@ -236,12 +236,12 @@ export class BackgroundAgents {
         this.changed(task);
     }
 
-    /** A sub-agent texts the user before its result: a first find, a question it settled, a delay. */
+    /** A sub-agent messages the user: a first find, a delay, its result. */
     async tellUser(id: string, text: string): Promise<void> {
         const task = this.tasks.get(id)?.task;
         if (task?.status !== "running") throw new Error("This task is not running any more.");
-        if (task.updates.length >= MAX_UPDATES) {
-            throw new Error(`You already sent ${MAX_UPDATES} updates. Keep the rest for your final answer.`);
+        if (task.updates.length >= MAX_MESSAGES) {
+            throw new Error(`You already sent ${MAX_MESSAGES} messages for this job. Put the rest in your notes.`);
         }
         task.updates.push(text);
         this.changed(task);
@@ -288,8 +288,9 @@ export class BackgroundAgents {
         }
         task.finishedAt = new Date();
         this.changed(task);
-        const text = task.status === "done" ? (task.result ?? "") : `I couldn't finish "${task.title}": ${task.result}`;
-        await this.notify(task.userId, text).catch((error) =>
+        // A job that is done already messaged the user itself; one that failed is said here.
+        if (task.status !== "failed") return;
+        await this.notify(task.userId, `I couldn't finish "${task.title}": ${task.result}`).catch((error) =>
             console.error(`[background ${task.id}] notify failed`, error),
         );
     }

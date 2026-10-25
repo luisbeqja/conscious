@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { createModels, fauxAssistantMessage, fauxProvider, fauxText, fauxToolCall } from "@earendil-works/pi-ai";
+import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai";
 import { afterEach, describe, expect, it } from "vitest";
 import { BackgroundAgents } from "../src/agents/background-agents.js";
 import { createRegistry } from "../src/capabilities/index.js";
@@ -76,16 +76,25 @@ describe("plugins in the agent loop", () => {
                 stopReason: "toolUse",
             }),
             fauxAssistantMessage(fauxToolCall("plugins_install_plugin", { id: "github" }), { stopReason: "toolUse" }),
-            fauxAssistantMessage(fauxText("Installed GitHub.")),
+            fauxAssistantMessage(fauxToolCall("chat_send_message", { text: "Installed GitHub." }), {
+                stopReason: "toolUse",
+            }),
+            fauxAssistantMessage([]),
             fauxAssistantMessage(fauxToolCall("github_list_notifications", {}), { stopReason: "toolUse" }),
             fauxAssistantMessage(
                 fauxToolCall("github_create_issue", { repo: "octocat/hello-world", title: "Thanks" }),
                 { stopReason: "toolUse" },
             ),
-            fauxAssistantMessage(fauxText("One review request on hello-world. I need your yes to open the issue.")),
+            fauxAssistantMessage(
+                fauxToolCall("chat_send_message", {
+                    text: "One review request on hello-world. I need your yes to open the issue.",
+                }),
+                { stopReason: "toolUse" },
+            ),
+            fauxAssistantMessage([]),
         ]);
 
-        expect(await orchestrator.send("me", "connect my github")).toBe("Installed GitHub.");
+        expect(await orchestrator.send("me", "connect my github")).toEqual(["Installed GitHub."]);
         const progress: RunProgress[] = [];
         await orchestrator.send("me", "anything on github?", { onProgress: (p) => progress.push(p) });
 

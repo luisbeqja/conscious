@@ -44,8 +44,10 @@ export interface AgentRun {
     brief: string;
     /** "done", or why it did not finish. */
     status: string;
-    /** What the user was sent. */
-    answer?: string;
+    /** What the user was sent, in order. */
+    sent: readonly string[];
+    /** What the agent wrote at the end, for itself and the chat: what it found and did not send. */
+    notes?: string;
 }
 
 /** An agent's files, under its own folder name, on the user's computer or the host's disk. */
@@ -231,9 +233,13 @@ export class AgentStore {
                 "",
                 run.brief.trim(),
                 "",
-                "## Answer",
+                "## Sent to the user",
                 "",
-                run.answer?.trim() || "(none)",
+                run.sent.join("\n\n").trim() || "(nothing)",
+                "",
+                "## Notes",
+                "",
+                run.notes?.trim() || "(none)",
                 "",
             ].join("\n"),
         );

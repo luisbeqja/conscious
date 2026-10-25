@@ -7,11 +7,10 @@ import {
 } from "../agents/background-agents.js";
 import { AGENTS_DIR, type AgentStore, dayIn, renderAgentList } from "../agents/resting-agents.js";
 import { notebookCapability } from "../capabilities/agents/capability.js";
-import { taskCapability } from "../capabilities/background/capability.js";
 import type { CapabilityRegistry } from "../capabilities/registry.js";
 import type { Capability, ToolContext } from "../capabilities/types.js";
 import type { Budgets } from "../config.js";
-import type { ConversationStore } from "../conversations/store.js";
+import { asSaid, type ConversationStore, withSentReplies } from "../conversations/store.js";
 import { type IncomingFile, type OutgoingFile, prepareFiles, withoutImages } from "../media/incoming.js";
 import { emptyMemory, isEmpty, type MemoryStore, renderMemory, SandboxMemoryStore } from "../memory/memory.js";
 import {
@@ -19,11 +18,11 @@ import {
     buildBackgroundPrompt,
     buildCheckBrief,
     buildLaneBrief,
+    buildNothingSentNote,
     buildSteeringMessage,
     buildSystemPrompt,
     buildTaskBrief,
     buildUserTurn,
-    isNothing,
     type PromptContext,
     renderRecentChat,
 } from "../prompts/prompts.js";
@@ -32,7 +31,7 @@ import type { SandboxProvider } from "../sandbox/sandbox.js";
 import type { Reminder, Scheduler } from "../scheduler/scheduler.js";
 import type { SkillLibrary } from "../skills/library.js";
 import type { ModelRuntime } from "./models.js";
-import { type RunProgress, runAgent } from "./run-agent.js";
+import { type AgentRunResult, type RunProgress, runAgent } from "./run-agent.js";
 import { adaptTool } from "./tool-adapter.js";
 
 export interface OrchestratorDeps {
@@ -61,13 +60,15 @@ interface RunOptions {
     deadline?: number;
     budgets?: Budgets;
     harness?: Harness;
-    task?: ToolContext["task"];
+    /** How its messages reach the user. */
+    say?: ToolContext["say"];
     /** Who the agent is and what it kept, when an agent of the user's does the job. */
     agent?: string;
     /** Only for the run that writes the job's answer. */
     notebook?: ToolContext["notebook"];
     onProgress?: (progress: RunProgress) => void;
     steering?: () => string[];
+    beforeStop?: (wrote: string) => string | undefined;
 }
 
 /** An agent woken for a job: its name, what it kept, and the design it works with. */
@@ -93,6 +94,8 @@ export class SentLog {
 
 /** How the user's chat takes part in one answer. */
 export interface SendOptions {
+    /** Puts a message in the chat the user wrote from, the moment the agent sends it. Else it is only returned. */
+    say?: (text: string) => Promise<void>;
     /** Live progress, for a terminal or a typing indicator. */
     onProgress?: (progress: RunProgress) => void;
     /** Reacts to the message being answered. Without it the agent cannot react. */
@@ -104,6 +107,34 @@ export interface SendOptions {
 }
 
 const FALLBACK = "Oops, something broke on my side. Try me again in a minute?";
+
+/** Messages one run may send, so a model caught in a loop cannot flood the user's chat. */
+const MAX_MESSAGES = 5;
+
+/** A run's way to the user: each message delivered at once and kept, up to `MAX_MESSAGES`. */
+const speaker = (deliver: (text: string) => Promise<void>) => {
+    const sent: string[] = [];
+    const say = async (text: string) => {
+        if (sent.length >= MAX_MESSAGES) {
+            throw new Error(`You already sent ${MAX_MESSAGES} messages for this. Stop here.`);
+        }
+        await deliver(text);
+        sent.push(text);
+    };
+    return { sent, say };
+};
+
+/** Reminds an agent, once, that it is stopping without having sent the user what it should. */
+const remindOnce = (run: string, forgot: () => boolean, note: (wrote: string) => string) => {
+    let reminded = false;
+    return (wrote: string) => {
+        if (reminded || !forgot()) return undefined;
+        reminded = true;
+        // How often this shows up says how well the model keeps to the message tool.
+        console.warn(`[orchestrator] ${run} was about to end without sending anything; reminded once`);
+        return note(wrote);
+    };
+};
 
 const toolsFor = (capabilities: readonly Capability[], context: ToolContext) => {
     const registered = capabilities.flatMap((capability) => capability.tools);
@@ -128,9 +159,9 @@ export class Orchestrator {
 
     /**
      * Answers one message. Messages from the same user wait for the one before them.
-     * An empty answer means a reaction said it all, so there is nothing to send.
+     * Resolves with what the user was sent, in order: none when a reaction said it all.
      */
-    send(userId: string, text: string, options: SendOptions = {}): Promise<string> {
+    send(userId: string, text: string, options: SendOptions = {}): Promise<string[]> {
         const previous = this.queues.get(userId) ?? Promise.resolve();
         const next = previous.catch(() => {}).then(() => this.handle(userId, text, options));
         this.queues.set(userId, next);
@@ -164,7 +195,7 @@ export class Orchestrator {
         return next;
     }
 
-    private async handle(userId: string, text: string, options: SendOptions): Promise<string> {
+    private async handle(userId: string, text: string, options: SendOptions): Promise<string[]> {
         const { store, registry, runtime, budgets, timezone, scheduler, background } = this.deps;
         const capabilities = (await registry.available(userId)).filter(
             (capability) => options.react || capability.id !== "reactions",
@@ -177,12 +208,14 @@ export class Orchestrator {
                   return done === true;
               }
             : undefined;
-        const history = await store.load(userId);
+        const { sent, say } = speaker(async (message) => options.say?.(message));
+        const history = withSentReplies(await store.load(userId));
         const { tools, effects } = toolsFor(capabilities, {
             userId,
             timezone,
             scheduler,
             background,
+            say,
             recentChat: renderRecentChat(history, text),
             react,
             sendFile: options.sendFile,
@@ -215,16 +248,26 @@ export class Orchestrator {
             budgets,
             sessionId: userId,
             onProgress: options.onProgress,
+            beforeStop: remindOnce(
+                `the answer to ${userId}`,
+                () => !sent.length && !reacted,
+                (wrote) => buildNothingSentNote("message", wrote),
+            ),
         });
-        await store.save(userId, withoutImages(result.messages));
-        if (!result.text && reacted && result.status === "completed") return "";
-        return result.text || FALLBACK;
+        await store.save(userId, withoutImages([...history, ...asSaid(result.messages.slice(history.length))]));
+        // Silence is the agent's to choose; a run that broke before it said anything is not.
+        if (!sent.length && result.status !== "completed") {
+            await options.say?.(FALLBACK);
+            sent.push(FALLBACK);
+        }
+        return sent;
     }
 
     /**
      * What a background agent runs: its own loop with the capabilities and method the orchestrator
      * chose for the job, never more background work. A job split into parts runs each part in a
-     * sub-agent of its own at the same time, then one more puts their findings together.
+     * sub-agent of its own at the same time, then one more puts their findings together and sends
+     * the user the result. Resolves with that agent's notes.
      */
     runBackgroundTask = async (task: BackgroundTask, signal: AbortSignal): Promise<string> => {
         const { background, agents } = this.deps;
@@ -237,7 +280,7 @@ export class Orchestrator {
                 signal,
                 harness: woken?.harness ?? task.harness,
                 agent: woken?.section,
-                task: { id: task.id, tellUser: (text) => background.tellUser(task.id, text) },
+                say: (text) => background.tellUser(task.id, text),
                 onProgress: (progress) => {
                     if (progress.type === "tool") background.progress(task.id, progress.name);
                 },
@@ -262,12 +305,14 @@ export class Orchestrator {
                 lanes.map(async (lane, index) => {
                     lane.status = "running";
                     try {
-                        lane.result = await this.runAlone(
+                        const { status, text } = await this.runAlone(
                             task.userId,
                             `background-${task.id}-${index + 1}`,
                             buildLaneBrief(task, lane),
                             { ...options(), deadline: lanesDeadline },
                         );
+                        if (status === "failed" || !text) throw new Error("the sub-agent did not finish");
+                        lane.result = text;
                         lane.status = "done";
                     } catch (error) {
                         lane.status = "failed";
@@ -276,13 +321,25 @@ export class Orchestrator {
                 }),
             );
             // Only the agent that writes the answer rewrites the notebook: the parts saw only their part.
+            let answered = false;
             const result = await this.runAlone(task.userId, `background-${task.id}`, buildTaskBrief(task), {
                 ...options(),
+                say: async (text) => {
+                    await background.tellUser(task.id, text);
+                    answered = true;
+                },
                 notebook:
                     woken && agents ? { save: (notes) => agents.saveNotes(task.userId, woken.name, notes) } : undefined,
+                beforeStop: remindOnce(
+                    `background task ${task.id}`,
+                    () => !answered,
+                    (wrote) => buildNothingSentNote("job", wrote),
+                ),
             });
-            await this.logRun(task, woken, "done", result);
-            return result;
+            if (result.status === "failed") throw new Error("the sub-agent did not finish");
+            if (!answered) throw new Error("I lost the answer before sending it");
+            await this.logRun(task, woken, "done", result.text);
+            return result.text;
         } catch (error) {
             const reason =
                 task.status === "cancelled"
@@ -342,8 +399,8 @@ export class Orchestrator {
         }
     }
 
-    /** Writes the job down in the agent's log. Never fails the job. */
-    private async logRun(task: BackgroundTask, woken: Woken | undefined, status: string, answer?: string) {
+    /** Writes the job down in the agent's log, with what the user was sent. Never fails the job. */
+    private async logRun(task: BackgroundTask, woken: Woken | undefined, status: string, notes?: string) {
         const { agents, timezone } = this.deps;
         if (!agents || !woken) return;
         await agents
@@ -353,25 +410,33 @@ export class Orchestrator {
                 title: task.title,
                 brief: task.brief,
                 status,
-                answer,
+                sent: task.updates,
+                notes,
             })
             .catch((error) => console.error(`[agents] could not log ${task.id} for ${woken.name}`, error));
     }
 
     /**
-     * A scheduled check firing: an agent does the job on its own. Returns what to send the user,
-     * or an empty string when it found nothing worth a message.
+     * A scheduled check firing: an agent does the job on its own and messages the user through `say`
+     * only when it found something worth it. Resolves with what it sent: none when it found nothing.
      */
-    runCheck = async (reminder: Reminder): Promise<string> => {
-        const text = await this.runAlone(
+    runCheck = async (reminder: Reminder, say: (text: string) => Promise<void>): Promise<string[]> => {
+        const speaking = speaker(say);
+        await this.runAlone(
             reminder.userId,
             `check-${reminder.id}-${Date.now()}`,
             buildCheckBrief(reminder.text, reminder.check ?? reminder.text),
+            { say: speaking.say },
         );
-        return isNothing(text) ? "" : text;
+        return speaking.sent;
     };
 
-    private async runAlone(userId: string, sessionId: string, brief: string, limits: RunOptions = {}): Promise<string> {
+    private async runAlone(
+        userId: string,
+        sessionId: string,
+        brief: string,
+        limits: RunOptions = {},
+    ): Promise<AgentRunResult> {
         const { registry, runtime, timezone, scheduler } = this.deps;
         const chosen = new Set(limits.harness?.capabilities ?? []);
         // Its job came from a brief, not a message, so there is nothing to react to.
@@ -382,21 +447,23 @@ export class Orchestrator {
                     capability.id !== "reactions" &&
                     // The agents are the orchestrator's to manage; a sub-agent keeps only its own notebook.
                     capability.id !== "agents" &&
-                    // Memory stays: the sub-agent is still Conscious, and knows the user.
-                    (!chosen.size || chosen.has(capability.id) || capability.id === "memory"),
+                    // Memory stays: the sub-agent is still Conscious, and knows the user. The chat is how it speaks.
+                    (!chosen.size ||
+                        chosen.has(capability.id) ||
+                        capability.id === "memory" ||
+                        capability.id === "chat"),
             ),
-            ...(limits.task ? [taskCapability] : []),
             ...(limits.notebook ? [notebookCapability] : []),
         ];
         const { tools, effects } = toolsFor(capabilities, {
             userId,
             timezone,
             scheduler,
-            task: limits.task,
+            say: limits.say,
             notebook: limits.notebook,
             seesImages: runtime.model.input.includes("image"),
         });
-        const result = await runAgent({
+        return runAgent({
             runtime,
             systemPrompt: buildBackgroundPrompt(
                 registry.renderIndex(capabilities),
@@ -415,9 +482,8 @@ export class Orchestrator {
             onProgress: limits.onProgress,
             steering: limits.steering,
             lastWords: limits.notebook ? new Set(["notebook_save_notes"]) : undefined,
+            beforeStop: limits.beforeStop,
         });
-        if (result.status === "failed" || !result.text) throw new Error("the sub-agent did not finish");
-        return result.text;
     }
 
     /** The agents the orchestrator can give a job to. A computer that cannot be reached lists none, for one message. */

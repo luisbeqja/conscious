@@ -1,5 +1,6 @@
 import { Agent, type AgentMessage, type AgentTool } from "@earendil-works/pi-agent-core";
-import type { ImageContent } from "@earendil-works/pi-ai";
+import type { AssistantMessageEvent, ImageContent } from "@earendil-works/pi-ai";
+import { SEND_MESSAGE } from "../capabilities/chat/capability.js";
 import type { Effect } from "../capabilities/types.js";
 import type { Budgets } from "../config.js";
 import type { ModelRuntime } from "./models.js";
@@ -20,17 +21,20 @@ export interface AgentRun {
     deadline?: number;
     /** New instructions that arrived during the run, read after each turn. */
     steering?: () => string[];
-    /** Tools that still run past the deadline and the tool budget, like an agent's notebook. */
+    /** Tools that still run past the deadline and the tool budget, like an agent's notebook. Messages always do. */
     lastWords?: ReadonlySet<string>;
+    /** Asked when the agent is about to stop, with the text it ended on. A note returned goes to it, and it goes on. */
+    beforeStop?: (wrote: string) => string | undefined;
     /** Live progress, for a terminal or a typing indicator. Never stored. */
     onProgress?: (progress: RunProgress) => void;
 }
 
+/** `text` is a message to the user as it is written, `tool` a step of the work. The agent's own text is never shown. */
 export type RunProgress = { type: "text"; delta: string } | { type: "tool"; name: string };
 
 export interface AgentRunResult {
     messages: AgentMessage[];
-    /** What the agent said last, the text the user receives. */
+    /** What the agent wrote last, outside any message to the user: a part's findings, a job's notes. */
     text: string;
     status: "completed" | "failed" | "budget_exhausted";
 }
@@ -49,8 +53,25 @@ export const lastAssistantText = (messages: readonly AgentMessage[]): string => 
 };
 
 /**
+ * What is new in a message to the user being written, from the call that sends it. `written` keeps what
+ * each call (by its place in the reply) showed so far. Empty for anything else the model writes.
+ */
+const newlyWritten = (update: AssistantMessageEvent, written: Map<number, string>): string => {
+    if (update.type !== "toolcall_delta" && update.type !== "toolcall_end") return "";
+    const call = update.type === "toolcall_end" ? update.toolCall : update.partial.content[update.contentIndex];
+    if (call?.type !== "toolCall" || call.name !== SEND_MESSAGE || typeof call.arguments.text !== "string") return "";
+    const text = call.arguments.text;
+    const before = written.get(update.contentIndex) ?? "";
+    // Arguments arrive as half-parsed JSON; a guess that changed earlier text is skipped, the message shows whole.
+    if (text.length <= before.length || !text.startsWith(before)) return "";
+    written.set(update.contentIndex, text);
+    return text.slice(before.length);
+};
+
+/**
  * One agent loop on pi-agent-core, shared by the orchestrator and every background agent.
- * Everything Conscious-specific is policy around the loop: budgets, and commits held for a yes.
+ * Everything Conscious-specific is policy around the loop: budgets, commits held for a yes, and
+ * messages to the user, which are the only thing of the agent's the user sees.
  */
 export const runAgent = async (run: AgentRun): Promise<AgentRunResult> => {
     let toolCalls = 0;
@@ -76,8 +97,8 @@ export const runAgent = async (run: AgentRun): Promise<AgentRunResult> => {
                     reason: "This acts on the user's behalf and needs their explicit yes, which is not built yet. Tell them what you would do instead.",
                 };
             }
-            // What the agent learned is worth keeping most when the job ran long.
-            if (run.lastWords?.has(toolCall.name)) return undefined;
+            // What the user is told, and what the agent learned, matter most when the job ran long.
+            if (toolCall.name === SEND_MESSAGE || run.lastWords?.has(toolCall.name)) return undefined;
             const save = run.lastWords?.size
                 ? ` If you have not saved your notebook, save it now with ${[...run.lastWords].join(" or ")}.`
                 : "";
@@ -85,14 +106,14 @@ export const runAgent = async (run: AgentRun): Promise<AgentRunResult> => {
                 status = "budget_exhausted";
                 return {
                     block: true,
-                    reason: `Time is up for this job. Stop using tools and write your final answer with what you have.${save}`,
+                    reason: `Time is up for this job. Use no tool but ${SEND_MESSAGE}, and finish with what you have.${save}`,
                 };
             }
             if (++toolCalls > run.budgets.maxToolCallsPerRun) {
                 status = "budget_exhausted";
                 return {
                     block: true,
-                    reason: `The tool budget for this message is used up. Answer with what you have.${save}`,
+                    reason: `The tool budget for this message is used up. Use no tool but ${SEND_MESSAGE}, and finish with what you have.${save}`,
                 };
             }
             return undefined;
@@ -100,18 +121,33 @@ export const runAgent = async (run: AgentRun): Promise<AgentRunResult> => {
     });
 
     let turns = 0;
+    let written = new Map<number, string>();
     agent.subscribe((event) => {
-        if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") {
-            run.onProgress?.({ type: "text", delta: event.assistantMessageEvent.delta });
+        if (event.type === "message_start") written = new Map();
+        if (event.type === "message_update") {
+            const delta = newlyWritten(event.assistantMessageEvent, written);
+            if (delta) run.onProgress?.({ type: "text", delta });
         }
-        if (event.type === "tool_execution_start") run.onProgress?.({ type: "tool", name: event.toolName });
+        // Sending a message is not a step of the work: the message itself shows.
+        if (event.type === "tool_execution_start" && event.toolName !== SEND_MESSAGE) {
+            run.onProgress?.({ type: "tool", name: event.toolName });
+        }
         if (event.type !== "turn_end") return;
         if (++turns >= run.budgets.maxTurnsPerRun) {
             status = "budget_exhausted";
             agent.abort();
             return;
         }
-        for (const text of run.steering?.() ?? []) agent.steer({ role: "user", content: text, timestamp: Date.now() });
+        const steering = run.steering?.() ?? [];
+        for (const text of steering) agent.steer({ role: "user", content: text, timestamp: Date.now() });
+        // A reply with no tool calls, and nothing new from the user: the agent is about to stop.
+        const { message } = event;
+        const stopping =
+            message.role === "assistant" &&
+            (message.stopReason === "stop" || message.stopReason === "length") &&
+            !message.content.some((block) => block.type === "toolCall");
+        const note = stopping && !steering.length ? run.beforeStop?.(lastAssistantText([message])) : undefined;
+        if (note) agent.followUp({ role: "user", content: note, timestamp: Date.now() });
     });
     const onAbort = () => agent.abort();
     run.signal?.addEventListener("abort", onAbort, { once: true });
@@ -130,7 +166,7 @@ export const runAgent = async (run: AgentRun): Promise<AgentRunResult> => {
     const messages = agent.state.messages.filter((message) => message.role !== "system");
     return {
         messages,
-        // Only this run: an answer to an earlier message must never be sent again.
+        // Only this run: what it wrote for an earlier message is not its notes now.
         text: lastAssistantText(messages.slice(history.length)),
         status,
     };

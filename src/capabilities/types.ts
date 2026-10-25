@@ -15,8 +15,8 @@ export interface ToolContext {
     scheduler: Scheduler;
     /** Absent inside a background agent: sub-agents do not spawn sub-agents. */
     background?: BackgroundAgents;
-    /** The background task this agent is working on. Only inside one. */
-    task?: { id: string; tellUser(text: string): Promise<void> };
+    /** Puts a message in front of the user, wherever they are. The only way anything an agent writes reaches them. */
+    say?: (text: string) => Promise<void>;
     /** The notebook of the agent doing this job. Only for the agent that writes the job's answer. */
     notebook?: { save(notes: string): Promise<void> };
     /** The last messages of the chat, handed to a background task so it knows what led to it. */
@@ -45,6 +45,8 @@ export interface RegisteredTool<TParams extends TSchema = TSchema> {
     description: string;
     parameters: TParams;
     effect: Effect;
+    /** Runs one call at a time, in the order the model made them, even when other calls share its turn. */
+    sequential?: boolean;
     execute(params: Static<TParams>, context: ToolContext): Promise<ToolOutput>;
 }
 
