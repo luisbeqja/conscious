@@ -1,7 +1,8 @@
 import type { Message, Space } from "@spectrum-ts/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ChatBook } from "../src/channels/chats.js";
-import { PhotonChannel, templateParam, userIdOf } from "../src/channels/photon.js";
+import { PhotonChannel, templateParam } from "../src/channels/photon.js";
+import { userIdOf } from "../src/channels/user-id.js";
 
 const fakeSpace = (id: string) => {
     const sent: string[] = [];

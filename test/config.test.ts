@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { loadConfig, loadPhotonConfig } from "../src/config.js";
+import { loadConfig, loadPhotonConfig, loadTelegramConfig } from "../src/config.js";
 
 describe("loadConfig", () => {
     it("reads lines left empty in a copied .env.example as the defaults", () => {
@@ -49,6 +49,25 @@ describe("loadConfig", () => {
 
         expect(photon.projectId).toBe("project");
         expect(photon.projectSecret).toBe("secret");
+    });
+
+    it("reads the Telegram users, each their own or the same person as another user", () => {
+        const telegram = loadTelegramConfig({
+            TELEGRAM_BOT_TOKEN: "123456:AAH-token_1",
+            CONSCIOUS_TELEGRAM_USERS: "111=+39 333 123 4567, 222",
+        });
+
+        expect(telegram?.users).toEqual(
+            new Map([
+                ["111", "+39 333 123 4567"],
+                ["222", "telegram:222"],
+            ]),
+        );
+        expect(loadTelegramConfig({})).toBeUndefined();
+        expect(() =>
+            loadTelegramConfig({ TELEGRAM_BOT_TOKEN: "123456:AAH", CONSCIOUS_TELEGRAM_USERS: "@luis" }),
+        ).toThrow('numeric Telegram user ids, not "@luis"');
+        expect(() => loadTelegramConfig({ TELEGRAM_BOT_TOKEN: "AAH-no-id" })).toThrow("TELEGRAM_BOT_TOKEN");
     });
 
     it("stops at start on a key copied with masking dots", () => {

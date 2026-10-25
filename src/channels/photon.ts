@@ -5,6 +5,8 @@ import type { IncomingFile, OutgoingFile } from "../media/incoming.js";
 import type { Transcriber } from "../media/transcribe.js";
 import { bubblePauseMs, bubbles } from "./bubbles.js";
 import { type Chat, ChatBook } from "./chats.js";
+import { userIdOf } from "./user-id.js";
+import { hearVoiceNote } from "./voice-notes.js";
 
 /** The parts of the orchestrator a channel needs: answer a message, nothing else. */
 export interface Answerer {
@@ -59,17 +61,6 @@ export const templateParam = (text: string): string => {
         .replace(/\s+/g, " ")
         .trim();
     return flat.length > 900 ? `${flat.slice(0, 899)}…` : flat;
-};
-
-/**
- * One id per person across platforms. WhatsApp reports a number as bare digits
- * (393331234567) while iMessage and the allow list use E.164 (+39 333 123 4567),
- * so phone numbers become "+" and digits; an Apple ID email is only lowercased.
- */
-export const userIdOf = (sender: string): string => {
-    const trimmed = sender.trim();
-    if (/^\+?[\d\s().-]+$/.test(trimmed)) return `+${trimmed.replace(/\D/g, "")}`;
-    return trimmed.toLowerCase();
 };
 
 /**
@@ -202,16 +193,7 @@ export class PhotonChannel {
         if (content.type === "text") return { text: content.text, files: [] };
         if (content.type === "reaction") return "";
         if (content.type === "voice") {
-            const { transcriber } = this.options;
-            if (!transcriber) return "I can't listen to voice notes on this install yet. Could you write it?";
-            try {
-                const said = await transcriber.transcribe(await content.read(), content.mimeType);
-                if (!said) return "I couldn't make out that voice note. Could you say it again, or write it?";
-                return { text: `(voice note) ${said}`, files: [] };
-            } catch (error) {
-                console.error("[photon] voice note failed", error);
-                return "I couldn't listen to that voice note just now. Could you write it?";
-            }
+            return hearVoiceNote(this.options.transcriber, () => content.read(), content.mimeType, "photon");
         }
         if (content.type === "attachment") {
             if ((content.size ?? 0) > MAX_INCOMING_BYTES) return "That file is too big for me (over 20 MB).";

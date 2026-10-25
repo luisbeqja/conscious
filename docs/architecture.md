@@ -40,7 +40,7 @@ Conscious is a personal assistant for daily life, not work, and it should feel l
 
 ## A message, end to end
 
-1. The terminal, the phone app, or Photon (iMessage and WhatsApp), hands the orchestrator your text. It waits behind any message still being answered for you.
+1. The terminal, the phone app, Telegram, or Photon (iMessage and WhatsApp), hands the orchestrator your text. It waits behind any message still being answered for you.
 2. The orchestrator loads the conversation, builds the turn (the time in your timezone, background tasks that finished or are still running, your text), and runs the loop with the packs available to you.
 3. The agent answers with `chat_send_message`, once or a few times: each message goes out the moment it is sent, on the channel you wrote from, and the app shows it as it is written. Tool calls show as they start.
 4. The conversation is saved as what was said and done: your message, the tools used, the messages sent.
@@ -50,7 +50,7 @@ Conscious is a personal assistant for daily life, not work, and it should feel l
 
 Every agent, the one you chat with, a background job's or a scheduled check's, speaks through one tool, `chat_send_message`. The text it writes outside the tool is never shown, so it can think aloud, keep notes and stay silent without a word of it reaching you.
 
-- **Where it goes.** The channel decides: the chat you wrote from while answering you (as bubbles on iMessage and WhatsApp), and wherever you last wrote for a job or a check. Messages of one turn go out in the order they were written, and one run sends at most five.
+- **Where it goes.** The channel decides: the chat you wrote from while answering you (as bubbles on iMessage, WhatsApp and Telegram), and wherever you last wrote for a job or a check. Messages of one turn go out in the order they were written, and one run sends at most five.
 - **Its own text is private.** A background job finishes with notes that only the orchestrator reads, to answer what you ask next; a part of a split job finishes with findings for the agent that merges them. A check that found nothing sends nothing.
 - **Forgetting the tool.** An agent about to end without sending anything is reminded once, with what it wrote quoted as not delivered. After that, silence is its choice. A job that still sends nothing is reported as not finished; an answer that broke before saying anything gets a short apology.
 - **The transcript teaches by example.** Replies from before the tool were plain text, and a model copies its own past turns, so they are shown as sent messages. For the same reason an answer is saved without the text nobody saw.
@@ -61,7 +61,7 @@ Every agent, the one you chat with, a background job's or a scheduled check's, s
 - **The first meeting.** While memory is empty, the system prompt adds `prompts/first-meeting.md`: say hi, ask their name, offer to look them up online. The look-up is a background task with a brief written from the memory skill: public pages only, no addresses, money or health, and it asks when two people share a name. Nothing it finds is saved until the user confirms it.
 - **Birthdays and follow-ups** are scheduled checks marked `unprompted`: a birthday arms one a week before and one on the day, and `reminders_follow_up` arms one after an event the user mentioned. Each runs the agent with memory, so the words fit what Conscious knows by then.
 - **Pacing** (`scheduler/pacing.ts`) runs before any reminder fires. A plain reminder the user set always goes. An unprompted one inside quiet hours is moved to their end, and past the daily limit it is dropped. While the user paused messages (`quiet_pause_messages`), unprompted ones and scheduled checks are dropped. The pause and the day's count are kept in `.conscious/pacing.json`.
-- **Bubbles.** On iMessage and WhatsApp, a message of two to four short paragraphs goes out as that many bubbles, with a short pause between them.
+- **Bubbles.** On iMessage, WhatsApp and Telegram, a message of two to four short paragraphs goes out as that many bubbles, with a short pause between them.
 
 ## Agents
 
@@ -92,6 +92,7 @@ Conscious reaches people through [Photon Spectrum](https://photon.codes/spectrum
 - **A user is their sender id** (phone number or Apple ID), so the same person on iMessage and WhatsApp is one conversation. Only ids on `CONSCIOUS_ALLOWED_USERS` are answered.
 - **Replies and notifications go to the chat the user last wrote from.** Nobody is messaged before they write first, which also keeps the numbers looking like normal chats to Apple's and Meta's spam checks.
 - **The phone app** (`mobile/`, Expo) is a channel of its own, `src/channels/app.ts`: a WebSocket to the host, signed in with an access code per user. It streams the answer as it is written and shows tool use and reactions live. It keeps its own transcript of the bubbles and files in `.conscious/app/`, so a phone that was closed sees what it missed. With Photon running too, the app user with the same id is the same conversation, and Conscious speaks first wherever the user last wrote.
+- **Telegram** is a channel of its own as well, `src/channels/telegram.ts`: the Bot API, long polled, with no SDK and no webhook, so it needs no public address either. A Telegram user is their numeric id (a username can change hands), answered only when it is on `CONSCIOUS_TELEGRAM_USERS` and only in their private chat with the bot: in a group, everyone would read the answers. The list can make an id the same user as a phone number, so Telegram, WhatsApp and the app are one conversation, and the chat book records Telegram like any other chat, so Conscious speaks first wherever the user last wrote.
 - **Spectrum Cloud owns the numbers and lines.** WhatsApp goes through the WhatsApp Business API, so Meta's rule against general-purpose assistants applies; it is allowed in the EU while the Commission's interim order stands.
 
 ## Skills

@@ -2,16 +2,16 @@
 
 A personal assistant for your daily life, not your work, that feels more like a friend than a coworker. It remembers you and the people in your life, nudges you before your sister's birthday, asks how the interview went, and handles reminders, plans, errands and things to look up. Long jobs run in the background while it keeps talking to you.
 
-You text it on WhatsApp or iMessage, or chat with it in its own phone app.
+You text it on WhatsApp, iMessage or Telegram, or chat with it in its own phone app.
 
 Conscious is open source and built in Europe. You run it yourself, on your own machine or server, with the model you choose: Mistral, Claude, GPT, or a local one through Ollama. Your memory, accounts and plugins stay on your install.
 
 ## How the agent works
 
 ```
-  WhatsApp / iMessage (Photon)   phone app   terminal
-                 │                   │           │
-                 └─────────┬─────────┴───────────┘
+  WhatsApp / iMessage (Photon)   Telegram   phone app   terminal
+                 │                   │          │           │
+                 └─────────┬─────────┴──────────┴───────────┘
                            ▼
                      Orchestrator ── memory, reminders, capabilities
                       │        │
@@ -44,7 +44,7 @@ Needs Node >= 22.19.
 ```bash
 pnpm install
 cp .env.example .env    # pick a model and set its API key
-pnpm chat               # terminal; `pnpm photon` for WhatsApp and iMessage, `pnpm app` for the phone app
+pnpm chat               # terminal; `pnpm photon` for WhatsApp and iMessage, `pnpm telegram` for Telegram, `pnpm app` for the phone app
 ```
 
 Models, Photon, the phone app, the computer, the browser, sign-ins and hosting: [`docs/setup.md`](docs/setup.md).
