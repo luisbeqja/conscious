@@ -1,3 +1,4 @@
+import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import {
     type BackgroundAgents,
     type BackgroundTask,
@@ -31,6 +32,7 @@ import type { SandboxProvider } from "../sandbox/sandbox.js";
 import type { Reminder, Scheduler } from "../scheduler/scheduler.js";
 import type { SkillLibrary } from "../skills/library.js";
 import type { ModelRuntime } from "./models.js";
+import type { Reactor } from "./reactions.js";
 import { type AgentRunResult, type RunProgress, runAgent } from "./run-agent.js";
 import { adaptTool } from "./tool-adapter.js";
 
@@ -52,6 +54,8 @@ export interface OrchestratorDeps {
     sent?: SentLog;
     /** The agents kept between background jobs, one per kind of job. */
     agents?: AgentStore;
+    /** Decides apart from the answer whether a message gets an emoji. Without it, nothing reacts. */
+    reactor?: Reactor;
 }
 
 /** How one background run is set up and limited. */
@@ -98,7 +102,7 @@ export interface SendOptions {
     say?: (text: string) => Promise<void>;
     /** Live progress, for a terminal or a typing indicator. */
     onProgress?: (progress: RunProgress) => void;
-    /** Reacts to the message being answered. Without it the agent cannot react. */
+    /** Puts an emoji on the message being answered; false when the chat cannot show it. Without it nothing reacts. */
     react?: (emoji: string) => Promise<boolean>;
     /** Files that came with the message. */
     files?: readonly IncomingFile[];
@@ -107,6 +111,9 @@ export interface SendOptions {
 }
 
 const FALLBACK = "Oops, something broke on my side. Try me again in a minute?";
+
+/** How much of the chat the reaction model reads before the message it reacts to. */
+const REACTION_CONTEXT = 6;
 
 /** Messages one run may send, so a model caught in a loop cannot flood the user's chat. */
 const MAX_MESSAGES = 5;
@@ -195,21 +202,37 @@ export class Orchestrator {
         return next;
     }
 
+    /**
+     * The reaction to a message: a small model of its own decides whether a friend would react,
+     * and with which emoji, beside the answer and never blocking it. True when one landed.
+     */
+    private async reactTo(
+        userId: string,
+        text: string,
+        history: readonly AgentMessage[],
+        options: SendOptions,
+    ): Promise<boolean> {
+        const { reactor } = this.deps;
+        if (!reactor || !options.react) return false;
+        try {
+            const emoji = await reactor.choose(renderRecentChat(history, text, REACTION_CONTEXT));
+            return emoji !== undefined && (await options.react(emoji));
+        } catch (error) {
+            console.warn(`[reactions] no reaction for ${userId}:`, error instanceof Error ? error.message : error);
+            return false;
+        }
+    }
+
     private async handle(userId: string, text: string, options: SendOptions): Promise<string[]> {
         const { store, registry, runtime, budgets, timezone, scheduler, background } = this.deps;
-        const capabilities = (await registry.available(userId)).filter(
-            (capability) => options.react || capability.id !== "reactions",
-        );
-        let reacted = false;
-        const react = options.react
-            ? async (emoji: string) => {
-                  const done = await options.react?.(emoji);
-                  reacted ||= done === true;
-                  return done === true;
-              }
-            : undefined;
+        const capabilities = await registry.available(userId);
         const { sent, say } = speaker(async (message) => options.say?.(message));
         const history = withSentReplies(await store.load(userId));
+        // Started first, so it usually lands before the agent could end without a word.
+        let reacted = false;
+        const reacting = this.reactTo(userId, text || "(a photo or a file)", history, options).then((done) => {
+            reacted = done;
+        });
         const { tools, effects } = toolsFor(capabilities, {
             userId,
             timezone,
@@ -217,7 +240,6 @@ export class Orchestrator {
             background,
             say,
             recentChat: renderRecentChat(history, text),
-            react,
             sendFile: options.sendFile,
             seesImages: runtime.model.input.includes("image"),
         });
@@ -248,12 +270,14 @@ export class Orchestrator {
             budgets,
             sessionId: userId,
             onProgress: options.onProgress,
+            // A reaction is an answer too, when it landed in time; otherwise the agent is asked for words.
             beforeStop: remindOnce(
                 `the answer to ${userId}`,
                 () => !sent.length && !reacted,
                 (wrote) => buildNothingSentNote("message", wrote),
             ),
         });
+        await reacting;
         await store.save(userId, withoutImages([...history, ...asSaid(result.messages.slice(history.length))]));
         // Silence is the agent's to choose; a run that broke before it said anything is not.
         if (!sent.length && result.status !== "completed") {
@@ -444,7 +468,6 @@ export class Orchestrator {
             ...(await registry.available(userId)).filter(
                 (capability) =>
                     capability.id !== "background" &&
-                    capability.id !== "reactions" &&
                     // The agents are the orchestrator's to manage; a sub-agent keeps only its own notebook.
                     capability.id !== "agents" &&
                     // Memory stays: the sub-agent is still Conscious, and knows the user. The chat is how it speaks.

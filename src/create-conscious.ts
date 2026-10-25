@@ -25,6 +25,7 @@ import { FileConversationStore } from "./conversations/file-store.js";
 import { SandboxConversationStore } from "./conversations/sandbox-store.js";
 import { createModelRuntime } from "./engine/models.js";
 import { Orchestrator, SentLog } from "./engine/orchestrator.js";
+import { createReactor } from "./engine/reactions.js";
 import { GoogleApi } from "./google/api.js";
 import { GOOGLE_CONNECTOR, GoogleOAuth } from "./google/oauth.js";
 import { createEmbedder } from "./knowledge/embeddings.js";
@@ -236,6 +237,7 @@ export const createConscious = (config: Config, notify: Notify, extra: readonly 
         skills: config.sandbox ? new SkillLibrary({ internet: config.sandbox.internet }) : undefined,
         sent,
         agents,
+        reactor: config.reactions && createReactor(createModelRuntime(config.reactions)),
     });
     /** The Vault page. When a secret is saved, the user hears it in the chat. */
     const vaultPages = vaultHandler({

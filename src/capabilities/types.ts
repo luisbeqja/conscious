@@ -21,8 +21,6 @@ export interface ToolContext {
     notebook?: { save(notes: string): Promise<void> };
     /** The last messages of the chat, handed to a background task so it knows what led to it. */
     recentChat?: string;
-    /** Reacts to the message being answered; false when the chat cannot show it. Absent where there is none. */
-    react?: (emoji: string) => Promise<boolean>;
     /** Sends a file into the user's chat. Only while answering a message on a channel that can. */
     sendFile?: (file: OutgoingFile) => Promise<void>;
     /** The model reads images, so a tool may show it one (a screenshot). */

@@ -22,6 +22,7 @@ Conscious is a personal assistant for daily life, not work, and it should feel l
 | Capability packs | Tools named `<id>_<verb>_<noun>` plus a `SKILL.md` on how to use them. |
 | Effects | Every tool is `read`, `draft` or `commit`. A commit will become a yes/no the user answers. |
 | Messages | `chat_send_message` is the only way any agent reaches the user, whatever the channel. What an agent writes outside it stays private. |
+| Reactions | A small model of their own, beside every answer, decides whether a message gets an emoji and which, from a list every channel accepts. The agent that answers has no reaction tool. |
 | Background agents | Sub-agents with a written brief and a harness designed for the job (instructions, packs, effort, parallel parts). They outlive the turn, can text an update, take a change of plan, and report to the user directly. |
 | Browser | A Chrome per user on an E2B desktop, driven over CDP with Playwright. The user signs in through a live view; commits are refused. |
 | Agents | One per kind of background job, kept between jobs as a folder: method, notebook, log. Woken by name. |

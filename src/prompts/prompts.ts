@@ -164,7 +164,7 @@ export const buildNothingSentNote = (forThe: "message" | "job", wrote: string): 
     const next =
         forThe === "job"
             ? `Send them the result with ${SEND_MESSAGE} now, then finish with your notes.`
-            : `Send what they should read with ${SEND_MESSAGE} now. If a reaction or silence really is the answer, react or end without writing anything.`;
+            : `Send what they should read with ${SEND_MESSAGE} now. If silence really is the answer, end without writing anything.`;
     return `<context>\n${what} ${next}\n</context>`;
 };
 

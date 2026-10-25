@@ -7,7 +7,6 @@ import { backgroundCapability } from "./background/capability.js";
 import { chatCapability } from "./chat/capability.js";
 import { createComputerCapability } from "./computer/capability.js";
 import { createPluginsCapability } from "./plugins/capability.js";
-import { reactionsCapability } from "./reactions/capability.js";
 import { CapabilityRegistry } from "./registry.js";
 import { remindersCapability } from "./reminders/capability.js";
 import { createSkillsCapability } from "./skills/capability.js";
@@ -36,8 +35,7 @@ export const createRegistry = (
     const registry = new CapabilityRegistry()
         .register(chatCapability)
         .register(remindersCapability)
-        .register(backgroundCapability)
-        .register(reactionsCapability);
+        .register(backgroundCapability);
     for (const capability of extra) registry.register(capability);
     if (plugins) {
         registry
