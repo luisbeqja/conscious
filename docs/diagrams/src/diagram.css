@@ -1,0 +1,66 @@
+/* The README's architecture diagrams, in the site's look: paper, ink, Cormorant Garamond, Hanken Grotesk and IBM Plex Mono.
+   scripts/render-diagrams.mjs renders each page's <main> to a PNG in docs/diagrams/. */
+@import url("../../../site/fonts/fonts.css");
+
+:root {
+    --paper: #f3f2ee;
+    --ink: #151513;
+    --ink-soft: rgba(21, 21, 19, 0.6);
+    --line: rgba(21, 21, 19, 0.16);
+    --mute: #6d6c66;
+    --card: #e9e8e3;
+    --box: #fff;
+    --box-ink: #3b3a36;
+    --serif: "Cormorant Garamond", Georgia, serif;
+    --sans: "Hanken Grotesk", system-ui, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--paper); }
+main { position: relative; width: 1200px; padding: 52px 56px 60px; background: var(--paper); color: var(--ink); font-family: var(--sans); -webkit-font-smoothing: antialiased; }
+main > * { position: relative; z-index: 1; }
+p { margin: 0; }
+
+header { max-width: 900px; }
+.eyebrow { font: 13px/1.2 var(--mono); letter-spacing: 0.09em; text-transform: uppercase; color: var(--mute); }
+h1 { margin: 14px 0 0; font: 500 56px/1.02 var(--serif); letter-spacing: -0.015em; }
+.lede { margin-top: 14px; font: 400 23px/1.32 var(--serif); color: var(--ink-soft); }
+
+/* a group: a soft card holding white boxes */
+.card { position: relative; z-index: 1; padding: 22px 22px 22px; border-radius: 28px; background: var(--card); }
+.card h2, .box h2 { margin: 0; font-size: 20px; font-weight: 600; letter-spacing: -0.01em; }
+.note { margin-top: 8px; font-size: 15.5px; line-height: 1.42; color: var(--mute); }
+.list { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+.item { padding: 11px 14px 12px; border-radius: 16px; background: var(--box); }
+.item b { display: block; font-size: 17px; font-weight: 600; letter-spacing: -0.005em; }
+.item span { display: block; margin-top: 3px; font-size: 14.5px; line-height: 1.38; color: var(--mute); }
+.item .m { font: 13.5px/1.4 var(--mono); }
+code, .m { font-family: var(--mono); }
+code { font-size: 0.9em; }
+
+/* the agent: a white window, like the chat on the site */
+.box { position: relative; z-index: 1; background: var(--box); border: 1px solid rgba(21, 21, 19, 0.09);
+    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.04), 0 34px 70px -38px rgba(21, 21, 19, 0.5); }
+
+/* a tool call or a file, written out */
+.log { padding: 13px 16px; border-radius: 16px; background: var(--box); color: var(--box-ink); font: 14px/1.75 var(--mono); }
+.log b { font-weight: 500; color: var(--ink); }
+.log i { display: inline-block; min-width: 72px; margin-right: 6px; font-style: normal; color: var(--mute); }
+
+/* chat bubbles, with the site's pointed tails */
+.talk { display: flex; flex-direction: column; gap: 14px; }
+.bubble { position: relative; max-width: 90%; padding: 9px 13px; font-size: 16px; line-height: 1.36; }
+.bubble.me { align-self: flex-end; background: var(--ink); color: var(--paper); }
+.bubble.c { align-self: flex-start; background: var(--box); color: var(--ink); }
+.bubble::after { content: ""; position: absolute; bottom: -7px; width: 0; height: 0; border-top: 7px solid transparent; }
+.bubble.me::after { right: 0; border-left: 10px solid transparent; border-top-color: var(--ink); }
+.bubble.c::after { left: 0; border-right: 10px solid transparent; border-top-color: var(--box); }
+.aside { font: 12.5px/1.3 var(--mono); color: var(--mute); }
+
+/* arrows, drawn by wires.js over everything: they only run between boxes */
+.wires { position: absolute; inset: 0; z-index: 2; overflow: visible; pointer-events: none; }
+.wire-label { position: absolute; z-index: 3; display: flex; align-items: center; gap: 7px; padding: 3px 7px; background: var(--paper);
+    font: 13.5px/1.3 var(--mono); color: var(--ink); text-align: center; white-space: nowrap; }
+.wire-label.on-card { background: var(--card); }
+.step { flex: none; display: grid; place-items: center; width: 21px; height: 21px; border-radius: 50%; background: var(--ink); color: var(--paper); font: 500 12px/1 var(--mono); }

@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>A message, end to end</title>
+<link rel="stylesheet" href="diagram.css">
+<style>
+    .map { display: grid; grid-template-columns: 236px 1fr 300px; column-gap: 124px; row-gap: 88px; margin-top: 44px; align-items: start; }
+    .stack { display: flex; flex-direction: column; gap: 52px; }
+    #you { grid-column: 1 / -1; display: grid; grid-template-columns: 236px 1fr; column-gap: 24px; align-items: center; }
+    #you .channels { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+    #you .note { margin-top: 6px; }
+    #hub { padding: 22px 26px 26px; text-align: center; }
+    #hub img { display: block; width: 160px; height: 160px; margin: -6px auto 0; }
+    #hub h2 { margin-top: 2px; font: 500 40px/1 var(--serif); letter-spacing: -0.01em; }
+    #hub .eyebrow { margin-top: 10px; }
+    #hub .reads { margin-top: 20px; text-align: left; }
+    #hub .reads p { font-size: 14.5px; color: var(--mute); }
+    #hub .log { margin-top: 8px; padding: 10px 14px; background: var(--paper); line-height: 1.7; }
+    #hub .note { margin-top: 14px; text-align: left; }
+</style>
+</head>
+<body>
+<main>
+    <header>
+        <div class="eyebrow">How Conscious works · 1 of 3</div>
+        <h1>A message, end to end</h1>
+        <p class="lede">You text it on any chat. One agent, the orchestrator, answers with the tools you have connected. Long jobs go to the background, and it can text you first.</p>
+    </header>
+
+    <div class="map">
+        <section class="card" id="you">
+            <div>
+                <h2>You text it</h2>
+                <p class="note">One conversation per person, whichever chat they write from.</p>
+            </div>
+            <div class="channels">
+                <div class="item"><b>WhatsApp, iMessage</b><span>through Photon</span></div>
+                <div class="item"><b>Telegram</b><span>a bot of your own</span></div>
+                <div class="item"><b>Phone app</b><span>streams as it writes</span></div>
+                <div class="item"><b>Terminal</b><span class="m">pnpm chat</span></div>
+            </div>
+        </section>
+
+        <div class="stack">
+            <section class="card" id="bg">
+                <h2>In the background</h2>
+                <div class="list">
+                    <div class="item"><b>Background agents</b><span>One designed for each long job. You keep chatting while it works, and it rests between jobs: see 2.</span></div>
+                    <div class="item"><b>Reminders, checks</b><span>One-off or recurring, in your timezone. A check texts you only when it finds something.</span></div>
+                </div>
+                <p class="note">What it sends on its own waits out the night and stops at a few a day.</p>
+            </section>
+            <section class="card" id="mem">
+                <h2>Memory</h2>
+                <p class="note">You and the people in your life, with birthdays. Kept apart from the chat, yours to see and delete.</p>
+            </section>
+        </div>
+
+        <section class="box" id="hub">
+            <img src="orb-listening.png" alt="">
+            <h2>Conscious</h2>
+            <div class="eyebrow">The orchestrator<br>one per person</div>
+            <div class="reads">
+                <p>Each turn it reads</p>
+                <div class="log">your message<br>the time where you are<br>its background jobs<br>your agents and skills</div>
+            </div>
+            <p class="note">It runs on the model you choose: Mistral, Claude, GPT, or a local one.</p>
+        </section>
+
+        <div class="stack">
+            <section class="card" id="tools">
+                <h2>What it can use</h2>
+                <div class="list">
+                    <div class="item"><b>Capability packs</b><span>reminders, web, Google, Spotify</span></div>
+                    <div class="item"><b>MCP servers</b><span>Kiwi.com, trivago, Todoist, Strava</span></div>
+                    <div class="item"><b>Shop, Composio</b><span>stores, more everyday apps</span></div>
+                    <div class="item"><b>Plugins</b><span>the agent writes them, sandboxed</span></div>
+                    <div class="item"><b>A computer of its own</b><span>files, a shell, skills, Chrome</span></div>
+                </div>
+                <p class="note">Every tool is <code>read</code>, <code>draft</code> or <code>commit</code>. A commit needs your yes.</p>
+            </section>
+            <section class="card" id="vault">
+                <h2>Vault</h2>
+                <p class="note">Keys you paste on a private page, sealed on your install. The model never sees one.</p>
+            </section>
+        </div>
+    </div>
+</main>
+<script src="wires.js"></script>
+<script>
+    wire("#you", "#hub", { out: "bottom", in: "top", at: 0.27, align: "to", step: 1, label: "your message", labelSide: "left" });
+    wire("#hub", "#tools", { out: "right", in: "left", align: "to", both: true, step: 2, label: "tools", labelSide: "above" });
+    wire("#hub", "#you", { out: "top", in: "bottom", at: 0.73, align: "from", step: 3, label: "chat_send_message", labelSide: "right" });
+    wire("#hub", "#bg", { out: "left", in: "right", align: "to", step: 4, label: "long jobs", labelSide: "above" });
+    wire("#bg", "#you", { out: "top", in: "bottom", align: "from", step: 5, label: "speaks first", labelSide: "right" });
+    wire("#mem", "#hub", { out: "right", in: "bottom", at: [0.5, 0.22], label: "every turn", labelSide: "above", labelAt: 0.32 });
+    wire("#vault", "#tools", { out: "top", in: "bottom", align: "to", label: "keys, added by the host", labelSide: "left" });
+</script>
+</body>
+</html>

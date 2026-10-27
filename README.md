@@ -8,25 +8,15 @@ Conscious is open source and built in Europe. You run it yourself, on your own m
 
 ## How the agent works
 
-```
-  WhatsApp / iMessage (Photon)   Telegram   phone app   terminal
-                 │                   │          │           │
-                 └─────────┬─────────┴──────────┴───────────┘
-                           ▼
-                     Orchestrator ── memory, reminders, capabilities
-                      │        │
-          background  │        │  tools
-                      ▼        ▼
-       sub-agents (up to 5 lanes)    skills · MCP · Composio · plugins
-                      │                      │
-                      ▼                      ▼
-              user's computer (E2B)       Vault (secrets)
-```
+![A message, end to end. You text Conscious on WhatsApp, iMessage, Telegram, the phone app or the terminal. The orchestrator reads your message with your memory, uses the tools you connected, and answers through chat_send_message. Long jobs go to background agents, and reminders and checks let it text you first.](docs/diagrams/overview.png)
 
 - **Orchestrator.** One agent per user, the one you chat with. It runs on [`pi-agent-core`](https://github.com/earendil-works/pi), answers one message at a time, and loads only the tools that user can use. The same loop runs every sub-agent.
 - **One way to talk.** Every agent, the one you chat with, a job's or a check's, reaches you only through one tool, `chat_send_message`, each message the moment it is ready. What it writes outside the tool stays private: you get its messages, never its thinking.
 - **Sub-agents made for each job.** For a long job ("find me a ticket to Lisbon") the orchestrator writes a harness for it: a method, the tools it needs, a time budget (10, 30 or 60 minutes) and up to five parts that run side by side, merged by a last agent. It answers you at once and you keep chatting. The job can text you a first find, takes a change of plan while it runs ("only morning flights"), and sends the result as a normal message. Jobs survive a restart.
 - **Agents that rest.** When a job ends, its agent is kept as a folder: its method, a notebook of what it learned, and a log of its jobs. The next job of the same kind ("a flight to Tokyo") wakes it with its notes. Nothing runs while it sleeps.
+
+![An agent for each kind of job. A flight search gets a flights agent with its own method, tools, time and parts that run side by side. When the job ends, the agent is kept as a folder with a notebook of what it learned, and the next flight search wakes it with those notes.](docs/diagrams/agents.png)
+
 - **Memory.** Facts about you and the people in your life, with birthdays, kept apart from the chat and read into every prompt. You can see and delete any line.
 - **Reminders and checks.** One-off or recurring, in your timezone. A scheduled check is a reminder with a job: an agent runs it and messages you only if it finds something. What Conscious sends on its own waits out the night and stops at a few a day.
 - **A computer of its own.** Each user gets an [E2B](https://e2b.dev) sandbox for files, a shell, memory and its agents, and optionally a second one with a real Chrome. It pauses when idle and holds no secrets. E2B is open source, so you can run it in Europe or on your own hardware.
@@ -34,6 +24,8 @@ Conscious is open source and built in Europe. You run it yourself, on your own m
 - **Connectors.** Google, Spotify, any IMAP mailbox, [Shop](https://shop.dev) for shopping across millions of online stores, hosted MCP servers (Todoist, Strava, Kiwi.com flights, trivago) and, optionally, Composio for more everyday apps. Work apps are left out on purpose. For anything else, the agent writes a plugin that runs in a sandbox and reaches only the hosts it declares.
 - **Vault.** Secrets never pass through the chat or the model. Conscious sends a private link, you paste a key or sign in there, and it is stored encrypted on your install and added to requests by the host.
 - **Safety in code.** Every tool is `read`, `draft` or `commit`. Commits (send, book, pay, delete) are blocked until you say yes.
+
+![Your install, your keys, your yes. Conscious and its data folder live on your install, each person's files and agents on a computer of their own, and the model never gets a key. Every tool is read, draft or commit, and a key reaches a service only through the host.](docs/diagrams/safety.png)
 
 More: [`docs/architecture.md`](docs/architecture.md).
 

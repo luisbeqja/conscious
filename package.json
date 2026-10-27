@@ -25,6 +25,7 @@
     "computer:check": "tsx --env-file-if-exists=.env scripts/check-computer.ts",
     "italy:download": "uv run scripts/download-italia-fonti.py",
     "italy:index": "tsx --env-file-if-exists=.env scripts/build-italy-index.ts",
+    "diagrams": "node scripts/render-diagrams.mjs",
     "start": "node --env-file-if-exists=.env dist/main.js",
     "build": "tsc -p tsconfig.build.json && node scripts/copy-assets.mjs",
     "typecheck": "tsc --noEmit",
