@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>An agent for each kind of job</title>
+<link rel="stylesheet" href="diagram.css">
+<style>
+    .story { display: grid; grid-template-columns: 1.1fr 1fr 1fr; column-gap: 72px; margin-top: 48px; }
+    .col { display: flex; flex-direction: column; gap: 16px; padding-bottom: 26px; }
+    .top { display: flex; align-items: center; gap: 10px; margin: -6px 0 4px -8px; }
+    .top img { flex: none; width: 80px; height: 80px; }
+    .top h2 { margin-top: 5px; }
+    .log { line-height: 1.7; }
+    .tree { display: flex; gap: 10px; justify-content: space-between; margin-top: 22px; }
+    .tree span, .merge { padding: 6px 10px; border-radius: 999px; background: var(--box); font: 13px/1.3 var(--mono); color: var(--box-ink); }
+    .merge { align-self: center; margin-top: 22px; }
+    .notes { padding: 13px 16px; border-radius: 16px; background: var(--paper); border: 1px dashed rgba(21, 21, 19, 0.28); font: 14px/1.6 var(--mono); color: var(--box-ink); }
+    .notes b { font-weight: 500; color: var(--ink); }
+    .notes .new { display: block; margin: 2px -6px 0; padding: 0 6px; background: rgba(21, 21, 19, 0.07); color: var(--ink); }
+    .col .note { margin-top: 0; }
+    .files i { min-width: 84px; }
+</style>
+</head>
+<body>
+<main>
+    <header>
+        <div class="eyebrow">How Conscious works · 2 of 3</div>
+        <h1>An agent for each kind of job</h1>
+        <p class="lede">A long job gets an agent designed for it. When the job ends, the agent rests as a folder with what it learned, and the next job of that kind wakes it.</p>
+    </header>
+
+    <div class="story">
+        <section class="card col" id="first">
+            <div class="top">
+                <img src="orb-thinking.png" alt="">
+                <div><div class="eyebrow">May · the first job</div><h2>Made for the job</h2></div>
+            </div>
+            <div class="talk">
+                <div class="bubble me">Find me a flight to Lisbon, first week of May</div>
+                <div class="bubble c">On it! I'll text you what I find.</div>
+            </div>
+            <div>
+                <div class="log" id="design"><b>background_start_task</b><br><i>agent</i>flights, new<br><i>method</i>written for flights<br><i>tools</i>kiwi.com, web<br><i>time</i>30 minutes<br><i>parts</i>3, side by side</div>
+                <div class="tree"><span id="lane1">Malpensa</span><span id="lane2">Linate</span><span id="lane3">Bergamo</span></div>
+                <div class="tree" style="justify-content: center"><span class="merge" id="merge">a last agent merges them</span></div>
+            </div>
+            <div class="talk">
+                <div class="bubble me">Only morning flights, please</div>
+                <div class="aside">passed to the job while it runs</div>
+                <div class="bubble c">Two morning flights from Malpensa on May 3. The best: 7:10, €84.</div>
+            </div>
+        </section>
+
+        <section class="card col" id="rest">
+            <div class="top">
+                <img src="orb-sleepy.png" alt="">
+                <div><div class="eyebrow">Between jobs</div><h2>Kept as a folder</h2></div>
+            </div>
+            <div class="log files"><b>agents/flights/</b><br><i>AGENT.md</i>method, tools<br><i>NOTES.md</i>its notebook<br><i>runs.md</i>a line per job<br><i>runs/</i>briefs, answers</div>
+            <div class="talk" style="margin-top: 6px"><div class="bubble me" id="booked">Booked the second one!</div></div>
+            <div class="notes" id="notes" style="margin-top: 34px"><b>NOTES.md</b><br>flies from Milan<br>morning flights only<br>Bergamo is often cheapest<br><span class="new">4 May: booked the 2nd one</span></div>
+            <p class="note">Nothing runs while it sleeps. It is files, not a process.</p>
+            <p class="note">Yours to see and delete: ask what an agent knows, or have it forgotten.</p>
+        </section>
+
+        <section class="card col" id="next">
+            <div class="top">
+                <img src="orb-happy.png" alt="">
+                <div><div class="eyebrow">June · the next job</div><h2>It wakes up</h2></div>
+            </div>
+            <div class="talk">
+                <div class="bubble me">Can you find me a flight to Tokyo in June?</div>
+            </div>
+            <div class="log"><b>background_start_task</b><br><i>agent</i>flights<br><i>it gets</i>its method<br><i></i>its notebook<br><i></i>its last jobs<br><i>adds</i>only what's new</div>
+            <p class="note">A fresh conversation every time. It remembers what it wrote down, so old prices never come back.</p>
+            <div class="talk">
+                <div class="bubble c">Morning flights from Malpensa on June 12. The best: €612, one stop.</div>
+            </div>
+            <div class="notes"><b>NOTES.md</b> <span class="aside">rewritten</span><br>flies from Milan<br>morning flights only<br>Bergamo is often cheapest<br>4 May: booked the 2nd one<br><span class="new">long haul: 1 stop is OK</span></div>
+        </section>
+    </div>
+</main>
+<script src="wires.js"></script>
+<script>
+    for (const lane of ["#lane1", "#lane2", "#lane3"]) {
+        wire("#design", lane, { out: "bottom", in: "top", width: 1.2 });
+        wire(lane, "#merge", { out: "bottom", in: "top", width: 1.2 });
+    }
+    wire("#booked", "#notes", { out: "bottom", in: "top", at: [0.5, 0.5], align: "from", label: "agents_add_note", labelSide: "left", labelClass: "on-card" });
+    wire("#first", "#rest", { out: "right", in: "left", at: 0.075, align: "from", label: "kept", labelSide: "below" });
+    wire("#rest", "#next", { out: "right", in: "left", at: 0.075, align: "from", label: "woken", labelSide: "below" });
+</script>
+</body>
+</html>

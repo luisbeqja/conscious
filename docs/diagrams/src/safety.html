@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Your install, your keys, your yes</title>
+<link rel="stylesheet" href="diagram.css">
+<style>
+    .where { display: grid; grid-template-columns: 250px 1fr 250px; column-gap: 84px; margin-top: 48px; align-items: start; }
+    .rules { display: grid; grid-template-columns: 1fr 1fr; column-gap: 24px; margin-top: 40px; align-items: start; }
+    #install .box { margin-top: 14px; padding: 16px 18px; border-radius: 16px; box-shadow: none; }
+    #install .box h2 { display: flex; align-items: center; gap: 8px; font-size: 18px; }
+    #install .box ul { margin: 8px 0 0; padding-left: 18px; font-size: 15.5px; line-height: 1.5; color: var(--box-ink); }
+    #install .log { margin-top: 10px; }
+    #install .log i { min-width: 136px; }
+    #computer .eyebrow { margin-top: 6px; }
+    #computer .log i { min-width: 0; }
+    .effect { display: grid; grid-template-columns: 74px 1fr auto; align-items: center; column-gap: 12px; }
+    .effect code { font-size: 15px; font-weight: 500; color: var(--ink); }
+    .effect .verdict { font: 13px/1.3 var(--mono); color: var(--mute); }
+    .effect.commit { background: var(--ink); color: var(--paper); }
+    .effect.commit b, .effect.commit code, .effect.commit .verdict { color: var(--paper); }
+    .effect.commit span:not(.verdict) { color: rgba(243, 242, 238, 0.7); }
+    #effects .head { display: flex; justify-content: space-between; align-items: center; margin: -18px -4px -14px 0; }
+    #effects .head img { width: 70px; height: 70px; }
+    .steps { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+    .steps .item { display: grid; grid-template-columns: 21px 1fr; column-gap: 12px; align-items: start; }
+    .steps .item p { font-size: 15.5px; line-height: 1.42; color: var(--box-ink); }
+    .steps .item .step { display: grid; margin-top: 1px; font-size: 12px; color: var(--paper); }
+</style>
+</head>
+<body>
+<main>
+    <header>
+        <div class="eyebrow">How Conscious works · 3 of 3</div>
+        <h1>Your install, your keys, your yes</h1>
+        <p class="lede">Conscious runs where you run it. Keys never pass through the chat or reach the model, and nothing that sends, books, pays or deletes runs without your yes.</p>
+    </header>
+
+    <div class="where">
+        <section class="card" id="model">
+            <h2>The model you choose</h2>
+            <p class="note">Mistral, Claude, GPT, or a local one through Ollama.</p>
+            <div class="list">
+                <div class="item"><b>It reads</b><span>the conversation, memory, tool results</span></div>
+                <div class="item"><b>It never gets</b><span>a key, a token or a password</span></div>
+            </div>
+        </section>
+
+        <section class="card" id="install">
+            <h2>Your install</h2>
+            <p class="note">Your machine or your server. There is no Conscious server that sees any of it.</p>
+            <div class="box">
+                <h2>Conscious</h2>
+                <ul>
+                    <li>the orchestrator and every agent</li>
+                    <li>the broker, which adds a key to a request on its way out, only to the hosts you approved</li>
+                    <li>plugins, each call in a sandbox that reaches only the hosts it declared</li>
+                </ul>
+            </div>
+            <div class="log"><b>.conscious/</b><br><i>vault.json</i>keys, sealed<br><i>reminders.json</i>reminders, checks<br><i>background.json</i>jobs in flight<br><i>pacing.json</i>pause, today's count</div>
+        </section>
+
+        <section class="card" id="computer">
+            <h2>Each person's computer</h2>
+            <div class="eyebrow">An E2B sandbox</div>
+            <div class="log" style="margin-top: 14px">memory/<br>agents/<br>skills/<br>files/<br>the conversation</div>
+            <p class="note">It holds no keys and pauses when idle. Without one, all this lives in <code>.conscious/</code>.</p>
+            <div class="list">
+                <div class="item"><b>A Chrome of its own</b><span>You sign in through a live view. Buttons that pay or send are refused.</span></div>
+            </div>
+        </section>
+    </div>
+
+    <div class="rules">
+        <section class="card" id="effects">
+            <div class="head"><h2>Every tool has an effect</h2><img src="orb-waiting.png" alt=""></div>
+            <div class="list">
+                <div class="item effect"><code>read</code><span>look up, search, list</span><span class="verdict">runs</span></div>
+                <div class="item effect"><code>draft</code><span>prepare, nothing leaves</span><span class="verdict">runs</span></div>
+                <div class="item effect commit"><code>commit</code><span>send, book, pay, delete</span><span class="verdict">needs your yes</span></div>
+            </div>
+            <p class="note">Approvals in the chat come next. Until then, commits are blocked.</p>
+        </section>
+
+        <section class="card" id="keys">
+            <h2>A key, from you to a service</h2>
+            <div class="steps">
+                <div class="item"><span class="step">1</span><p>Conscious texts you a private link: single use, 15 minutes.</p></div>
+                <div class="item"><span class="step">2</span><p>You paste the key there, or sign in. Never in the chat.</p></div>
+                <div class="item"><span class="step">3</span><p>It is checked, sealed and kept on your install.</p></div>
+                <div class="item"><span class="step">4</span><p>Conscious adds it to each request, only to the hosts you approved.</p></div>
+            </div>
+        </section>
+    </div>
+</main>
+<script src="wires.js"></script>
+<script>
+    wire("#install", "#model", { out: "left", in: "right", at: 0.17, align: "from", both: true, label: "no keys", labelSide: "above" });
+    wire("#install", "#computer", { out: "right", in: "left", at: 0.17, align: "from", both: true, label: "no keys", labelSide: "above" });
+</script>
+</body>
+</html>
