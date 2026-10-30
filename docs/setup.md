@@ -41,7 +41,7 @@ Ask for something that takes a while ("find me a ticket to Lisbon") and Consciou
 - **It follows up.** Mention an interview, a doctor's visit or a first date, and it asks how it went afterwards, once.
 - **It knows when to be quiet.** What it sends on its own waits out the night (`CONSCIOUS_QUIET_HOURS`, 22-8 by default) and stops at a few a day (`CONSCIOUS_MAX_UNPROMPTED`, 3). Tell it "leave me alone this week" and it holds those and scheduled checks until then. Reminders you set yourself always come.
 - **It texts like a person.** Short messages, often two or three bubbles instead of one block, reactions when a reaction is enough, and no assistant phrases. It talks to you only through one tool, `chat_send_message`, so you get its messages, never its thinking.
-- **It stays out of your job.** No work apps, no work skills: ask about work and it helps only with the personal side.
+- **It helps with work too.** No work apps or work skills are installed, but it never turns down a work question: it helps with what it has, like Claude Code on your Mac.
 
 ## Choose your model
 
