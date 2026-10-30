@@ -176,8 +176,10 @@ export class MacBridge {
                 return [200, { token: paired.token }];
             },
             [MAC_OFFERS_PATH]: (given) => {
-                const offer = this.links.offer(text(given.name, 100));
+                const name = text(given.name, 100);
+                const offer = this.links.offer(name);
                 const links = this.chatLinks?.(offer.code) ?? {};
+                console.log(`[mac] a QR code is shown on ${JSON.stringify(name)}`);
                 return [200, { ...offer, links }];
             },
             [`${MAC_OFFERS_PATH}/collect`]: (given) => {

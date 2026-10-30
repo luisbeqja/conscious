@@ -33,9 +33,14 @@ export const macCommands =
         const linked = options.links.linked(userId);
         if (QR_CODE.test(action)) {
             const name = options.links.claim(action, userId);
+            console.log(
+                name
+                    ? `[mac] ${userId} sent the code for ${JSON.stringify(name)}`
+                    : `[mac] ${userId} sent an unknown code`,
+            );
             return name
                 ? `Linking ${name}… it connects in a few seconds.`
-                : "That code doesn't work any more: it expired or was already used. Show a new QR on your Mac.";
+                : "That code doesn't work any more. Your Mac's page shows a new one in a few seconds: scan that one.";
         }
         if (action === "off") {
             options.bridge.disconnect(userId);

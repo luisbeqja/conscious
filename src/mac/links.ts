@@ -29,15 +29,18 @@ export interface LinkedMac {
 interface Saved {
     pairings: Pairing[];
     macs: LinkedMac[];
+    offers: Offer[];
 }
 
 /**
  * A Mac asking to be linked: it shows its code as a QR, and the owner sends the code from their
- * chat. Only the Mac that asked holds the secret that collects the token. Kept in memory only.
+ * chat. Only the Mac that asked holds the secret that collects the token. Saved with the links, so
+ * a restart of Conscious does not void a QR someone is about to scan.
  */
 interface Offer {
     code: string;
-    secret: Buffer;
+    /** SHA-256 of the secret, hex. */
+    secret: string;
     name: string;
     expiresAt: number;
     /** Who sent the code, once someone did. */
@@ -75,6 +78,7 @@ export class MacLinks {
             const saved = JSON.parse(readFileSync(file, "utf8")) as Partial<Saved>;
             this.pairings = saved.pairings ?? [];
             this.macs = saved.macs ?? [];
+            this.offers = saved.offers ?? [];
         }
     }
 
@@ -116,11 +120,12 @@ export class MacLinks {
         const secret = randomBytes(32).toString("base64url");
         const offer: Offer = {
             code: newCode(),
-            secret: digestOf(secret),
+            secret: digestOf(secret).toString("hex"),
             name: name.trim().slice(0, 60) || "Mac",
             expiresAt: now + OFFER_MINUTES * 60_000,
         };
         this.offers.push(offer);
+        this.save();
         return { code: offer.code, secret, expiresAt: new Date(offer.expiresAt) };
     }
 
@@ -129,6 +134,7 @@ export class MacLinks {
         const offer = this.openOffer(code);
         if (!offer || (offer.userId && offer.userId !== userId)) return undefined;
         offer.userId = userId;
+        this.save();
         return offer.name;
     }
 
@@ -138,7 +144,7 @@ export class MacLinks {
      */
     collect(code: string, secret: string): { userId: string; token: string } | "waiting" | undefined {
         const offer = this.openOffer(code);
-        if (!offer || !timingSafeEqual(offer.secret, digestOf(secret))) return undefined;
+        if (!offer || !timingSafeEqual(Buffer.from(offer.secret, "hex"), digestOf(secret))) return undefined;
         if (!offer.userId) return "waiting";
         this.offers = this.offers.filter((entry) => entry !== offer);
         return { userId: offer.userId, token: this.link(offer.userId, offer.name) };
@@ -193,7 +199,9 @@ export class MacLinks {
 
     private save(): void {
         if (!this.file) return;
-        const saved: Saved = { pairings: this.pairings, macs: this.macs };
+        const now = this.now().getTime();
+        const offers = this.offers.filter((offer) => offer.expiresAt > now);
+        const saved: Saved = { pairings: this.pairings, macs: this.macs, offers };
         mkdirSync(dirname(this.file), { recursive: true });
         const temporary = `${this.file}.tmp`;
         writeFileSync(temporary, JSON.stringify(saved, null, 2), { mode: 0o600 });
