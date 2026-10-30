@@ -18,8 +18,9 @@ import {
 } from "./config.js";
 import { createConscious } from "./create-conscious.js";
 import { modelSetupProblem } from "./engine/models.js";
-import { inviteCommands } from "./invites/commands.js";
+import { type Command, inviteCommands } from "./invites/commands.js";
 import { Invites } from "./invites/invites.js";
+import { macCommands } from "./mac/commands.js";
 import { connectServers } from "./mcp/servers.js";
 import { createTranscriber } from "./media/transcribe.js";
 
@@ -63,7 +64,7 @@ const notify = (userId: string, text: string): Promise<void> => {
     if (telegramChannel && chat?.platform === TELEGRAM) return telegramChannel.notify(userId, text);
     return channel ? channel.notify(userId, text) : Promise.resolve();
 };
-const { orchestrator, scheduler, background, sandboxes, vaultPage, vaultUpgrade, startVault } = createConscious(
+const { orchestrator, scheduler, background, sandboxes, vaultPage, vaultUpgrade, startVault, mac } = createConscious(
     config,
     notify,
     mcp.capabilities,
@@ -73,12 +74,15 @@ const invites = new Invites(join(config.dataDir, "invites.json"));
 const owners = new Set(
     [...photon.allowedUsers, ...(telegram?.users.values() ?? []), ...(app?.users ?? [])].map(userIdOf),
 );
-const command = inviteCommands({
+const invite = inviteCommands({
     invites,
     isOwner: (userId) => owners.has(userId),
     telegramLink: (code) => telegramChannel?.link(code),
     whatsapp: photon.platforms.includes("whatsapp"),
 });
+const linkMac =
+    mac && macCommands({ ...mac, publicUrl: config.vault.publicUrl, isOwner: (userId) => owners.has(userId) });
+const command: Command = (userId, text) => invite(userId, text) ?? linkMac?.(userId, text);
 // On one port (a host that gives the service a single address), the app's server serves the Vault too.
 const onePort = app?.port === config.vault.port;
 const appServer =

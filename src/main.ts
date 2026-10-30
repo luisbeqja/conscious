@@ -3,6 +3,7 @@ import { createInterface } from "node:readline/promises";
 import { loadConfig } from "./config.js";
 import { createConscious } from "./create-conscious.js";
 import { modelSetupProblem } from "./engine/models.js";
+import { macCommands } from "./mac/commands.js";
 import { connectServers } from "./mcp/servers.js";
 
 const USER = "me";
@@ -19,7 +20,7 @@ const mcp = await connectServers(config.mcpServers);
 const terminal = createInterface({ input: stdin, output: stdout });
 
 // Reminders and finished background tasks arrive on their own, so they print above the prompt.
-const { orchestrator, scheduler, background, sandboxes, startVault } = createConscious(
+const { orchestrator, scheduler, background, sandboxes, startVault, mac } = createConscious(
     config,
     async (_userId, text) => {
         stdout.write(`\r\x1b[K${bold("conscious")} ${text}\n`);
@@ -37,6 +38,9 @@ const COMMANDS: Record<string, () => Promise<void> | void> = {
     "/tasks": () => console.log(dim(JSON.stringify(background.list(USER), null, 2))),
 };
 
+// Whoever runs the terminal owns the install, so they can link their Mac from here too.
+const linkMac = mac && macCommands({ ...mac, publicUrl: config.vault.publicUrl, isOwner: () => true });
+
 const vaultServer = startVault();
 scheduler.start();
 background.resume();
@@ -46,7 +50,7 @@ console.log(
     ),
 );
 console.log(dim(`Vault on ${config.vault.publicUrl}`));
-console.log(dim(`Commands: ${Object.keys(COMMANDS).join(" ")} /exit\n`));
+console.log(dim(`Commands: ${Object.keys(COMMANDS).join(" ")}${linkMac ? " /mac" : ""} /exit\n`));
 terminal.setPrompt("you ");
 
 terminal.prompt();
@@ -56,8 +60,10 @@ for await (const input of terminal) {
     const line = input.trim();
     if (line === "/exit") break;
     const command = COMMANDS[line];
-    if (!line || command) {
+    const linking = line.startsWith("/mac") ? linkMac?.(USER, line) : undefined;
+    if (!line || command || linking !== undefined) {
         await command?.();
+        if (linking !== undefined) console.log(dim(linking));
         terminal.prompt();
         continue;
     }

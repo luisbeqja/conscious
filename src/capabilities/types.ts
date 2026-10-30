@@ -45,6 +45,8 @@ export interface RegisteredTool<TParams extends TSchema = TSchema> {
     effect: Effect;
     /** Runs one call at a time, in the order the model made them, even when other calls share its turn. */
     sequential?: boolean;
+    /** Waits minutes for its answer, so only background agents get it: the chat would stall on it. */
+    backgroundOnly?: boolean;
     execute(params: Static<TParams>, context: ToolContext): Promise<ToolOutput>;
 }
 

@@ -46,6 +46,8 @@ export interface Config {
     embeddings?: EmbeddingsConfig;
     /** The search index of official Italian pages (`pnpm italy:index`). No file, no capability. */
     italyIndex: string;
+    /** Owners may link their Mac with /mac, so Conscious can give Claude Code jobs there. Off unless asked for. */
+    mac: boolean;
 }
 
 export type PhotonPlatform = "imessage" | "whatsapp";
@@ -159,6 +161,7 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): Config => {
         transcription: loadTranscriptionConfig(env),
         embeddings: loadEmbeddingsConfig(env),
         italyIndex: env.CONSCIOUS_ITALY_INDEX || join(dataDir, "italy", "index.sqlite"),
+        mac: env.CONSCIOUS_MAC === "true",
     };
 };
 

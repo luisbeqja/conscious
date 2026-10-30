@@ -86,6 +86,15 @@ A background job usually comes back in another form: another flight, another pre
 - **Sign-in through a live view.** `browser_ask_user_to_sign_in` opens the site's sign-in page and starts the desktop's VNC stream with a fresh password. The link is a code on the Vault's server (`/browser/<code>/…`) that relays noVNC's page and socket to the computer, adding the token. It lasts 15 minutes, and a new one for the user closes the old. With the app and the Vault on one port, the app's server routes sockets by path: `/app/socket` to the app, the rest to the live views.
 - **Commits in a browser.** Before a click, the tool reads the element: a button whose label pays, buys, books, orders, sends, posts, deletes, transfers or signs up, in six languages, or a submit in a form with card fields, is refused; plain links are not. Typing into password and card fields is refused; Enter and Space are not keys the agent can press. A heuristic, written down as such, until approvals exist.
 
+## Your Mac
+
+`CONSCIOUS_MAC=true` lets the owners link their own Mac, so Conscious can give jobs to Claude Code there (`src/mac/`).
+
+- **Linked in code.** `/mac` is answered by the channel, never by the agent, and only for owners: a code that works once, for 15 minutes. `pnpm mac pair` trades it at `POST /mac/pair` for a token that lives only on the Mac; Conscious keeps its digest in `macs.json`.
+- **The Mac connects out.** conscious-mac (`src/mac/local/`, kept running by launchd) holds a socket to `/mac/socket` on the Vault's server, which pings it every 30 seconds. Each job has an id: a Mac that drops off gets its jobs again when it is back, and answers each once.
+- **One turn of Claude Code per job.** The Mac runs its own `claude -p` in a folder it checks against its own list, with `--permission-prompts none`, so whatever would ask for approval is refused and listed in the answer; `--resume` goes on with a conversation, and a read-only job runs in plan mode. The server sends a folder, a message, a session and read-only, and nothing else reaches the command line.
+- **Always a background job.** `mac_ask_claude_code` waits minutes, so it is `backgroundOnly`: the chat is never offered it and starts a background task with the `mac` capability instead, given to the `claude-code` agent. That agent sends the user what matters. `mac_check_status` shows Claude Code's last steps and the latest conversations, which the next job goes on with.
+
 ## Channels
 
 Conscious reaches people through [Photon Spectrum](https://photon.codes/spectrum): one SDK and one message stream for iMessage and WhatsApp. `src/channels/photon.ts` is the only code that knows about it.

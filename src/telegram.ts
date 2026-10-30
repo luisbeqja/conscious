@@ -7,6 +7,7 @@ import { createConscious } from "./create-conscious.js";
 import { modelSetupProblem } from "./engine/models.js";
 import { inviteCommands } from "./invites/commands.js";
 import { Invites } from "./invites/invites.js";
+import { macCommands } from "./mac/commands.js";
 import { connectServers } from "./mcp/servers.js";
 import { createTranscriber } from "./media/transcribe.js";
 
@@ -21,7 +22,7 @@ const mcp = await connectServers(config.mcpServers);
 
 // The channel needs the orchestrator and the orchestrator's notifications need the channel.
 let notify: (userId: string, text: string) => Promise<void> = async () => {};
-const { orchestrator, scheduler, background, sandboxes, startVault } = createConscious(
+const { orchestrator, scheduler, background, sandboxes, startVault, mac } = createConscious(
     config,
     (userId, text) => notify(userId, text),
     mcp.capabilities,
@@ -29,6 +30,13 @@ const { orchestrator, scheduler, background, sandboxes, startVault } = createCon
 // Friends the users on CONSCIOUS_TELEGRAM_USERS invite with /invite.
 const invites = new Invites(join(config.dataDir, "invites.json"));
 const owners = new Set([...telegram.users.values()].map(userIdOf));
+const invite = inviteCommands({
+    invites,
+    isOwner: (userId) => owners.has(userId),
+    telegramLink: (code) => channel.link(code),
+});
+const linkMac =
+    mac && macCommands({ ...mac, publicUrl: config.vault.publicUrl, isOwner: (userId) => owners.has(userId) });
 const channel: TelegramChannel = new TelegramChannel(
     createTelegramApi(telegram.botToken),
     orchestrator,
@@ -37,11 +45,7 @@ const channel: TelegramChannel = new TelegramChannel(
         chats: new ChatBook(join(config.dataDir, "chats.json")),
         transcriber: config.transcription && createTranscriber(config.transcription),
         invites,
-        command: inviteCommands({
-            invites,
-            isOwner: (userId) => owners.has(userId),
-            telegramLink: (code) => channel.link(code),
-        }),
+        command: (userId, text) => invite(userId, text) ?? linkMac?.(userId, text),
         onJoined: (guest) => {
             channel
                 .notify(guest.invitedBy, `${guest.userId} just joined Conscious on Telegram ✅`)
