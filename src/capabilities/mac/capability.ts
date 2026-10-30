@@ -31,7 +31,10 @@ export const createMacCapability = (bridge: MacBridge): Capability => ({
             // The chat starts a background task for it instead of waiting.
             backgroundOnly: true,
             parameters: Type.Object({
-                folder: Type.String({ description: "An allowed folder, by its name or path, from mac_check_status." }),
+                folder: Type.String({
+                    description:
+                        "An allowed folder from mac_check_status, by its name or path, or a path inside one (~/Desktop when the home folder is allowed).",
+                }),
                 message: Type.String({
                     description:
                         "What Claude Code should do or answer, written to a capable engineer who cannot see the chat: the goal, the user's words, what not to touch, and what to report back.",

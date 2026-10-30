@@ -161,21 +161,18 @@ With `CONSCIOUS_BROWSER=e2b` (and a computer), Conscious gets a real Chrome of i
 
 Conscious can hand work on your own Mac to [Claude Code](https://code.claude.com): "ask Claude Code why the build fails in conscious", "have it add a line to notes.txt". It becomes a background job: Claude Code works on your real files, in the folders you allowed, and Conscious tells you what it did when it is done. The next job in that folder goes on with the same conversation, so Claude Code remembers the work.
 
-1. Set `CONSCIOUS_MAC=true` and restart Conscious.
-2. Send `/mac` on Telegram, WhatsApp or in `pnpm chat`. Only owners can. It answers with a line to run on your Mac.
-3. On the Mac, in a copy of this repository, with Node 22 and Claude Code installed and signed in:
+1. Set `CONSCIOUS_MAC=true` and restart Conscious. For a WhatsApp QR as well as Telegram's, set `CONSCIOUS_WHATSAPP_NUMBER` to Conscious's own number.
+2. On the Mac, in a copy of this repository, with Node 22 and Claude Code installed and signed in, run `pnpm mac`. It starts conscious-mac in the background, from every login on, and opens its page at http://localhost:7337.
+3. Type your Conscious's address on the page and scan the QR with your phone. It opens your chat with Conscious with the code ready: tap Start (Telegram) or Send (WhatsApp), and the page links by itself. Sending `/mac <code>` from any chat works too. Only owners can link a Mac.
+4. On the page, add the folders Claude Code may work in, and pick what it may do and the model.
 
-```bash
-pnpm mac pair https://your-conscious.example.com k7qd-m2xa-9wfe   # the line /mac gave you
-pnpm mac allow ~/code/my-project                                  # each folder Claude Code may work in
-pnpm mac install                                                  # keep it running, from every login on
-```
+The page shows whether the Mac is online and what Claude Code did lately; "Unlink this Mac" and "Stop conscious-mac" are there too. `/mac off` in the chat unlinks it from the other side. Everything the page does also works in the terminal: `pnpm mac help` lists it, including `pnpm mac pair <address> <code>` with a code from `/mac`, for a Mac without a browser.
 
-`pnpm mac status` shows what is set up and which Claude Code it runs, `pnpm mac model sonnet` picks a model, `pnpm mac forbid <folder>` takes a folder back, and `pnpm mac uninstall` stops it. `/mac off` in the chat unlinks the Mac; `/mac new` links another one in its place.
-
-- **The Mac calls Conscious, never the other way.** It holds a socket open to `/mac/socket` on your Conscious's address, so it needs no open port, works behind any router, and comes back by itself after sleep or a network change. The code from `/mac` works once, for 15 minutes. The token it is traded for stays in `~/.config/conscious/mac.json`, readable by you alone; Conscious keeps only a digest of it.
+- **The Mac calls Conscious, never the other way.** It holds a socket open to `/mac/socket` on your Conscious's address, so it needs no open port, works behind any router, and comes back by itself after sleep or a network change. A QR's code works for 10 minutes and links only the Mac that showed it. The token the Mac gets stays in `~/.config/conscious/mac.json`, readable by you alone; Conscious keeps only a digest of it.
+- **The page is for you alone.** It listens on this Mac only, and opens for a browser that `pnpm mac` handed a key from a file only you can read. Other websites open in the same browser cannot read it or change a setting.
 - **Your Claude account stays on the Mac.** conscious-mac runs your own `claude`, unchanged, signed in the way you signed it in. Conscious never sees a Claude login, and what Claude Code uses is on your own plan or key.
-- **The Mac decides what Claude Code may do.** It works only in the folders you allowed (never your home folder as a whole), in `acceptEdits` mode: it edits files there and runs what your Claude Code settings already allow. Anything it would ask permission for is refused, since nobody is at the Mac to say yes, and Conscious tells you what it wanted to do. Conscious can only pick a folder, write the message, go on with a conversation and ask for a read-only job (plan mode); no other flag reaches Claude Code. `pnpm mac mode` changes the mode if you want it to do more on its own.
+- **The Mac decides what Claude Code may do.** It works only in the folders you allowed, in `acceptEdits` mode: it edits files there and runs what your Claude Code settings already allow. Anything it would ask permission for is refused, since nobody is at the Mac to say yes, and Conscious tells you what it wanted to do. Conscious can only pick a folder, write the message, go on with a conversation and ask for a read-only job (plan mode); no other flag reaches Claude Code.
+- **Full control, if you want it.** "My whole home folder" (`pnpm mac allow ~`) lets Claude Code work anywhere in your home folder, and "Full control" (`pnpm mac mode bypassPermissions`) lets it run any command without asking. Together, any message that reaches Conscious can do anything on your Mac that you can, and Conscious also reads web pages and emails, which may carry instructions of their own. `pnpm mac forbid ~` and `pnpm mac mode acceptEdits` take it back.
 - **Awake while it works.** The Mac stays awake while Claude Code runs a job, then may sleep again. A Mac that is asleep, closed or off the internet is offline, and Conscious says so.
 
 ## Skills

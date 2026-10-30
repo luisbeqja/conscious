@@ -92,7 +92,7 @@ export const createConscious = (config: Config, notify: Notify, extra: readonly 
             onLinked: (userId, name, folders) => {
                 const where = folders.length
                     ? `in ${folders.map((folder) => folder.name).join(", ")}`
-                    : "once you allow a folder with `pnpm mac allow <folder>`";
+                    : "once you add a folder on its page (pnpm mac opens it)";
                 say(userId, `${name} is linked ✅ I can ask Claude Code to work on it now, ${where}.`).catch(
                     (error: unknown) => console.error(`[mac] could not tell ${userId} their Mac is linked`, error),
                 );

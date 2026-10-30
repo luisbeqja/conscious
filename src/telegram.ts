@@ -56,6 +56,8 @@ const channel: TelegramChannel = new TelegramChannel(
     },
 );
 notify = channel.notify;
+// A Mac's QR opens this bot with its code.
+if (mac) mac.bridge.chatLinks = (code) => ({ telegram: channel.link(`mac-${code}`) });
 const vaultServer = startVault();
 scheduler.start();
 background.resume();

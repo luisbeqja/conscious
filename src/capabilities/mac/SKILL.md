@@ -4,5 +4,5 @@
 - To go on with the same work ("now add a test", "what did you change?"), pass the `session` of the latest conversation in that folder, from `mac_check_status`: Claude Code then remembers what it did. Leave it out for new work.
 - Claude Code writes for a developer. Send the user what matters in a few lines: what it did, what it found, what it needs from them. Never paste a long diff or log.
 - What it was refused is in `denied`: nobody can approve a prompt on the Mac from here. Say what it wanted to do; the user can allow it in Claude Code on the Mac, or do it themselves.
-- A Mac that is offline is asleep, off the internet, or not running conscious-mac: say so, and do not retry in a loop. Never name a folder that is not allowed.
+- A Mac that is offline is asleep, off the internet, or not running conscious-mac: say so, and do not retry in a loop. Never name a folder outside the allowed ones; a path inside one is fine.
 - When the user asks how it is going, `mac_check_status` shows what Claude Code is doing right now.

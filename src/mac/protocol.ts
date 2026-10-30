@@ -7,7 +7,16 @@
 export const PROTOCOL_VERSION = 1;
 
 export const MAC_SOCKET_PATH = "/mac/socket";
+/** A Mac trades a code from /mac for its token. */
 export const MAC_PAIR_PATH = "/mac/pair";
+/** A Mac asks for a code to show as a QR, then collects its token at `/collect` once the owner sent it. */
+export const MAC_OFFERS_PATH = "/mac/offers";
+
+/** Where the owner sends a Mac's code from: the links its QR opens, for the chats this install has. */
+export interface ChatLinks {
+    telegram?: string;
+    whatsapp?: string;
+}
 
 /** Why a socket was closed, so the Mac knows whether to come back. */
 export const CLOSE = {
@@ -57,7 +66,9 @@ export type FromMac =
     | { type: "folders"; folders: MacFolder[] }
     | { type: "step"; id: string; step: string }
     | { type: "answer"; id: string; answer: MacAnswer }
-    | { type: "failed"; id: string; reason: string };
+    | { type: "failed"; id: string; reason: string }
+    /** The user unlinked it from the Mac. */
+    | { type: "unlink" };
 
 export type ToMac =
     | { type: "welcome"; user: string }

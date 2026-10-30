@@ -83,6 +83,15 @@ const invite = inviteCommands({
 const linkMac =
     mac && macCommands({ ...mac, publicUrl: config.vault.publicUrl, isOwner: (userId) => owners.has(userId) });
 const command: Command = (userId, text) => invite(userId, text) ?? linkMac?.(userId, text);
+// A Mac's QR opens the chat with its code ready to send, on Telegram or WhatsApp.
+if (mac) {
+    mac.bridge.chatLinks = (code) => ({
+        telegram: telegramChannel?.link(`mac-${code}`),
+        whatsapp: photon.whatsappNumber
+            ? `https://wa.me/${photon.whatsappNumber}?text=${encodeURIComponent(`/mac ${code}`)}`
+            : undefined,
+    });
+}
 // On one port (a host that gives the service a single address), the app's server serves the Vault too.
 const onePort = app?.port === config.vault.port;
 const appServer =
