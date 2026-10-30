@@ -60,6 +60,8 @@ export interface PhotonConfig {
     allowedUsers: ReadonlySet<string>;
     /** The approved template that carries messages outside WhatsApp's 24-hour window. */
     whatsappTemplate?: { name: string; languageCode: string };
+    /** Conscious's own WhatsApp number, digits only, for the QR that links a Mac. */
+    whatsappNumber?: string;
 }
 
 export interface AppConfig {
@@ -355,5 +357,6 @@ export const loadPhotonConfig = (env: NodeJS.ProcessEnv = process.env): PhotonCo
                   languageCode: env.CONSCIOUS_WHATSAPP_TEMPLATE_LANGUAGE || "en",
               }
             : undefined,
+        whatsappNumber: env.CONSCIOUS_WHATSAPP_NUMBER?.replace(/\D/g, "") || undefined,
     };
 };

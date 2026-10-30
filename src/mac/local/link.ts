@@ -10,6 +10,8 @@ const KEEP_MS = 24 * 60 * 60_000;
 /** The server pings every 30 seconds: this long without hearing from it, the link is gone. */
 const SILENCE_MS = 75_000;
 const MAX_WAIT_MS = 30_000;
+/** Jobs shown on the Mac's page. */
+const ACTIVITY_KEPT = 20;
 
 type Reply = Extract<FromMac, { type: "answer" | "failed" }>;
 
@@ -22,6 +24,23 @@ interface Job {
 /** Why the link ended: stopped here, or the server no longer takes this Mac. */
 export type LinkEnd = "stopped" | "unlinked" | "outdated";
 
+/** Where the link stands, for the Mac's page. */
+export type LinkState = "connecting" | "online" | "offline" | LinkEnd;
+
+/** A job as the Mac's page shows it. */
+export interface Activity {
+    id: string;
+    folder: string;
+    asked: string;
+    readOnly: boolean;
+    startedAt: string;
+    endedAt?: string;
+    result: "working" | "answered" | "failed";
+    steps: number;
+    lastStep?: string;
+    reason?: string;
+}
+
 export interface MacLinkOptions {
     log?: (line: string) => void;
     /** Passed to every Claude Code run; tests turn it off. */
@@ -30,11 +49,13 @@ export interface MacLinkOptions {
 
 const sleep = (ms: number, signal: AbortSignal) =>
     new Promise<void>((resolve) => {
-        const timer = setTimeout(resolve, ms);
-        signal.addEventListener("abort", () => {
+        const done = () => {
             clearTimeout(timer);
+            signal.removeEventListener("abort", done);
             resolve();
-        });
+        };
+        const timer = setTimeout(done, ms);
+        signal.addEventListener("abort", done, { once: true });
     });
 
 /**
@@ -44,13 +65,24 @@ const sleep = (ms: number, signal: AbortSignal) =>
 export class MacLink {
     private socket?: WebSocket;
     private readonly jobs = new Map<string, Job>();
+    private readonly recent: Activity[] = [];
     private readonly log: (line: string) => void;
+    private current: LinkState = "connecting";
 
     constructor(
         private readonly file: string,
         private readonly options: MacLinkOptions = {},
     ) {
         this.log = options.log ?? ((line) => console.log(`${new Date().toISOString()} ${line}`));
+    }
+
+    get state(): LinkState {
+        return this.current;
+    }
+
+    /** The latest jobs, newest first. */
+    activity(): readonly Activity[] {
+        return this.recent;
     }
 
     /** Stays connected, coming back after every drop, until `signal` or the server says this Mac is not linked. */
@@ -65,26 +97,50 @@ export class MacLink {
         try {
             while (!signal.aborted) {
                 const settings = this.settings();
-                if (!settings) return "unlinked";
+                if (!settings?.token) return this.ended("unlinked");
+                this.current = "connecting";
                 const { code, opened } = await this.connect(settings, signal);
                 if (signal.aborted) break;
                 if (code === CLOSE.unlinked) {
-                    // Paired again meanwhile: the new token is in the file.
+                    // Linked again meanwhile: the new token is in the file.
                     if (this.settings()?.token !== settings.token) continue;
-                    return "unlinked";
+                    return this.ended("unlinked");
                 }
-                if (code === CLOSE.outdated) return "outdated";
+                if (code === CLOSE.outdated) return this.ended("outdated");
                 if (opened) wait = 1_000;
+                this.current = "offline";
                 this.log(`Not connected to ${settings.server}; trying again in ${wait / 1_000}s`);
                 await sleep(wait, signal);
                 wait = Math.min(wait * 2, MAX_WAIT_MS);
             }
-            return "stopped";
+            return this.ended("stopped");
         } finally {
             unwatchFile(this.file, changed);
             this.socket?.close();
             for (const job of this.jobs.values()) job.stop?.();
         }
+    }
+
+    /**
+     * What runs in the background: linked while the settings hold a token, and waiting for a new one
+     * when they do not, until `signal`. The Mac's page stays up all the while.
+     */
+    async stayLinked(signal: AbortSignal): Promise<void> {
+        while (!signal.aborted) {
+            const token = this.settings()?.token;
+            if ((await this.run(signal)) === "stopped") return;
+            while (!signal.aborted && this.settings()?.token === token) await sleep(1_000, signal);
+        }
+    }
+
+    /** Tells Conscious the user unlinked this Mac here, so it forgets it too. */
+    unlink(): void {
+        this.send({ type: "unlink" });
+    }
+
+    private ended(end: LinkEnd): LinkEnd {
+        this.current = end;
+        return end;
     }
 
     private settings(): MacSettings | undefined {
@@ -143,7 +199,10 @@ export class MacLink {
         } catch {
             return;
         }
-        if (message.type === "welcome") this.log(`Connected, for ${message.user}`);
+        if (message.type === "welcome") {
+            this.current = "online";
+            this.log(`Connected, for ${message.user}`);
+        }
         if (message.type === "cancel") this.jobs.get(message.id)?.stop?.();
         if (message.type === "ask") this.start(message.id, message.request);
     }
@@ -157,8 +216,19 @@ export class MacLink {
             if (known.reply) this.send(known.reply);
             return;
         }
+        const activity: Activity = {
+            id,
+            folder: String(request.folder ?? ""),
+            asked: String(request.message ?? "").slice(0, 160),
+            readOnly: request.readOnly === true,
+            startedAt: new Date(now).toISOString(),
+            result: "working",
+            steps: 0,
+        };
+        this.recent.unshift(activity);
+        this.recent.splice(ACTIVITY_KEPT);
         const settings = this.settings();
-        const folder = settings && resolveFolder(String(request.folder ?? ""), settings.folders);
+        const folder = settings && resolveFolder(activity.folder, settings.folders);
         if (!settings || !folder) {
             const allowed = settings?.folders.length
                 ? listFolders(settings.folders)
@@ -180,11 +250,15 @@ export class MacLink {
             folder,
             message: String(request.message ?? ""),
             session: request.session,
-            readOnly: request.readOnly === true,
+            readOnly: activity.readOnly,
             permissionMode: settings.permissionMode,
             model: settings.model,
             caffeinate: this.options.caffeinate,
-            onStep: (step) => this.send({ type: "step", id, step }),
+            onStep: (step) => {
+                activity.steps++;
+                activity.lastStep = step;
+                this.send({ type: "step", id, step });
+            },
         });
         this.jobs.set(id, { stop: run.stop });
         run.answer.then(
@@ -196,6 +270,12 @@ export class MacLink {
 
     private finish(id: string, reply: Reply): void {
         this.jobs.set(id, { reply, endedAt: Date.now() });
+        const activity = this.recent.find((entry) => entry.id === id);
+        if (activity) {
+            activity.endedAt = new Date().toISOString();
+            activity.result = reply.type === "answer" && !reply.answer.error ? "answered" : "failed";
+            if (reply.type === "failed") activity.reason = reply.reason;
+        }
         this.log(`Job ${id.slice(0, 8)} ${reply.type === "answer" ? "answered" : `failed: ${reply.reason}`}`);
         this.send(reply);
     }

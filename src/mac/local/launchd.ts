@@ -65,12 +65,15 @@ export const installAgent = (agent: AgentPlist): void => {
     if (started.status !== 0) throw new Error(`launchctl did not start it: ${started.stderr.trim()}`);
 };
 
-/** Stops it and takes it out of login. False when it was not installed. */
+/**
+ * Stops it and takes it out of login. False when it was not installed. The file goes first: run
+ * from conscious-mac itself, bootout ends this very process.
+ */
 export const uninstallAgent = (): boolean => {
+    const installed = existsSync(plistFile());
+    if (installed) rmSync(plistFile());
     spawnSync("launchctl", ["bootout", `${target()}/${LABEL}`], { stdio: "ignore" });
-    if (!existsSync(plistFile())) return false;
-    rmSync(plistFile());
-    return true;
+    return installed;
 };
 
 /** "running", "not running", or "not installed". */

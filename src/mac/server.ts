@@ -5,8 +5,10 @@ import type { Duplex } from "node:stream";
 import { type RawData, type WebSocket, WebSocketServer } from "ws";
 import type { LinkedMac, MacLinks } from "./links.js";
 import {
+    type ChatLinks,
     CLOSE,
     type FromMac,
+    MAC_OFFERS_PATH,
     MAC_PAIR_PATH,
     MAC_SOCKET_PATH,
     type MacAnswer,
@@ -124,6 +126,8 @@ export class MacBridge {
     private readonly sockets = new WebSocketServer({ noServer: true, maxPayload: MAX_PAYLOAD_BYTES });
     private readonly heartbeat: NodeJS.Timeout;
     private readonly now: () => Date;
+    /** The chat links a Mac's QR opens. Set once the channels run, since they start after Conscious. */
+    chatLinks?: (code: string) => ChatLinks;
 
     constructor(
         private readonly links: MacLinks,
@@ -150,34 +154,61 @@ export class MacBridge {
         this.heartbeat.unref();
     }
 
-    /** `POST /mac/pair` with `{ code, name }`: a Mac trades the code from /mac for its token. False for other paths. */
+    /**
+     * The Macs' JSON requests, all POST. `/mac/pair` trades a code from /mac for a token; `/mac/offers`
+     * gives a Mac a code to show as a QR, and `/mac/offers/collect` its token once the owner sent the
+     * code from their chat. False for other paths.
+     */
     serve = (request: IncomingMessage, response: ServerResponse): boolean => {
-        if (request.url?.split("?")[0] !== MAC_PAIR_PATH) return false;
-        const reply = (status: number, body: object) =>
+        const path = request.url?.split("?")[0];
+        const routes: Record<string, (given: Record<string, unknown>) => [number, object]> = {
+            [MAC_PAIR_PATH]: (given) => {
+                const paired = this.links.pair(text(given.code, 100), text(given.name, 100));
+                if (!paired) {
+                    return [
+                        403,
+                        {
+                            error: "That code does not work: it was used, or more than 15 minutes passed. Send /mac in the chat for a new one.",
+                        },
+                    ];
+                }
+                this.linked(paired.userId);
+                return [200, { token: paired.token }];
+            },
+            [MAC_OFFERS_PATH]: (given) => {
+                const offer = this.links.offer(text(given.name, 100));
+                const links = this.chatLinks?.(offer.code) ?? {};
+                return [200, { ...offer, links }];
+            },
+            [`${MAC_OFFERS_PATH}/collect`]: (given) => {
+                const collected = this.links.collect(text(given.code, 100), text(given.secret, 100));
+                if (collected === "waiting") return [202, { waiting: true }];
+                if (!collected) return [410, { error: "This code expired. Show a new QR." }];
+                this.linked(collected.userId);
+                return [200, { token: collected.token }];
+            },
+        };
+        const route = path ? routes[path] : undefined;
+        if (!route) return false;
+        const reply = ([status, body]: [number, object]) =>
             response
                 .writeHead(status, { "content-type": "application/json", "cache-control": "no-store" })
                 .end(JSON.stringify(body));
         if (request.method !== "POST") {
-            reply(405, { error: "Pair with: pnpm mac pair <address> <code>" });
+            reply([405, { error: "Link a Mac with pnpm mac." }]);
             return true;
         }
         void readBody(request)
-            .then((body) => {
-                const given = JSON.parse(body ?? "{}") as { code?: unknown; name?: unknown };
-                const paired = this.links.pair(text(given.code, 100), text(given.name, 100));
-                if (!paired) {
-                    return reply(403, {
-                        error: "That code does not work: it was used, or more than 15 minutes passed. Send /mac in the chat for a new one.",
-                    });
-                }
-                // A Mac linked in place of another takes over at once.
-                this.connections.get(paired.userId)?.socket.close(CLOSE.unlinked, "another Mac was linked");
-                console.log(`[mac] a Mac was linked for ${paired.userId}`);
-                reply(200, { token: paired.token });
-            })
-            .catch(() => reply(400, { error: "Send JSON: { code, name }" }));
+            .then((body) => reply(route(JSON.parse(body || "{}") as Record<string, unknown>)))
+            .catch(() => reply([400, { error: "Send JSON." }]));
         return true;
     };
+
+    /** A Mac was linked in place of the user's old one, which stops at once. */
+    private linked(userId: string): void {
+        this.connections.get(userId)?.socket.close(CLOSE.unlinked, "another Mac was linked");
+        console.log(`[mac] a Mac was linked for ${userId}`);
+    }
 
     /** Takes the Macs' sockets at `/mac/socket`. False for any other upgrade. */
     upgrade = (request: IncomingMessage, socket: Duplex, head: Buffer): boolean => {
@@ -309,6 +340,13 @@ export class MacBridge {
             return;
         }
         if (message.type === "hello") return;
+        if (message.type === "unlink") {
+            const { userId, name } = connection.mac;
+            this.disconnect(userId);
+            this.links.forget(userId);
+            console.log(`[mac] ${name} was unlinked from the Mac`);
+            return;
+        }
         const job = this.jobs.get(text(message.id, 100));
         // Only the user's own Mac can answer their job.
         if (!job || job.userId !== connection.mac.userId) return;

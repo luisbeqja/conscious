@@ -8,10 +8,12 @@ import { listFolders, realFolder } from "./folders.js";
 import { agentState, installAgent, logFile, uninstallAgent } from "./launchd.js";
 import { MacLink } from "./link.js";
 import { type MacSettings, PERMISSION_MODES, readSettings, settingsFile, writeSettings } from "./settings.js";
+import { MacPage, PAGE_PORT, pageKey } from "./ui.js";
 
 const USAGE = `conscious-mac: Claude Code on this Mac, for Conscious.
 
-  pnpm mac pair <address> <code>   link this Mac (send /mac in the chat for both)
+  pnpm mac                         open its page: link this Mac with a QR, and every setting
+  pnpm mac pair <address> <code>   link this Mac without the page (send /mac in the chat for both)
   pnpm mac allow <folder>          let Claude Code work in a folder
   pnpm mac forbid <folder>         take a folder back
   pnpm mac install                 keep it running, from every login on
@@ -22,6 +24,7 @@ const USAGE = `conscious-mac: Claude Code on this Mac, for Conscious.
   pnpm mac mode <mode>             Claude Code's permission mode (acceptEdits)`;
 
 const file = settingsFile();
+const port = Number(process.env.CONSCIOUS_MAC_PORT) || PAGE_PORT;
 
 const fail = (message: string): never => {
     console.error(message);
@@ -106,15 +109,17 @@ const allow = (path?: string) => {
     const settings = paired();
     if (!path) return fail("Run it as: pnpm mac allow <folder>");
     const folder = realFolder(path) ?? fail(`${path} is not a folder on this Mac.`);
-    // Claude Code edits what it is let into: never the whole home folder or disk.
-    const home = realFolder(homedir()) ?? homedir();
-    const holdsHome = relative(folder, home);
-    if (holdsHome === "" || (!holdsHome.startsWith("..") && !isAbsolute(holdsHome))) {
-        fail("Pick a project folder, not your home folder or anything that holds it.");
-    }
     settings.folders = [...new Set([...settings.folders, folder])];
     writeSettings(file, settings);
     showFolders(settings);
+    // Claude Code works on what it is let into: the home folder is all of the user's files.
+    const home = realFolder(homedir()) ?? homedir();
+    const holdsHome = relative(folder, home);
+    if (holdsHome === "" || (!holdsHome.startsWith("..") && !isAbsolute(holdsHome))) {
+        console.log(
+            "That is your whole home folder: Claude Code may now work on any file you have, keys and sign-ins included. `pnpm mac forbid` takes it back.",
+        );
+    }
 };
 
 const forbid = (path?: string) => {
@@ -147,23 +152,60 @@ const setMode = (mode?: string) => {
     }
 };
 
+/** Whether conscious-mac is running with its page, here or in the background. */
+const pageUp = async (): Promise<boolean> => {
+    try {
+        const response = await fetch(`http://127.0.0.1:${port}/health`, { signal: AbortSignal.timeout(1_500) });
+        return ((await response.json()) as { app?: string }).app === "conscious-mac";
+    } catch {
+        return false;
+    }
+};
+
+/** The background program, with its page, linked or waiting to be. It keeps running until stopped from the page. */
 const run = async () => {
-    paired();
+    if (await pageUp()) {
+        return fail(
+            "conscious-mac already runs in the background: pnpm mac opens its page, pnpm mac uninstall stops it.",
+        );
+    }
     const stop = new AbortController();
     for (const signal of ["SIGINT", "SIGTERM"] as const) process.on(signal, () => stop.abort());
-    const end = await new MacLink(file).run(stop.signal);
-    if (end === "unlinked") console.log("This Mac is not linked any more. Send /mac in the chat, then pnpm mac pair.");
-    if (end === "outdated") console.log("This conscious-mac is older than Conscious: git pull, then pnpm mac install.");
-    // Launchd starts it again only after a crash; an unlinked or outdated Mac would only fail again.
+    const link = new MacLink(file);
+    const macPage = new MacPage({
+        file,
+        link,
+        port,
+        name: macName,
+        findClaude,
+        claudeVersion,
+        log: logFile(),
+        stop: () => {
+            uninstallAgent();
+            stop.abort();
+        },
+    });
+    const server = await macPage.listen().catch((error: unknown) => {
+        console.error(`Its page could not start on port ${port}: ${error instanceof Error ? error.message : error}`);
+        return undefined;
+    });
+    if (server) console.log(`Its page: http://localhost:${port}, opened with pnpm mac`);
+    await link.stayLinked(stop.signal);
+    server?.close();
     process.exit(0);
 };
 
-const install = () => {
-    const settings = paired();
+/** Starts conscious-mac in the background, from now and at every login, in place of any older one. */
+const startInBackground = () => {
+    const claude = readSettings(file)?.claude || findClaude();
     const cli = fileURLToPath(import.meta.url);
     const repo = resolve(dirname(cli), "..", "..", "..");
     const path = [
-        ...new Set([dirname(process.execPath), dirname(settings.claude), ...(process.env.PATH ?? "").split(delimiter)]),
+        ...new Set([
+            dirname(process.execPath),
+            ...(claude ? [dirname(claude)] : []),
+            ...(process.env.PATH ?? "").split(delimiter),
+        ]),
     ]
         .filter(Boolean)
         .join(delimiter);
@@ -171,25 +213,49 @@ const install = () => {
         // Launchd starts it in the repository, where tsx is found whatever version pnpm installed.
         program: [process.execPath, "--import", "tsx", cli, "run"],
         directory: repo,
-        env: { PATH: path, ...(process.env.CONSCIOUS_MAC_SETTINGS ? { CONSCIOUS_MAC_SETTINGS: file } : {}) },
+        env: {
+            PATH: path,
+            ...(process.env.CONSCIOUS_MAC_SETTINGS ? { CONSCIOUS_MAC_SETTINGS: file } : {}),
+            ...(process.env.CONSCIOUS_MAC_PORT ? { CONSCIOUS_MAC_PORT: String(port) } : {}),
+        },
         log: logFile(),
     });
-    console.log(`conscious-mac is running, and starts at every login. Its log: ${logFile()}`);
-    if (!settings.folders.length) console.log("No folder is allowed yet: pnpm mac allow <folder>");
+};
+
+const install = () => {
+    startInBackground();
+    console.log(`conscious-mac is running, and starts at every login. Its page: pnpm mac. Its log: ${logFile()}`);
+};
+
+/** `pnpm mac`: makes sure this version runs in the background, then opens its page in the browser. */
+const openPage = async () => {
+    if (!(await pageUp())) {
+        // Not running, or an older version without the page: this one takes its place.
+        startInBackground();
+        const started = Date.now();
+        while (!(await pageUp())) {
+            if (Date.now() - started > 20_000) return fail(`conscious-mac did not start. Its log: ${logFile()}`);
+            await new Promise((resolve) => setTimeout(resolve, 500));
+        }
+    }
+    spawnSync("open", [`http://localhost:${port}/open?key=${pageKey(file)}`]);
+    console.log(`Conscious on this Mac: http://localhost:${port}`);
 };
 
 const status = () => {
     const settings = readSettings(file);
-    if (!settings) return console.log("Not linked: send /mac in the chat, then run what it says.");
+    if (!settings?.token) return console.log("Not linked: run pnpm mac, and scan the code on its page.");
     console.log(`${settings.name}, linked to ${settings.server}`);
     showFolders(settings);
     console.log(`Claude Code: ${settings.claude} (${claudeVersion(settings.claude) ?? "not found"})`);
     console.log(`Permission mode: ${settings.permissionMode}. Model: ${settings.model ?? "Claude Code's default"}.`);
-    console.log(`In the background: ${agentState()}. Log: ${logFile()}`);
+    console.log(`In the background: ${agentState()}. Page: http://localhost:${port}. Log: ${logFile()}`);
 };
 
 const [command = "", ...args] = process.argv.slice(2);
 const commands: Record<string, () => unknown> = {
+    "": openPage,
+    help: () => console.log(USAGE),
     pair: () => pair(args[0], args[1]),
     allow: () => allow(args.join(" ")),
     forbid: () => forbid(args.join(" ")),
@@ -203,6 +269,6 @@ const commands: Record<string, () => unknown> = {
 const chosen = commands[command];
 if (!chosen) {
     console.log(USAGE);
-    process.exit(command ? 1 : 0);
+    process.exit(1);
 }
 await chosen?.();

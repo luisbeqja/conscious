@@ -1,8 +1,8 @@
 import { chmodSync, mkdirSync, mkdtempSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
-import { createServer, type Server } from "node:http";
+import { createServer, request as httpRequest, type IncomingHttpHeaders, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { homedir, tmpdir } from "node:os";
+import { basename, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import WebSocket from "ws";
 import { createMacCapability } from "../src/capabilities/mac/capability.js";
@@ -12,7 +12,8 @@ import { MacLinks } from "../src/mac/links.js";
 import { runClaude } from "../src/mac/local/claude.js";
 import { resolveFolder } from "../src/mac/local/folders.js";
 import { type LinkEnd, MacLink } from "../src/mac/local/link.js";
-import { type MacSettings, writeSettings } from "../src/mac/local/settings.js";
+import { type MacSettings, readSettings, writeSettings } from "../src/mac/local/settings.js";
+import { MacPage } from "../src/mac/local/ui.js";
 import { CLOSE, type FromMac, MAC_SOCKET_PATH, type ToMac } from "../src/mac/protocol.js";
 import { MacBridge } from "../src/mac/server.js";
 import type { Scheduler } from "../src/scheduler/scheduler.js";
@@ -305,6 +306,13 @@ describe("allowed folders", () => {
         expect(resolveFolder("src", [project])).toBeUndefined();
     });
 
+    it("read ~ as the home folder, which, once allowed, opens every path inside it", () => {
+        const home = realpathSync(homedir());
+        expect(resolveFolder("~", [home])).toBe(home);
+        expect(resolveFolder("~/..", [home])).toBeUndefined();
+        expect(resolveFolder("~", [temporary("elsewhere-")])).toBeUndefined();
+    });
+
     it("refuse a session id that would pass as a flag before Claude Code starts", async () => {
         const { answer } = runClaude({
             claude: "/bin/false",
@@ -375,5 +383,221 @@ describe("/mac", () => {
         expect(links.linked(OWNER)).toBeUndefined();
         expect(command(OWNER, "/mac off")).toBe("No Mac is linked, so there is nothing to unlink.");
         bridge.close();
+    });
+});
+
+/** A request with the headers a browser would send, or a site pretending. */
+const call = (
+    port: number,
+    path: string,
+    options: { method?: string; headers?: Record<string, string>; body?: unknown } = {},
+) =>
+    new Promise<{ status: number; headers: IncomingHttpHeaders; body: string }>((resolve, reject) => {
+        const body = options.body === undefined ? undefined : JSON.stringify(options.body);
+        const sent = httpRequest(
+            {
+                host: "127.0.0.1",
+                port,
+                path,
+                method: options.method ?? "GET",
+                headers: {
+                    host: `localhost:${port}`,
+                    ...(body ? { "content-type": "application/json" } : {}),
+                    ...options.headers,
+                },
+            },
+            (response) => {
+                let data = "";
+                response.on("data", (chunk) => {
+                    data += chunk;
+                });
+                response.on("end", () =>
+                    resolve({ status: response.statusCode ?? 0, headers: response.headers, body: data }),
+                );
+            },
+        );
+        sent.on("error", reject);
+        sent.end(body);
+    });
+
+/** conscious-mac in the background with its page, not linked yet, and a browser that opened it with `pnpm mac`. */
+const openPage = async () => {
+    const file = join(temporary("mac-"), "mac.json");
+    const link = new MacLink(file, { log: () => {}, caffeinate: false });
+    const stop = new AbortController();
+    stops.push(stop);
+    void link.stayLinked(stop.signal);
+    const chosen: string[] = [];
+    const macPage = new MacPage({
+        file,
+        link,
+        port: 0,
+        name: () => "Luis's MacBook",
+        findClaude: fakeClaude,
+        claudeVersion: () => "2.1.308 (Claude Code)",
+        log: "/tmp/conscious-mac.log",
+        chooseFolder: async () => chosen.shift(),
+        collectEveryMs: 50,
+    });
+    const server = await macPage.listen();
+    servers.push(server);
+    const port = (server.address() as AddressInfo).port;
+    const opened = await call(port, `/open?${new URL(macPage.openUrl()).searchParams}`);
+    const cookie = opened.headers["set-cookie"]?.[0]?.split(";")[0] ?? "";
+    const api = async (path: string, body?: unknown) => {
+        const response = await call(port, path, {
+            method: body === undefined ? "GET" : "POST",
+            headers: { cookie, origin: `http://localhost:${port}` },
+            body,
+        });
+        // biome-ignore lint/suspicious/noExplicitAny: the page's state, read as JSON
+        return { status: response.status, data: JSON.parse(response.body) as any };
+    };
+    return { file, link, port, cookie, api, chosen };
+};
+
+describe("linking a Mac with a QR", () => {
+    it("gives a code once its secret's owner collects it, after the owner sent it from their chat", () => {
+        let now = new Date("2026-10-30T10:00:00Z");
+        const links = new MacLinks(undefined, () => now);
+        const offer = links.offer("Luis's MacBook");
+        expect(links.collect(offer.code, "not the secret")).toBeUndefined();
+        expect(links.collect(offer.code, offer.secret)).toBe("waiting");
+        expect(links.claim(offer.code.replaceAll("-", ""), OWNER)).toBe("Luis's MacBook");
+        // Sent by someone else afterwards, it stays the owner's.
+        expect(links.claim(offer.code, "+39444")).toBeUndefined();
+        const collected = links.collect(offer.code, offer.secret);
+        expect(collected).toMatchObject({ userId: OWNER });
+        expect(links.macFor(typeof collected === "object" ? collected.token : "")?.name).toBe("Luis's MacBook");
+        expect(links.collect(offer.code, offer.secret)).toBeUndefined();
+
+        const late = links.offer("Mac");
+        now = new Date(now.getTime() + 11 * 60_000);
+        expect(links.claim(late.code, OWNER)).toBeUndefined();
+    });
+
+    it("answers /start mac-<code> from the QR and /mac <code> typed, for the owner only", () => {
+        const links = new MacLinks();
+        const bridge = new MacBridge(links);
+        const command = macCommands({ links, bridge, publicUrl: "https://c.example", isOwner: (id) => id === OWNER });
+        const offer = links.offer("Luis's MacBook");
+        expect(command("+39444", `/start mac-${offer.code}`)).toBe("Only the owner of this Conscious can link a Mac.");
+        expect(command(OWNER, `/start mac-${offer.code}`)).toBe(
+            "Linking Luis's MacBook… it connects in a few seconds.",
+        );
+        expect(command(OWNER, "/mac k7qd-m2xa-9wfe")).toBe(
+            "That code doesn't work any more: it expired or was already used. Show a new QR on your Mac.",
+        );
+        expect(command(OWNER, "/mac stauts")).toBe(
+            "Send /mac to link your Mac, /mac new for another one, /mac off to unlink it.",
+        );
+        expect(command(OWNER, "/start inv-k7qdm2xa9w")).toBeUndefined();
+        bridge.close();
+    });
+
+    it("links from the page: a QR to scan, then the Mac connects by itself", async () => {
+        const { links, bridge, url, linked } = await serve();
+        bridge.chatLinks = (code) => ({ telegram: `https://t.me/conscious_bot?start=mac-${code}` });
+        const mac = await openPage();
+        expect((await mac.api("/api/state")).data).toMatchObject({ linked: false, name: "Luis's MacBook" });
+
+        const shown = (await mac.api("/api/link", { server: url })).data.linking;
+        expect(shown.qr.telegram).toContain("<svg");
+        expect(shown.code).toMatch(/^[a-z2-9]{4}-[a-z2-9]{4}-[a-z2-9]{4}$/);
+
+        // The owner scans it, and Telegram sends the bot /start with the code.
+        const command = macCommands({ links, bridge, publicUrl: url, isOwner: (id) => id === OWNER });
+        expect(command(OWNER, `/start mac-${shown.code}`)).toBe(
+            "Linking Luis's MacBook… it connects in a few seconds.",
+        );
+        await until(() => bridge.status(OWNER)?.online === true);
+        expect(linked).toEqual([`${OWNER} Luis's MacBook `]);
+        expect((await mac.api("/api/state")).data).toMatchObject({ linked: true, state: "online", server: url });
+        expect(readSettings(mac.file)).toMatchObject({
+            server: url,
+            name: "Luis's MacBook",
+            permissionMode: "acceptEdits",
+        });
+    });
+
+    it("changes every setting from the page, and unlinks this Mac from Conscious too", async () => {
+        const { links, bridge, url } = await serve();
+        const paired = links.pair(links.startPairing(OWNER).code, "Mac");
+        const mac = await openPage();
+        writeSettings(mac.file, {
+            server: url,
+            token: paired?.token ?? "",
+            name: "Mac",
+            folders: [],
+            claude: "claude",
+            permissionMode: "acceptEdits",
+        });
+        await until(() => bridge.status(OWNER)?.online === true);
+
+        const project = temporary("project-");
+        expect((await mac.api("/api/folders/add", { path: project })).data.folders).toEqual([
+            { name: basename(project), path: project },
+        ]);
+        // Conscious sees the new folder without a restart.
+        await until(() => bridge.status(OWNER)?.folders.length === 1);
+        mac.chosen.push(temporary("picked-"));
+        expect((await mac.api("/api/folders/pick", {})).data.folders).toHaveLength(2);
+        expect((await mac.api("/api/folders/remove", { path: project })).data.folders).toHaveLength(1);
+        expect((await mac.api("/api/folders/add", { path: "/no/such/folder" })).status).toBe(400);
+
+        expect(
+            (await mac.api("/api/settings", { permissionMode: "bypassPermissions", model: "haiku" })).data,
+        ).toMatchObject({ permissionMode: "bypassPermissions", model: "haiku" });
+        expect((await mac.api("/api/settings", { permissionMode: "yolo" })).status).toBe(400);
+        expect((await mac.api("/api/settings", { model: "" })).data.model).toBe("");
+        expect(readSettings(mac.file)?.permissionMode).toBe("bypassPermissions");
+        expect(readSettings(mac.file)?.model).toBeUndefined();
+
+        expect((await mac.api("/api/unlink", {})).data.linked).toBe(false);
+        await until(() => links.linked(OWNER) === undefined);
+        await until(() => mac.link.state === "unlinked");
+    });
+
+    it("opens only for this computer's browser, with the key pnpm mac hands it", async () => {
+        const mac = await openPage();
+        expect((await call(mac.port, "/")).status).toBe(401);
+        expect((await call(mac.port, "/open?key=wrong")).status).toBe(403);
+        const shown = await call(mac.port, "/", { headers: { cookie: mac.cookie } });
+        expect(shown.status).toBe(200);
+        expect(shown.headers["content-security-policy"]).toMatch(/script-src 'nonce-/);
+        // A site that points its own name at this computer still sends its own Host.
+        const rebound = await call(mac.port, "/api/state", {
+            headers: { cookie: mac.cookie, host: "evil.example:7337" },
+        });
+        expect(rebound.status).toBe(403);
+        // Another site in the same browser cannot change a setting, even with the cookie.
+        const forged = await call(mac.port, "/api/settings", {
+            method: "POST",
+            headers: { cookie: mac.cookie, origin: "https://evil.example" },
+            body: { permissionMode: "bypassPermissions" },
+        });
+        expect(forged.status).toBe(403);
+        expect(JSON.parse((await call(mac.port, "/health")).body)).toEqual({ ok: true, app: "conscious-mac" });
+    });
+
+    it("serves the offers over HTTP: waiting, then the token once", async () => {
+        const { links, url } = await serve();
+        const post = async (path: string, body: unknown) => {
+            const response = await fetch(`${url}${path}`, {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify(body),
+            });
+            return { status: response.status, body: (await response.json()) as Record<string, string> };
+        };
+        const offer = (await post("/mac/offers", { name: "Mac" })).body;
+        expect(offer).toMatchObject({ links: {} });
+        expect((await post("/mac/offers/collect", { code: offer.code, secret: "wrong" })).status).toBe(410);
+        expect((await post("/mac/offers/collect", { code: offer.code, secret: offer.secret })).status).toBe(202);
+        links.claim(offer.code ?? "", OWNER);
+        const collected = await post("/mac/offers/collect", { code: offer.code, secret: offer.secret });
+        expect(collected.status).toBe(200);
+        expect(links.macFor(collected.body.token ?? "")?.userId).toBe(OWNER);
+        expect((await post("/mac/offers/collect", { code: offer.code, secret: offer.secret })).status).toBe(410);
     });
 });
