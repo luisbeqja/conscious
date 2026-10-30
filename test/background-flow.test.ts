@@ -22,10 +22,17 @@ const twoScripts = () => {
     models.setProvider(faux.provider);
     const scripts = { main: [] as Reply[], background: [] as Reply[] };
     const seen = { main: [] as string[], background: [] as string[] };
+    const offered = { main: [] as string[][], background: [] as string[][] };
     faux.setResponses(
         Array.from({ length: 50 }, () => (context, options) => {
             const lane = options?.sessionId?.startsWith("background-") ? "background" : "main";
             seen[lane].push(JSON.stringify(context.messages));
+            // The tools a model is offered come in the transcript's system messages.
+            offered[lane].push(
+                context.messages.flatMap((message) =>
+                    message.role === "system" ? (message.toolsAdded ?? []).map((tool) => tool.name) : [],
+                ),
+            );
             const next = scripts[lane].shift();
             if (!next) throw new Error(`no scripted ${lane} reply left`);
             return next(context.messages);
@@ -35,7 +42,7 @@ const twoScripts = () => {
         model: faux.getModel(),
         streamFn: (model, context, options) => models.streamSimple(model, context, options),
     };
-    return { runtime, scripts, seen };
+    return { runtime, scripts, seen, offered };
 };
 
 const text =
@@ -70,7 +77,7 @@ describe("a background task while the chat goes on", () => {
     const scheduler = new Scheduler(async () => {});
     afterEach(() => scheduler.stopAll());
 
-    const setUp = () => {
+    const setUp = (capabilities: Capability[] = [webCapability]) => {
         const model = twoScripts();
         const sent: string[] = [];
         let orchestrator: Orchestrator | undefined;
@@ -82,7 +89,7 @@ describe("a background task while the chat goes on", () => {
             3,
         );
         orchestrator = new Orchestrator({
-            registry: createRegistry(undefined, [webCapability]),
+            registry: createRegistry(undefined, capabilities),
             store: new InMemoryConversationStore(),
             runtime: model.runtime,
             budgets: { maxTurnsPerRun: 10, maxToolCallsPerRun: 10, maxBackgroundAgents: 3 },
@@ -138,6 +145,38 @@ describe("a background task while the chat goes on", () => {
         expect(seen.main.at(-1)).toContain(
             'it sent the user: \\"Found it: TAP on Tuesday, €89 return.\\"; its notes for you: Sent TAP.',
         );
+    });
+
+    it("keeps tools that wait minutes out of the chat, and gives them to the background task", async () => {
+        const slow: Capability = {
+            id: "slow",
+            summary: "Slow work.",
+            skill: "",
+            tools: [
+                defineTool({
+                    name: "slow_run_job",
+                    label: "Run the job",
+                    description: "Takes minutes.",
+                    effect: "draft",
+                    backgroundOnly: true,
+                    parameters: Type.Object({}),
+                    execute: async () => ({ data: "done" }),
+                }),
+            ],
+        };
+        const { scripts, offered, background, orchestrator } = setUp([webCapability, slow]);
+        scripts.main.push(
+            call("background_start_task", { title: "The slow job", brief: "Run it.", capabilities: ["slow"] }),
+            send("On it!"),
+            done,
+        );
+        scripts.background.push(call("slow_run_job", {}), send("Done: it ran."), done);
+
+        await orchestrator.send("me", "run the slow job");
+        await vi.waitFor(() => expect(background.list("me")[0]?.status).toBe("done"));
+        expect(offered.main[0]).toContain("background_start_task");
+        expect(offered.main[0]).not.toContain("slow_run_job");
+        expect(offered.background[0]).toContain("slow_run_job");
     });
 
     it("fails a job whose agent never sends the user its result, after reminding it once", async () => {

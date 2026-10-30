@@ -144,7 +144,10 @@ const remindOnce = (run: string, forgot: () => boolean, note: (wrote: string) =>
 };
 
 const toolsFor = (capabilities: readonly Capability[], context: ToolContext) => {
-    const registered = capabilities.flatMap((capability) => capability.tools);
+    // Only the chat has `background`; it hands slow tools to a background agent instead of waiting on them.
+    const registered = capabilities
+        .flatMap((capability) => capability.tools)
+        .filter((tool) => !(tool.backgroundOnly && context.background));
     return {
         tools: registered.map((tool) => adaptTool(tool, context)),
         effects: new Map(registered.map((tool) => [tool.name, tool.effect])),

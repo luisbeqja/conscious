@@ -21,6 +21,7 @@
     "photon": "tsx --env-file-if-exists=.env src/photon.ts",
     "app": "tsx --env-file-if-exists=.env src/app.ts",
     "telegram": "tsx --env-file-if-exists=.env src/telegram.ts",
+    "mac": "tsx src/mac/local/cli.ts",
     "skills:import": "tsx scripts/import-skill.ts",
     "computer:check": "tsx --env-file-if-exists=.env scripts/check-computer.ts",
     "italy:download": "uv run scripts/download-italia-fonti.py",

@@ -12,6 +12,7 @@ import { composioReaches, createComposioCapability } from "./capabilities/compos
 import { createGoogleCapability } from "./capabilities/google/capability.js";
 import { createRegistry } from "./capabilities/index.js";
 import { createItalyCapability } from "./capabilities/italy/capability.js";
+import { createMacCapability } from "./capabilities/mac/capability.js";
 import { createMailCapability, verifyMailbox } from "./capabilities/mail/capability.js";
 import { createMemoryCapability } from "./capabilities/memory/capability.js";
 import { createQuietCapability } from "./capabilities/quiet/capability.js";
@@ -30,6 +31,8 @@ import { GoogleApi } from "./google/api.js";
 import { GOOGLE_CONNECTOR, GoogleOAuth } from "./google/oauth.js";
 import { createEmbedder } from "./knowledge/embeddings.js";
 import { KnowledgeIndex } from "./knowledge/store.js";
+import { MacLinks } from "./mac/links.js";
+import { MacBridge } from "./mac/server.js";
 import { MAIL_CONNECTOR } from "./mail/account.js";
 import { openImap } from "./mail/imap.js";
 import { McpSignIn, McpUserServers } from "./mcp/sign-in.js";
@@ -81,6 +84,20 @@ export const createConscious = (config: Config, notify: Notify, extra: readonly 
         return notify(userId, text);
     };
     const pacing = new Pacing(config.pacing, join(config.dataDir, "pacing.json"));
+    // The owners' own Macs, when this install lets them link one: Claude Code works there when asked.
+    const macLinks = config.mac ? new MacLinks(join(config.dataDir, "macs.json")) : undefined;
+    const macs =
+        macLinks &&
+        new MacBridge(macLinks, {
+            onLinked: (userId, name, folders) => {
+                const where = folders.length
+                    ? `in ${folders.map((folder) => folder.name).join(", ")}`
+                    : "once you allow a folder with `pnpm mac allow <folder>`";
+                say(userId, `${name} is linked ✅ I can ask Claude Code to work on it now, ${where}.`).catch(
+                    (error: unknown) => console.error(`[mac] could not tell ${userId} their Mac is linked`, error),
+                );
+            },
+        });
     // The fire callback runs only after `start`, once `orchestrator` exists.
     const scheduler: Scheduler = new Scheduler(
         async (reminder, late) => {
@@ -153,6 +170,7 @@ export const createConscious = (config: Config, notify: Notify, extra: readonly 
         web,
         createMailCapability(openImap, vault),
         ...(italy ? [createItalyCapability(italy)] : []),
+        ...(macs ? [createMacCapability(macs)] : []),
         ...(google ? [createGoogleCapability(new GoogleApi(google), vault)] : []),
         ...(spotify ? [createSpotifyCapability(spotify, vault)] : []),
         ...(shop ? [createShopCapability(new ShopClient(), shop, sandboxes)] : []),
@@ -252,12 +270,13 @@ export const createConscious = (config: Config, notify: Notify, extra: readonly 
     /** The Vault's pages, and the live views of the users' browsers beside them. */
     const vaultPage: RequestListener = (request, response) => {
         if (showLiveView?.(request, response)) return;
+        if (macs?.serve(request, response)) return;
         return vaultPages(request, response);
     };
     const relay = liveViews && relayLiveView(liveViews);
-    /** The live views' sockets. False for any other upgrade, which the caller refuses. */
+    /** The live views' sockets and the Macs'. False for any other upgrade, which the caller refuses. */
     const vaultUpgrade = (request: IncomingMessage, socket: Duplex, head: Buffer): boolean =>
-        relay?.(request, socket, head) ?? false;
+        (macs?.upgrade(request, socket, head) || relay?.(request, socket, head)) ?? false;
     /** Serves the Vault page on a port of its own. */
     const startVault = () => {
         const server = createServer(vaultPage);
@@ -277,6 +296,8 @@ export const createConscious = (config: Config, notify: Notify, extra: readonly 
         vaultPage,
         vaultUpgrade,
         startVault,
+        /** For /mac, when owners may link their Mac. */
+        mac: macLinks && macs ? { links: macLinks, bridge: macs } : undefined,
     };
 };
 

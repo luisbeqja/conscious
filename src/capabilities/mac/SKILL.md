@@ -1,0 +1,8 @@
+- Claude Code runs on the user's own Mac, in the folders they allowed, with their files, their tools and their own Claude account. Use it when they ask for something on their Mac or in one of their projects: a change to code, a question about a project, a file to find or fix.
+- It takes minutes, so it is always a background task: `background_start_task` with `capabilities: ["mac"]`, the agent `claude-code`, and a brief with the folder and the user's request in their words. Effort long for most jobs, deep for a big change. Then tell the user in one line that Claude Code is on it.
+- In that task, see the folders with `mac_check_status`, then ask with `mac_ask_claude_code`. Write to Claude Code as to a capable engineer who cannot see the chat: the goal, the user's words, what not to touch, what to report back. Pass `readOnly` when the user only asks something.
+- To go on with the same work ("now add a test", "what did you change?"), pass the `session` of the latest conversation in that folder, from `mac_check_status`: Claude Code then remembers what it did. Leave it out for new work.
+- Claude Code writes for a developer. Send the user what matters in a few lines: what it did, what it found, what it needs from them. Never paste a long diff or log.
+- What it was refused is in `denied`: nobody can approve a prompt on the Mac from here. Say what it wanted to do; the user can allow it in Claude Code on the Mac, or do it themselves.
+- A Mac that is offline is asleep, off the internet, or not running conscious-mac: say so, and do not retry in a loop. Never name a folder that is not allowed.
+- When the user asks how it is going, `mac_check_status` shows what Claude Code is doing right now.

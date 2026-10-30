@@ -157,6 +157,27 @@ With `CONSCIOUS_BROWSER=e2b` (and a computer), Conscious gets a real Chrome of i
 - **Private by construction.** The browser computer's addresses open only with a token Conscious holds, so nobody else can drive or watch it. The sign-in link goes through Conscious's own server (the Vault's), lasts 15 minutes, and a new one closes the old.
 - **Cost.** The desktop computer is bigger than the one for files (E2B gives it 8 CPUs and 8 GB, about $0.53 an hour while it runs). It pauses after `CONSCIOUS_BROWSER_IDLE_MINUTES` (5) and E2B bills nothing while it is paused; its tabs and sign-ins survive.
 
+## Claude Code on your Mac
+
+Conscious can hand work on your own Mac to [Claude Code](https://code.claude.com): "ask Claude Code why the build fails in conscious", "have it add a line to notes.txt". It becomes a background job: Claude Code works on your real files, in the folders you allowed, and Conscious tells you what it did when it is done. The next job in that folder goes on with the same conversation, so Claude Code remembers the work.
+
+1. Set `CONSCIOUS_MAC=true` and restart Conscious.
+2. Send `/mac` on Telegram, WhatsApp or in `pnpm chat`. Only owners can. It answers with a line to run on your Mac.
+3. On the Mac, in a copy of this repository, with Node 22 and Claude Code installed and signed in:
+
+```bash
+pnpm mac pair https://your-conscious.example.com k7qd-m2xa-9wfe   # the line /mac gave you
+pnpm mac allow ~/code/my-project                                  # each folder Claude Code may work in
+pnpm mac install                                                  # keep it running, from every login on
+```
+
+`pnpm mac status` shows what is set up and which Claude Code it runs, `pnpm mac model sonnet` picks a model, `pnpm mac forbid <folder>` takes a folder back, and `pnpm mac uninstall` stops it. `/mac off` in the chat unlinks the Mac; `/mac new` links another one in its place.
+
+- **The Mac calls Conscious, never the other way.** It holds a socket open to `/mac/socket` on your Conscious's address, so it needs no open port, works behind any router, and comes back by itself after sleep or a network change. The code from `/mac` works once, for 15 minutes. The token it is traded for stays in `~/.config/conscious/mac.json`, readable by you alone; Conscious keeps only a digest of it.
+- **Your Claude account stays on the Mac.** conscious-mac runs your own `claude`, unchanged, signed in the way you signed it in. Conscious never sees a Claude login, and what Claude Code uses is on your own plan or key.
+- **The Mac decides what Claude Code may do.** It works only in the folders you allowed (never your home folder as a whole), in `acceptEdits` mode: it edits files there and runs what your Claude Code settings already allow. Anything it would ask permission for is refused, since nobody is at the Mac to say yes, and Conscious tells you what it wanted to do. Conscious can only pick a folder, write the message, go on with a conversation and ask for a read-only job (plan mode); no other flag reaches Claude Code. `pnpm mac mode` changes the mode if you want it to do more on its own.
+- **Awake while it works.** The Mac stays awake while Claude Code runs a job, then may sleep again. A Mac that is asleep, closed or off the internet is offline, and Conscious says so.
+
 ## Skills
 
 Skills are instructions for jobs that come up often, in the [AgentSkills](https://agentskills.io) format. They live on the user's computer, in `skills/`: the repo's [`skills/`](../skills/) folder is copied in when a computer starts, next to the skills the agent wrote for that user. The system prompt lists the ones that can run there, and the agent reads a skill's `SKILL.md` before it uses it.
@@ -307,6 +328,7 @@ src/
 ├─ channels/app.ts       the phone app's WebSocket: streamed replies, reactions, files
 ├─ channels/telegram.ts  the Telegram Bot API, long polled: replies as bubbles, reactions, files, notifications
 ├─ invites/              /invite links for friends, and who was invited
+├─ mac/                  /mac and the socket the users' Macs hold open; mac/local/ is conscious-mac, run on the Mac
 ├─ create-conscious.ts   composition root: which implementation sits behind each seam
 ├─ config.ts             environment → typed config
 ├─ engine/
@@ -328,6 +350,7 @@ src/
 │  ├─ computer/          shell and files in the user's sandbox
 │  ├─ skills/            the agent saves its own skills, with undo
 │  ├─ italy/             official Italian pages: search, read, with their source address
+│  ├─ mac/               Claude Code on the user's Mac, from a background task
 │  ├─ plugins/           search, install and write plugins
 │  └─ vault/             connect and disconnect accounts through Vault links
 ├─ skills/               the skill library: copy into the computer, list what can run, import
