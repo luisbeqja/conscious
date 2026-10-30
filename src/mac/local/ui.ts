@@ -18,6 +18,8 @@ const COOKIE = "conscious_mac";
 const MAX_BODY_BYTES = 8_192;
 /** How often a Mac showing a QR asks Conscious whether its code was sent. */
 const COLLECT_EVERY_MS = 2_000;
+/** Fresh codes a QR gets, one after another, when its code expires or Conscious lost it: about an hour of them. */
+const MAX_RENEWALS = 5;
 
 /** The key that opens the page, beside the settings and readable by this user alone. */
 export const pageKey = (settingsFile: string): string => {
@@ -68,9 +70,15 @@ interface Linking {
     secret: string;
     links: ChatLinks;
     expiresAt: number;
+    /** How many codes came before this one. */
+    renewals: number;
     error?: string;
     timer?: NodeJS.Timeout;
+    /** A check is under way, so another does not start beside it. */
+    busy?: boolean;
 }
+
+type Offer = Pick<Linking, "code" | "secret" | "links" | "expiresAt">;
 
 class Refusal extends Error {
     constructor(
@@ -250,7 +258,10 @@ export class MacPage {
 
     /** Asks Conscious for a code to show as a QR, then asks every two seconds whether it was sent. */
     private async startLinking(server: string): Promise<void> {
-        this.stopLinking();
+        this.showOffer(server, await this.requestOffer(server), 0);
+    }
+
+    private async requestOffer(server: string): Promise<Offer> {
         const response = await fetch(new URL(MAC_OFFERS_PATH, server), {
             method: "POST",
             headers: { "content-type": "application/json" },
@@ -267,50 +278,71 @@ export class MacPage {
             expiresAt?: string;
             links?: ChatLinks;
         };
-        if (!response.ok || !offer.code || !offer.secret)
+        if (!response.ok || !offer.code || !offer.secret) {
             throw new Refusal(502, `${server} answered ${response.status}.`);
-        const linking: Linking = {
-            server,
+        }
+        return {
             code: offer.code,
             secret: offer.secret,
             links: offer.links ?? {},
             expiresAt: new Date(offer.expiresAt ?? Date.now() + 10 * 60_000).getTime(),
         };
+    }
+
+    private showOffer(server: string, offer: Offer, renewals: number): void {
+        this.stopLinking();
+        const linking: Linking = { server, ...offer, renewals };
         this.linking = linking;
         linking.timer = setInterval(() => void this.collect(linking), this.options.collectEveryMs ?? COLLECT_EVERY_MS);
     }
 
     private async collect(linking: Linking): Promise<void> {
-        if (this.linking !== linking) return;
-        if (Date.now() > linking.expiresAt) {
+        if (this.linking !== linking || linking.busy) return;
+        linking.busy = true;
+        try {
+            if (Date.now() > linking.expiresAt) return await this.renew(linking);
+            const response = await fetch(new URL(`${MAC_OFFERS_PATH}/collect`, linking.server), {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ code: linking.code, secret: linking.secret }),
+            }).catch(() => undefined);
+            if (this.linking !== linking) return;
+            // Not sent yet, or Conscious unreachable or restarting for a moment: ask again shortly.
+            if (!response || response.status === 202 || response.status >= 500) return;
+            const result = (await response.json().catch(() => ({}))) as { token?: string };
+            // Conscious no longer knows the code: it expired, or went in a restart.
+            if (!result.token) return await this.renew(linking);
+            clearInterval(linking.timer);
+            const before = readSettings(this.options.file);
+            writeSettings(this.options.file, {
+                server: linking.server,
+                token: result.token,
+                name: this.options.name(),
+                folders: before?.folders ?? [],
+                claude: before?.claude || this.options.findClaude() || "claude",
+                permissionMode: before?.permissionMode ?? "acceptEdits",
+                model: before?.model,
+            });
+            this.linking = undefined;
+        } finally {
+            linking.busy = false;
+        }
+    }
+
+    /** A code that expired, or that Conscious lost, gives way to a fresh one on the page, about an hour's worth. */
+    private async renew(linking: Linking): Promise<void> {
+        if (linking.renewals >= MAX_RENEWALS) {
             clearInterval(linking.timer);
             linking.error = "This code expired. Cancel, and show a new one.";
             return;
         }
-        const response = await fetch(new URL(`${MAC_OFFERS_PATH}/collect`, linking.server), {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ code: linking.code, secret: linking.secret }),
-        }).catch(() => undefined);
-        // Offline for a moment: the next try may get through.
-        if (!response || response.status === 202 || this.linking !== linking) return;
-        const result = (await response.json().catch(() => ({}))) as { token?: string; error?: string };
-        clearInterval(linking.timer);
-        if (!result.token) {
-            linking.error = result.error ?? `Conscious answered ${response.status}.`;
-            return;
+        try {
+            const offer = await this.requestOffer(linking.server);
+            if (this.linking === linking) this.showOffer(linking.server, offer, linking.renewals + 1);
+        } catch (error) {
+            // The next check tries again.
+            linking.error = `${error instanceof Error ? error.message : error} Trying again…`;
         }
-        const before = readSettings(this.options.file);
-        writeSettings(this.options.file, {
-            server: linking.server,
-            token: result.token,
-            name: this.options.name(),
-            folders: before?.folders ?? [],
-            claude: before?.claude || this.options.findClaude() || "claude",
-            permissionMode: before?.permissionMode ?? "acceptEdits",
-            model: before?.model,
-        });
-        this.linking = undefined;
     }
 
     private stopLinking(): void {

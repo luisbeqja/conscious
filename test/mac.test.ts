@@ -476,6 +476,49 @@ describe("linking a Mac with a QR", () => {
         expect(links.claim(late.code, OWNER)).toBeUndefined();
     });
 
+    it("keeps a QR's code through a restart of Conscious", () => {
+        const file = join(temporary("macs-"), "macs.json");
+        const offer = new MacLinks(file).offer("Luis's MacBook");
+        expect(new MacLinks(file).claim(offer.code, OWNER)).toBe("Luis's MacBook");
+        expect(new MacLinks(file).collect(offer.code, offer.secret)).toMatchObject({ userId: OWNER });
+    });
+
+    it("waits out a restart of Conscious on the page, and shows a fresh code for one it lost", async () => {
+        // A Conscious that restarts: 502 for a moment, then it no longer knows the first code.
+        const codes = ["aaaa-bbbb-cccc", "dddd-eeee-ffff"];
+        const replies = [502, 502, 410];
+        let shown = 0;
+        const conscious = createServer((request, response) => {
+            let body = "";
+            request.on("data", (chunk) => {
+                body += chunk;
+            });
+            request.on("end", () => {
+                const send = (status: number, json: object) =>
+                    response.writeHead(status, { "content-type": "application/json" }).end(JSON.stringify(json));
+                if (request.url === "/mac/offers") {
+                    return send(200, {
+                        code: codes[shown++],
+                        secret: "s",
+                        expiresAt: new Date(Date.now() + 600_000).toISOString(),
+                        links: { telegram: "https://t.me/conscious_bot?start=mac-x" },
+                    });
+                }
+                const { code } = JSON.parse(body) as { code: string };
+                if (code === codes[0]) return send(replies.shift() ?? 410, { error: "This code expired." });
+                send(200, { token: "the-token" });
+            });
+        });
+        await new Promise<void>((resolve) => conscious.listen(0, "127.0.0.1", resolve));
+        servers.push(conscious);
+        const url = `http://127.0.0.1:${(conscious.address() as AddressInfo).port}`;
+        const mac = await openPage();
+        expect((await mac.api("/api/link", { server: url })).data.linking.code).toBe(codes[0]);
+        await until(() => readSettings(mac.file)?.token === "the-token");
+        expect(shown).toBe(2);
+        expect(replies).toEqual([]);
+    });
+
     it("answers /start mac-<code> from the QR and /mac <code> typed, for the owner only", () => {
         const links = new MacLinks();
         const bridge = new MacBridge(links);
@@ -486,7 +529,7 @@ describe("linking a Mac with a QR", () => {
             "Linking Luis's MacBook… it connects in a few seconds.",
         );
         expect(command(OWNER, "/mac k7qd-m2xa-9wfe")).toBe(
-            "That code doesn't work any more: it expired or was already used. Show a new QR on your Mac.",
+            "That code doesn't work any more. Your Mac's page shows a new one in a few seconds: scan that one.",
         );
         expect(command(OWNER, "/mac stauts")).toBe(
             "Send /mac to link your Mac, /mac new for another one, /mac off to unlink it.",
