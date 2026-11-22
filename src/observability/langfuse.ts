@@ -63,6 +63,8 @@ class LangfuseRunTrace implements RunTrace {
         private readonly root: LangfuseAgent,
         private readonly run: TraceStart,
         private readonly content: boolean,
+        /** The user and session, put on every step too, so filtering by user finds them. */
+        private readonly within: <T>(make: () => T) => T,
     ) {}
 
     event(event: AgentEvent): void {
@@ -77,10 +79,15 @@ class LangfuseRunTrace implements RunTrace {
     private handle(event: AgentEvent): void {
         if (event.type === "turn_start") {
             this.turn += 1;
-            this.generation = this.root.startObservation(
-                `turn ${this.turn}`,
-                { model: this.run.model, ...(this.content && this.turn === 1 ? { input: clip(this.run.input) } : {}) },
-                { asType: "generation" },
+            this.generation = this.within(() =>
+                this.root.startObservation(
+                    `turn ${this.turn}`,
+                    {
+                        model: this.run.model,
+                        ...(this.content && this.turn === 1 ? { input: clip(this.run.input) } : {}),
+                    },
+                    { asType: "generation" },
+                ),
             );
             return;
         }
@@ -115,9 +122,11 @@ class LangfuseRunTrace implements RunTrace {
         if (event.type === "tool_execution_start") {
             this.tools.set(
                 event.toolCallId,
-                this.root.startObservation(event.toolName, this.content ? { input: clip(event.args) } : {}, {
-                    asType: "tool",
-                }),
+                this.within(() =>
+                    this.root.startObservation(event.toolName, this.content ? { input: clip(event.args) } : {}, {
+                        asType: "tool",
+                    }),
+                ),
             );
             return;
         }
@@ -174,11 +183,12 @@ export const createLangfuseTracer = (config: LangfuseConfig): Tracer => {
         start: (run) => {
             const user = userHash(run.userId);
             const day = new Date().toISOString().slice(0, 10);
-            const root = propagateAttributes(
-                { userId: user, sessionId: `${user}-${day}`, traceName: run.name, tags: [run.name] },
-                () => startObservation(run.name, config.content ? { input: clip(run.input) } : {}, { asType: "agent" }),
+            const attributes = { userId: user, sessionId: `${user}-${day}`, traceName: run.name, tags: [run.name] };
+            const within = <T>(make: () => T): T => propagateAttributes(attributes, make);
+            const root = within(() =>
+                startObservation(run.name, config.content ? { input: clip(run.input) } : {}, { asType: "agent" }),
             );
-            return new LangfuseRunTrace(root, run, config.content);
+            return new LangfuseRunTrace(root, run, config.content, within);
         },
         flush: () => processor.forceFlush(),
     };
