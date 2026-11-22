@@ -277,6 +277,35 @@ describe("Orchestrator", () => {
         expect(await orchestrator.resume("me", "[they approved]", watchBegan)).toEqual([]);
     });
 
+    it("lets a run whose turns are used up tell the user where it got to, instead of breaking off", async () => {
+        const { faux, runtime } = scriptedModel();
+        const step = () =>
+            fauxAssistantMessage(fauxToolCall("reminders_list_reminders", {}), { stopReason: "toolUse" });
+        faux.setResponses([
+            step(),
+            step(),
+            // Past the budget: a tool is refused, and it says where it is.
+            step(),
+            ...sends("I got to the summary page; tell me to go on and I'll finish."),
+        ]);
+        const orchestrator = new Orchestrator({
+            registry: createRegistry(),
+            store: new InMemoryConversationStore(),
+            runtime,
+            budgets: { maxTurnsPerRun: 2, maxToolCallsPerRun: 10, maxBackgroundAgents: 1 },
+            timezone: "Europe/Rome",
+            scheduler,
+            background: new BackgroundAgents(
+                async () => "",
+                async () => {},
+                1,
+            ),
+        });
+        const said: string[] = [];
+        await orchestrator.send("me", "get my certificate", { say: async (text) => void said.push(text) });
+        expect(said).toEqual(["I got to the summary page; tell me to go on and I'll finish."]);
+    });
+
     it("says something broke when the answer failed before anything was sent", async () => {
         const { faux, runtime } = scriptedModel();
         faux.setResponses([]);
