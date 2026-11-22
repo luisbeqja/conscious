@@ -3,6 +3,7 @@ import { Type } from "typebox";
 import type { BrowserProvider, BrowserTab, DownloadedFile } from "../../browser/browser.js";
 import { clickIsCommit, clickIsDeclaration, typingIsRefused } from "../../browser/guard.js";
 import type { LiveViews } from "../../browser/live-view.js";
+import { appApproval, appProviders } from "../../browser/spid.js";
 import { promptFile } from "../../prompts/prompt-file.js";
 import type { SandboxProvider } from "../../sandbox/sandbox.js";
 import { type Capability, defineTool, type ToolContext } from "../types.js";
@@ -318,6 +319,9 @@ export const createBrowserCapability = (
         },
     });
 
+    const approveGuidance = (app: string, lifetimeSeconds: number) =>
+        `Send the user this link in one short message: they tap it on their phone, the ${app} app opens, and they approve the sign-in there. It lasts about ${Math.round(lifetimeSeconds / 60)} minutes. Never send it anywhere else. Stop now and wait for them; once they say they approved, read the page, which goes on by itself. If the code ran out first, reload the provider's page or press its button for a new code, then call browser_ask_user_to_approve_in_app again.`;
+
     const signIn = defineTool({
         name: "browser_ask_user_to_sign_in",
         label: "Ask the user to sign in",
@@ -338,11 +342,43 @@ export const createBrowserCapability = (
             if (url !== undefined && !/^https?:\/\//i.test(url))
                 throw new Error("Give a full address, starting with https://");
             const session = await browsers.forUser(context.userId);
-            if (url) await (await session.tab()).goto(url);
+            const tab = await session.tab();
+            if (url) await tab.goto(url);
+            // On a SPID provider whose app can approve the sign-in, that link is better on a phone.
+            const transaction = await tab.spidTransaction().catch(() => undefined);
+            const approval = transaction && appApproval(transaction);
+            if (approval) {
+                return {
+                    data: { ...approval, url: tab.url() },
+                    guidance: approveGuidance(approval.app, approval.lifetimeSeconds),
+                };
+            }
             const { link } = liveViews.open(context.userId, await session.liveView());
             return {
                 data: { link, expiresInMinutes: 15 },
                 guidance: `Send the user this link in one short message: it shows your browser on the ${params.site} sign-in page, where they sign in themselves, then tell you they are done. Never send it anywhere else. Stop now: in the chat, wait for their reply; in a background job, end with the link and what you will do once they are in.`,
+            };
+        },
+    });
+
+    const approveInApp = defineTool({
+        name: "browser_ask_user_to_approve_in_app",
+        label: "Ask the user to approve in their SPID app",
+        description: `On an identity provider's SPID sign-in page in your browser, the one that shows a QR code: get a link that opens the provider's app on the user's phone, on this very sign-in. They tap it, approve in the app, and the page goes on by itself. Use it instead of the live view whenever the provider is one of: ${appProviders().join(", ")}. The user is on their phone and cannot scan a QR code on it.`,
+        effect: "draft",
+        parameters: Type.Object({}),
+        execute: async (_params, context) => {
+            const tab = await tabFor(context);
+            const transaction = await tab.spidTransaction();
+            const approval = transaction && appApproval(transaction);
+            if (!approval) {
+                throw new Error(
+                    "This page waits for no app sign-in Conscious knows. Open the identity provider's sign-in page first; for another provider, use browser_ask_user_to_sign_in.",
+                );
+            }
+            return {
+                data: { ...approval, url: tab.url() },
+                guidance: approveGuidance(approval.app, approval.lifetimeSeconds),
             };
         },
     });
@@ -374,6 +410,21 @@ export const createBrowserCapability = (
         summary:
             "Your own browser: open pages, click and type, take screenshots, find and save pictures and files, and use sites the user signed in to.",
         skill: promptFile(import.meta.url, "SKILL.md"),
-        tools: [open, read, click, download, type, press, scroll, back, screenshot, findImages, saveFile, signIn, act],
+        tools: [
+            open,
+            read,
+            click,
+            download,
+            type,
+            press,
+            scroll,
+            back,
+            screenshot,
+            findImages,
+            saveFile,
+            signIn,
+            approveInApp,
+            act,
+        ],
     };
 };
