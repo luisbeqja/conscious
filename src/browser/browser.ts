@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { Sandbox as Desktop } from "@e2b/desktop";
-import { type Browser, chromium, type Page } from "playwright-core";
+import { type Browser, chromium, type Download, type Page } from "playwright-core";
 import type { ElementInfo } from "./guard.js";
 
 /** An image on the page, as the agent can pick it. */
@@ -9,6 +9,13 @@ export interface FoundImage {
     alt: string;
     width: number;
     height: number;
+}
+
+/** A file the page gave the browser to save: a "Download" button, a PDF made in the page. */
+export interface DownloadedFile {
+    /** The name the site gave it. */
+    name: string;
+    bytes: Uint8Array;
 }
 
 /** The one tab the agent works in. Playwright drives it; tests use a fake. */
@@ -20,7 +27,11 @@ export interface BrowserTab {
     snapshot(): Promise<string>;
     /** What an element is, read before acting on it. */
     inspect(ref: string): Promise<ElementInfo>;
-    click(ref: string): Promise<void>;
+    /**
+     * Clicks, and returns the file when the click made the browser download one. With
+     * `waitForFileMs`, waits that long for a file the page is still preparing.
+     */
+    click(ref: string, waitForFileMs?: number): Promise<DownloadedFile | undefined>;
     type(ref: string, text: string, submit: boolean): Promise<void>;
     press(key: string): Promise<void>;
     scroll(direction: "up" | "down"): Promise<void>;
@@ -53,6 +64,7 @@ export interface BrowserProvider {
 }
 
 const STEP_MS = 15_000;
+const MAX_DOWNLOAD_BYTES = 20_000_000;
 const MAX_SHOT_HEIGHT = 4_000;
 
 /** The Playwright page behind a BrowserTab. */
@@ -141,9 +153,38 @@ export class PlaywrightTab implements BrowserTab {
         });
     }
 
-    async click(ref: string): Promise<void> {
-        await this.page.getByRef(ref).click({ timeout: STEP_MS });
-        await this.settle();
+    async click(ref: string, waitForFileMs = 0): Promise<DownloadedFile | undefined> {
+        // A download can start during the click or while the page settles: catch it either way.
+        let download: Download | undefined;
+        const started = (file: Download) => {
+            download ??= file;
+        };
+        this.page.on("download", started);
+        try {
+            await this.page.getByRef(ref).click({ timeout: STEP_MS });
+            await this.settle();
+            if (!download && waitForFileMs > 0) {
+                download = await this.page.waitForEvent("download", { timeout: waitForFileMs }).catch(() => undefined);
+            }
+        } finally {
+            this.page.off("download", started);
+        }
+        if (!download) return undefined;
+        const failure = await download.failure();
+        if (failure) throw new Error(`The download failed: ${failure}`);
+        // A stream, not a path: the browser runs on another computer.
+        const chunks: Buffer[] = [];
+        let size = 0;
+        for await (const chunk of await download.createReadStream()) {
+            const part = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+            size += part.length;
+            if (size > MAX_DOWNLOAD_BYTES) {
+                await download.cancel().catch(() => undefined);
+                throw new Error("The file is over 20 MB: too big to keep.");
+            }
+            chunks.push(part);
+        }
+        return { name: download.suggestedFilename(), bytes: new Uint8Array(Buffer.concat(chunks)) };
     }
 
     async type(ref: string, text: string, submit: boolean): Promise<void> {

@@ -150,7 +150,7 @@ To check a setup before you text it, run `pnpm computer:check`. It starts a thro
 
 ## Give it a browser
 
-With `CONSCIOUS_BROWSER=e2b` (and a computer), Conscious gets a real Chrome of its own, on a second E2B computer per user: an E2B desktop. It opens pages, clicks and types, scrolls, takes screenshots it can look at, finds the pictures on a page, and saves pictures and files (behind a login too) to `files/browser/` on the user's computer, from where it can send them in the chat.
+With `CONSCIOUS_BROWSER=e2b` (and a computer), Conscious gets a real Chrome of its own, on a second E2B computer per user: an E2B desktop. It opens pages, clicks and types, scrolls, takes screenshots it can look at, finds the pictures on a page, and saves pictures and files (behind a login too, and the ones a button makes the page download, like a certificate PDF) to `files/browser/` on the user's computer, from where it can send them in the chat.
 
 - **You sign in, never Conscious.** When a job needs a site you use (an airline, a shop, GitHub), Conscious sends a private link that shows its browser on that site's sign-in page. You sign in on your phone, 2FA included, and the browser stays signed in for next time. It never sees or types a password, and refuses to type into password and card fields.
 - **SPID and CIE too.** On a public office's site Conscious picks "Entra con SPID" and your identity provider, then sends the link on the provider's own page: you sign in and approve on your phone.
