@@ -1,6 +1,6 @@
 import { posix } from "node:path";
 import { Type } from "typebox";
-import type { BrowserProvider, BrowserTab } from "../../browser/browser.js";
+import type { BrowserProvider, BrowserTab, DownloadedFile } from "../../browser/browser.js";
 import { clickIsCommit, clickIsDeclaration, typingIsRefused } from "../../browser/guard.js";
 import type { LiveViews } from "../../browser/live-view.js";
 import { promptFile } from "../../prompts/prompt-file.js";
@@ -11,6 +11,8 @@ import { type Capability, defineTool, type ToolContext } from "../types.js";
 const PAGE_CHARS = 10_000;
 const MAX_FILE_BYTES = 20_000_000;
 const MAX_IMAGE_BYTES = 4_000_000;
+// A page may build the file after the click, as the Anagrafe does with its PDFs.
+const DOWNLOAD_WAIT_MS = 30_000;
 // Enter and Space are left out on purpose: they can press a focused "Pay" button past the guard.
 const KEYS = ["Escape", "Tab", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "PageUp", "PageDown", "Home", "End"];
 const EXTENSIONS: Record<string, string> = {
@@ -72,6 +74,21 @@ export const createBrowserCapability = (
         return path;
     };
 
+    /** Keeps a file a click made the browser download, and says where it went. */
+    const keep = async (context: ToolContext, file: DownloadedFile, name?: string) => {
+        const extension = posix.extname(file.name).toLowerCase();
+        const base = (name || posix.basename(file.name, extension) || "file").replace(/[^\w.-]+/g, "-").slice(0, 60);
+        const saved = await save(
+            context,
+            `${base || "file"}${/^\.[a-z0-9]{1,5}$/.test(extension) ? extension : ""}`,
+            file.bytes,
+        );
+        return { saved, name: file.name, bytes: file.bytes.length };
+    };
+
+    const keptGuidance =
+        "The click downloaded a file, now saved on your computer. To give it to the user while answering them, send it with computer_send_file. In a background job, say where it is saved.";
+
     const open = defineTool({
         name: "browser_open_page",
         label: "Open a page",
@@ -121,8 +138,37 @@ export const createBrowserCapability = (
             if (why) throw commitRefused(element.name, why);
             const declares = clickIsDeclaration(element);
             if (declares) throw declarationRefused(element.name, declares);
-            await tab.click(params.ref);
-            return { data: await look(context, tab) };
+            const file = await tab.click(params.ref);
+            const page = await look(context, tab);
+            if (!file) return { data: page };
+            return { data: { ...page, downloaded: await keep(context, file) }, guidance: keptGuidance };
+        },
+    });
+
+    const download = defineTool({
+        name: "browser_download",
+        label: "Download a file",
+        description:
+            'Click a button that makes the page download a file, like "Scarica il certificato" or "Download PDF", wait for the file, and save it on your computer. For a file the page makes itself, which has no address for browser_save_file. The same clicks are refused as with browser_click.',
+        effect: "draft",
+        parameters: Type.Object({
+            ref,
+            name: Type.Optional(Type.String({ description: "A short file name, e.g. autocertificazione-residenza." })),
+        }),
+        execute: async (params, context) => {
+            const tab = await tabFor(context);
+            const element = await tab.inspect(params.ref);
+            const why = clickIsCommit(element);
+            if (why) throw commitRefused(element.name, why);
+            const declares = clickIsDeclaration(element);
+            if (declares) throw declarationRefused(element.name, declares);
+            const file = await tab.click(params.ref, DOWNLOAD_WAIT_MS);
+            if (!file) {
+                throw new Error(
+                    "No file came within 30 seconds. Read the page: it may ask for one more step, or show the file to open instead.",
+                );
+            }
+            return { data: { ...(await keep(context, file, params.name)), url: tab.url() }, guidance: keptGuidance };
         },
     });
 
@@ -328,6 +374,6 @@ export const createBrowserCapability = (
         summary:
             "Your own browser: open pages, click and type, take screenshots, find and save pictures and files, and use sites the user signed in to.",
         skill: promptFile(import.meta.url, "SKILL.md"),
-        tools: [open, read, click, type, press, scroll, back, screenshot, findImages, saveFile, signIn, act],
+        tools: [open, read, click, download, type, press, scroll, back, screenshot, findImages, saveFile, signIn, act],
     };
 };
