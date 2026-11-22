@@ -17,6 +17,7 @@ import {
     typingIsRefused,
 } from "../src/browser/guard.js";
 import { LiveViews, relayLiveView, serveLiveView } from "../src/browser/live-view.js";
+import { appApproval, type SpidTransaction } from "../src/browser/spid.js";
 import { createBrowserCapability } from "../src/capabilities/browser/capability.js";
 import type { ToolContext } from "../src/capabilities/types.js";
 import { adaptTool } from "../src/engine/tool-adapter.js";
@@ -187,6 +188,10 @@ class FakeTab implements BrowserTab {
             { src: "https://shop.example/big.jpg", alt: "The tram", width: 1200, height: 800 },
         ];
     }
+    transaction?: SpidTransaction;
+    async spidTransaction() {
+        return this.transaction;
+    }
     async download(url: string) {
         const file = this.files[url];
         if (!file) throw new Error("404");
@@ -352,6 +357,42 @@ describe("the browser tools", () => {
         expect(data.url).toBe("https://posteid.poste.it/jod-login-schema/consent.jsp");
         expect(tab.steps.some((step) => step.startsWith("goto"))).toBe(false);
         expect(output.guidance).toContain("allow Poste to pass your tax code to the Anagrafe");
+    });
+
+    it("turns Poste ID's QR code into a link that opens the PosteID app on the user's phone", async () => {
+        const tab = new FakeTab();
+        tab.address = "https://posteid.poste.it/jod-login-schema/login.jsp";
+        tab.transaction = { host: "posteid.poste.it", id: "c32af7109fd94056b6b4a54ad8907087", lifetimeSeconds: 120 };
+        const { call } = setUp(tab);
+        const output = await call("browser_ask_user_to_approve_in_app", {});
+        expect(output.data).toMatchObject({
+            provider: "Poste ID",
+            app: "PosteID",
+            link: "https://appregistry-posteid.mobile.poste.it/jod-login-schema/btcs/pid/access/v1/?tranId=c32af7109fd94056b6b4a54ad8907087",
+            lifetimeSeconds: 120,
+        });
+        expect(output.guidance).toMatch(/about 2 minutes/);
+        expect(tab.steps).toEqual([]);
+        // Not on a provider's page, or on one whose app link is not known: the live view instead.
+        tab.transaction = undefined;
+        await expect(call("browser_ask_user_to_approve_in_app", {})).rejects.toThrow(/browser_ask_user_to_sign_in/);
+    });
+
+    it("answers a sign-in request on Poste ID's page with the app link, not the live view", async () => {
+        const tab = new FakeTab();
+        tab.address = "https://posteid.poste.it/jod-login-schema/login.jsp";
+        tab.transaction = { host: "posteid.poste.it", id: "0a06489493e24dd1a8a749fe3c0b00f5" };
+        const { call } = setUp(tab);
+        const output = await call("browser_ask_user_to_sign_in", { site: "Poste ID" });
+        expect((output.data as { link: string }).link).toMatch(/^https:\/\/appregistry-posteid\.mobile\.poste\.it\//);
+        expect(output.guidance).toMatch(/PosteID app opens/);
+    });
+
+    it("builds app links only for known providers and well-formed transactions", () => {
+        expect(appApproval({ host: "posteid.poste.it", id: "abc12345" })?.lifetimeSeconds).toBe(120);
+        expect(appApproval({ host: "evil-posteid.poste.it.example", id: "abc12345" })).toBeUndefined();
+        expect(appApproval({ host: "loginspid.aruba.it", id: "abc12345" })).toBeUndefined();
+        expect(appApproval({ host: "posteid.poste.it", id: "x&next=https://evil" })).toBeUndefined();
     });
 
     it("asks for a SPID sign-in on the provider's page already open, without leaving it", async () => {

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { Sandbox as Desktop } from "@e2b/desktop";
 import { type Browser, chromium, type Download, type Page } from "playwright-core";
 import type { ElementInfo } from "./guard.js";
+import type { SpidTransaction } from "./spid.js";
 
 /** An image on the page, as the agent can pick it. */
 export interface FoundImage {
@@ -39,6 +40,8 @@ export interface BrowserTab {
     /** A JPEG of the window, or of the page from the top when `fullPage`. */
     screenshot(fullPage: boolean): Promise<Uint8Array>;
     images(): Promise<FoundImage[]>;
+    /** The SPID sign-in an identity provider's page is waiting for, if the page open now is one. */
+    spidTransaction(): Promise<SpidTransaction | undefined>;
     /** Fetches a URL with the browser's cookies, so a file behind a sign-in comes too. */
     download(url: string): Promise<{ bytes: Uint8Array; contentType: string }>;
 }
@@ -241,6 +244,20 @@ export class PlaywrightTab implements BrowserTab {
                 add(image.currentSrc || image.src, image.alt, image.naturalWidth, image.naturalHeight);
             }
             return found.slice(0, 40);
+        });
+    }
+
+    spidTransaction(): Promise<SpidTransaction | undefined> {
+        // Runs in the page. Poste ID keeps the transaction its QR code and app link share in `shtrans`.
+        return this.page.evaluate(() => {
+            const page = window as unknown as { shtrans?: unknown; maxtime?: unknown };
+            if (typeof page.shtrans !== "string" || !page.shtrans) return undefined;
+            const lifetime = Number(page.maxtime);
+            return {
+                host: location.hostname,
+                id: page.shtrans,
+                ...(lifetime > 0 ? { lifetimeSeconds: Math.round(lifetime / 1000) } : {}),
+            };
         });
     }
 
