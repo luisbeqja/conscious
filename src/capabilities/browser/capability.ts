@@ -222,17 +222,17 @@ export const createBrowserCapability = (
         execute: async (params, context) => ({ data: await look(context, await tabFor(context), params.from ?? 0) }),
     });
 
-    /** The click is the user's own consent or declaration: they make it in the live view. */
+    /** The click is the user's own declaration: they make it in the live view. */
     const declarationRefused = (label: string, why: string) =>
         new Error(
-            `Not done: "${label}" would consent or declare something in the user's name (${why}). That choice is theirs alone. Call browser_ask_user_to_act on this page, saying what they are asked to consent to or declare, and wait for them.`,
+            `Not done: "${label}" would declare something in the user's name (${why}). That choice is theirs alone. Call browser_ask_user_to_act on this page, saying what they are asked to declare, and wait for them.`,
         );
 
     const click = defineTool({
         name: "browser_click",
         label: "Click",
         description:
-            "Click an element of the page by its ref. With `next`, click more elements of the same page after it, in order, in one step: ticking or unticking boxes, picking options, then a button. A click that pays, books, orders, sends, posts, deletes or signs up is refused, and so is one that consents or declares something in the user's name.",
+            'Click an element of the page by its ref. With `next`, click more elements of the same page after it, in order, in one step: ticking or unticking boxes, picking options, then a button. A click that pays, books, orders, sends, posts, deletes or signs up is refused, and so is one that declares something in the user\'s name (an exemption reason, "dichiaro"). Consents the job needs, like "Acconsento" on SPID, are yours to click.',
         effect: "draft",
         parameters: Type.Object({
             ref,
@@ -538,7 +538,7 @@ export const createBrowserCapability = (
         name: "browser_ask_user_to_act",
         label: "Ask the user to act",
         description:
-            "Hand your browser to the user, on the page open now, for a step that is theirs alone: a consent (an identity provider passing on their tax code), a declaration (that they read a privacy notice, the legal reason for a stamp-duty exemption), a choice only they can make. Returns a private link that shows your browser.",
+            'Hand your browser to the user, on the page open now, for a step that is theirs alone: a declaration ("dichiaro", the legal reason for a stamp-duty exemption), a choice only they can make. Not for consents the job needs ("Acconsento" on SPID, a privacy notice): click those yourself. Returns a private link that shows your browser.',
         effect: "draft",
         parameters: Type.Object({
             what: Type.String({

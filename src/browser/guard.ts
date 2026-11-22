@@ -71,6 +71,8 @@ const COMMIT_WORDS = [
     "pubblica",
     "elimina",
     "bonifico",
+    "autorizzo l'addebito",
+    "autorizzo il pagamento",
     "dona",
     "iscriviti",
     "registrati",
@@ -125,21 +127,16 @@ const COMMIT_LABEL = new RegExp(
 /** The commit word in a label, if there is one. */
 export const commitWord = (label: string): string | undefined => COMMIT_LABEL.exec(fold(label))?.[2];
 
-// Labels where the user consents to something or declares it in their own name: an identity
-// provider passing on their tax code, a privacy notice they confirm they read, the legal reason
-// they give for not paying a stamp duty. Choosing one for them would be a declaration they never
-// made, so these go to the user like a sign-in does. "Accetto" is left out: cookie banners say it.
+// Labels where the user declares something in their own name, with legal weight: "dichiaro", the
+// reason they give for not paying a stamp duty. A false one is an offence, so these go to the user
+// like a sign-in does. Consents are not here: an identity provider passing on their tax code, a
+// privacy notice they read, are part of the job they asked for, and the agent gives them itself.
 const DECLARATION_WORDS = [
     // Italian
-    "acconsento",
-    "non acconsento",
-    "autorizzo",
     "dichiaro",
-    "presa visione",
     "esenzione",
     "esente",
     // English
-    "i consent",
     "i declare",
 ];
 
@@ -148,12 +145,12 @@ const DECLARATION_LABEL = new RegExp(
     "u",
 );
 
-/** The consent or declaration word in a label, if there is one. */
+/** The declaration word in a label, if there is one. */
 export const declarationWord = (label: string): string | undefined => DECLARATION_LABEL.exec(fold(label))?.[2];
 
 /**
- * Why clicking this would consent or declare something in the user's name, or undefined when it
- * does not. Those clicks are the user's own: they make them in the live view.
+ * Why clicking this would declare something in the user's name, or undefined when it does not.
+ * Those clicks are the user's own: they make them in the live view.
  */
 export const clickIsDeclaration = (element: ElementInfo): string | undefined => {
     if (element.navigates) return undefined;
