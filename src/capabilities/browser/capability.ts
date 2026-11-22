@@ -7,11 +7,14 @@ import { type AppApproval, appApproval, appProviders } from "../../browser/spid.
 import { promptFile } from "../../prompts/prompt-file.js";
 import type { SandboxProvider } from "../../sandbox/sandbox.js";
 import { type Capability, defineTool, type ToolContext, type ToolOutput } from "../types.js";
+import { guideFor, SITE_GUIDES } from "./sites/index.js";
 
 // A page is read in parts this long; the tree of a big page runs to hundreds of thousands.
 const PAGE_CHARS = 10_000;
 const MAX_FILE_BYTES = 20_000_000;
 const MAX_IMAGE_BYTES = 4_000_000;
+// A guide read this long ago is read again on the next visit.
+const GUIDE_FRESH_MS = 6 * 60 * 60_000;
 // How often the page is looked at while the user does their part elsewhere.
 const POLL_MS = 2_000;
 // As long as a live view link lasts.
@@ -118,15 +121,55 @@ export const createBrowserCapability = (
         const text = from > 0 && cached?.url === url ? cached.text : await tab.snapshot();
         trees.set(context.userId, { url, text });
         const next = from + PAGE_CHARS;
+        // A site with a guide says so the first time the agent lands on it, so it never has to remember.
+        const guide = guideFor(url);
+        const unread = guide && !hasRead(context.userId, guide.id);
         return {
             url,
             title: await tab.title(),
+            ...(unread
+                ? {
+                      siteGuide: `There is a guide to ${guide.name}: read it before going on, with browser_read_site_guide site="${guide.id}".`,
+                  }
+                : {}),
             page: text.slice(from, next),
             ...(next < text.length
                 ? { more: `${text.length - next} more characters: browser_read_page with from=${next}` }
                 : {}),
         };
     };
+
+    // Which guides each user's agent read lately: it reads one once, not on every click.
+    const guidesRead = new Map<string, Map<string, number>>();
+    const hasRead = (userId: string, id: string): boolean => {
+        const at = guidesRead.get(userId)?.get(id);
+        return at !== undefined && now().getTime() - at < GUIDE_FRESH_MS;
+    };
+
+    const readGuide = defineTool({
+        name: "browser_read_site_guide",
+        label: "Read a site's guide",
+        description: `How a site works, from earlier visits: where things are, the quickest way through, and which steps are the user's own. Read it before a job on: ${SITE_GUIDES.map((guide) => `${guide.id} (${guide.name})`).join(", ")}.`,
+        effect: "read",
+        parameters: Type.Object({
+            site: Type.Union(
+                SITE_GUIDES.map((guide) => Type.Literal(guide.id)),
+                { description: "Which site." },
+            ),
+        }),
+        execute: async (params, context) => {
+            const guide = SITE_GUIDES.find((candidate) => candidate.id === params.site);
+            if (!guide) throw new Error("No guide for that site.");
+            const read = guidesRead.get(context.userId) ?? new Map<string, number>();
+            read.set(guide.id, now().getTime());
+            guidesRead.set(context.userId, read);
+            return {
+                data: { site: guide.name, guide: guide.text() },
+                guidance:
+                    "Follow it where it fits what the user asked. If the site has changed from what it says, trust the page.",
+            };
+        },
+    });
 
     const save = async (context: ToolContext, name: string, bytes: Uint8Array): Promise<string> => {
         const stamp = now().toISOString().slice(0, 19).replace(/[-:T]/g, "");
@@ -543,6 +586,7 @@ export const createBrowserCapability = (
             signIn,
             approveInApp,
             act,
+            readGuide,
         ],
     };
 };

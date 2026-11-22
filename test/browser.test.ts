@@ -331,6 +331,22 @@ describe("the browser tools", () => {
         expect(tab.steps).toEqual(["click e1"]);
     });
 
+    it("points to a site's guide the first time it lands there, and not after reading it", async () => {
+        const tab = new FakeTab({ e1: element({ name: "Avanti" }) });
+        const { call } = setUp(tab);
+        const first = await call("browser_open_page", { url: "https://sc.anpr.interno.it/serviziCittadino/home" });
+        expect((first.data as { siteGuide?: string }).siteGuide).toMatch(/browser_read_site_guide site="anpr"/);
+        const guide = await call("browser_read_site_guide", { site: "anpr" });
+        const text = (guide.data as { guide: string }).guide;
+        expect(text).toContain("https://spid.anpr.interno.it/rp/<provider>/anpr5");
+        expect(text).toContain("Scarica autocertificazione");
+        const after = await call("browser_click", { ref: "e1" });
+        expect((after.data as { siteGuide?: string }).siteGuide).toBeUndefined();
+        // Another site has no guide.
+        const other = await call("browser_open_page", { url: "https://www.ryanair.com/" });
+        expect((other.data as { siteGuide?: string }).siteGuide).toBeUndefined();
+    });
+
     it("saves the file a button makes the page download, as the Anagrafe does with its PDFs", async () => {
         const pdf = new Uint8Array([0x25, 0x50, 0x44, 0x46]);
         const tab = new FakeTab({
