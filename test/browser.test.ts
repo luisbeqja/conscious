@@ -2,7 +2,13 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
 import { WebSocket, WebSocketServer } from "ws";
-import type { BrowserProvider, BrowserTab, FoundImage, LiveViewTarget } from "../src/browser/browser.js";
+import type {
+    BrowserProvider,
+    BrowserTab,
+    DownloadedFile,
+    FoundImage,
+    LiveViewTarget,
+} from "../src/browser/browser.js";
 import {
     clickIsCommit,
     clickIsDeclaration,
@@ -152,8 +158,13 @@ class FakeTab implements BrowserTab {
         if (!found) throw new Error(`no ${ref}`);
         return found;
     }
-    async click(ref: string) {
-        this.steps.push(`click ${ref}`);
+    /** Files a click on a ref downloads, and how long the page takes to make them. */
+    readonly downloads: Record<string, { file: DownloadedFile; afterMs?: number }> = {};
+    async click(ref: string, waitForFileMs = 0) {
+        this.steps.push(`click ${ref}${waitForFileMs ? ` wait ${waitForFileMs}` : ""}`);
+        const made = this.downloads[ref];
+        if (!made || (made.afterMs ?? 0) > waitForFileMs) return undefined;
+        return made.file;
     }
     async type(ref: string, text: string, submit: boolean) {
         this.steps.push(`type ${ref} ${text}${submit ? " ⏎" : ""}`);
@@ -284,6 +295,42 @@ describe("the browser tools", () => {
         const saved = await call("browser_save_file", { url: "https://shop.example/big", name: "lisbon tram" });
         expect(saved.data).toMatchObject({ saved: "files/browser/20261025120000-lisbon-tram.jpg", type: "image/jpeg" });
         expect(saved.images?.[0]?.mimeType).toBe("image/jpeg");
+    });
+
+    it("saves the file a button makes the page download, as the Anagrafe does with its PDFs", async () => {
+        const pdf = new Uint8Array([0x25, 0x50, 0x44, 0x46]);
+        const tab = new FakeTab({
+            e1: element({ name: "Scarica autocertificazione" }),
+            e2: element({ name: "Ottieni", submitsForm: true }),
+            e3: element({ name: "ACCONSENTO" }),
+        });
+        tab.downloads.e1 = { file: { name: "Autocertificazione-LUIS-BEQJA.pdf", bytes: pdf }, afterMs: 4_000 };
+        const { call, sandboxes } = setUp(tab);
+        const output = await call("browser_download", { ref: "e1", name: "autocertificazione residenza" });
+        expect(output.data).toMatchObject({
+            saved: "files/browser/20261025120000-autocertificazione-residenza.pdf",
+            name: "Autocertificazione-LUIS-BEQJA.pdf",
+            bytes: 4,
+        });
+        expect(tab.steps).toContain("click e1 wait 30000");
+        const box = await sandboxes.forUser("me");
+        expect(await box.readBytes("files/browser/20261025120000-autocertificazione-residenza.pdf")).toEqual(pdf);
+        expect(output.guidance).toMatch(/computer_send_file/);
+        // No file in time, and the clicks that are refused anyway.
+        await expect(call("browser_download", { ref: "e2" })).rejects.toThrow(/No file came/);
+        await expect(call("browser_download", { ref: "e3" })).rejects.toThrow(/browser_ask_user_to_act/);
+    });
+
+    it("keeps a file a plain click downloads, under the site's own name", async () => {
+        const tab = new FakeTab({ e1: element({ name: "Download PDF" }) });
+        tab.downloads.e1 = { file: { name: "ricevuta.pdf", bytes: new Uint8Array([1, 2]) } };
+        const { call } = setUp(tab);
+        const output = await call("browser_click", { ref: "e1" });
+        expect((output.data as { downloaded: unknown }).downloaded).toEqual({
+            saved: "files/browser/20261025120000-ricevuta.pdf",
+            name: "ricevuta.pdf",
+            bytes: 2,
+        });
     });
 
     it("hands a consent to the user instead of clicking it, on the page open now", async () => {
