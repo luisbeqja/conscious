@@ -311,6 +311,15 @@ A host such as Railway, Render or Fly.io gives a service one address. Set `CONSC
 
 The phone app's access code is in the first deploy's logs. Each user's computer is found again by the same `E2B_API_KEY`, so memory and conversations carry over.
 
+## See every run in Langfuse
+
+Set `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` (from a [Langfuse](https://langfuse.com) project) and every run is a trace there: each message, each time Conscious went on after you approved in your SPID app, each background job and check.
+
+- **What a trace holds.** Each model turn, with tokens and cost, and each tool call, with what it was asked and what it returned (cut at 8,000 characters). A failed tool or a model error is marked red, a run that used up its turns orange. Pictures are left out.
+- **Who.** A user is a short hash of their id, never the phone number. Each user's day is one session.
+- **Only names, timings and costs.** With `LANGFUSE_CONTENT=false`, nothing anyone wrote or a tool returned leaves your install.
+- `LANGFUSE_BASE_URL` is `https://cloud.langfuse.com` (EU) by default; set it for the US cloud or your own Langfuse. `LANGFUSE_TRACING_ENVIRONMENT` labels the traces, e.g. `production`.
+
 ## Check it
 
 ```bash

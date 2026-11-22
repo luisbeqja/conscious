@@ -184,5 +184,5 @@ Secrets never pass through the chat. When a plugin needs an account you have not
 3. **More sign-in on the Vault page.** Open banking (EU PSD2 aggregators).
 4. **An egress proxy for the computer**, so skills can reach only the hosts the user approved, with the Vault adding tokens on the way out instead of the computer holding them.
 5. **Memory, better.** Today it is `memory/MEMORY.md` in the sandbox, written by the agent and read into every prompt. Next: search over older notes when the index outgrows the prompt.
-6. **Tracing** with Langfuse, one trace per message, sub-agents as child agents.
+6. **Tracing, further.** Langfuse traces every run today (one per message or job). Next: a background job's parts as children of the job's trace, and scores from the user's reactions.
 7. **A stronger plugin sandbox:** run plugin calls in a container or microVM with no network, for installs with many users.

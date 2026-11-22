@@ -14,6 +14,7 @@ import type { Budgets } from "../config.js";
 import { asSaid, type ConversationStore, withSentReplies } from "../conversations/store.js";
 import { type IncomingFile, type OutgoingFile, prepareFiles, withoutImages } from "../media/incoming.js";
 import { emptyMemory, isEmpty, type MemoryStore, renderMemory, SandboxMemoryStore } from "../memory/memory.js";
+import type { Tracer } from "../observability/tracing.js";
 import {
     buildAgentSection,
     buildBackgroundPrompt,
@@ -56,6 +57,8 @@ export interface OrchestratorDeps {
     agents?: AgentStore;
     /** Decides apart from the answer whether a message gets an emoji. Without it, nothing reacts. */
     reactor?: Reactor;
+    /** Where runs are traced (Langfuse). Without it, nothing is. */
+    tracer?: Tracer;
 }
 
 /** How one background run is set up and limited. */
@@ -108,6 +111,8 @@ export interface SendOptions {
     files?: readonly IncomingFile[];
     /** Sends a file into the chat. Without it the agent cannot send files. */
     sendFile?: (file: OutgoingFile) => Promise<void>;
+    /** What the run is called in traces: a message unless said otherwise. */
+    traceName?: string;
 }
 
 const FALLBACK = "Oops, something broke on my side. Try me again in a minute?";
@@ -190,7 +195,7 @@ export class Orchestrator {
     resume(userId: string, note: string, since: number): Promise<string[]> {
         const chat = this.chats.get(userId);
         if (!chat || (this.lastMessage.get(userId) ?? 0) > since) return Promise.resolve([]);
-        return this.enqueue(userId, note, chat);
+        return this.enqueue(userId, note, { ...chat, traceName: "resume" });
     }
 
     private enqueue(userId: string, text: string, options: SendOptions): Promise<string[]> {
@@ -287,7 +292,14 @@ export class Orchestrator {
                   sandbox: await this.deps.sandboxes?.forUser(userId).catch(() => undefined),
               })
             : { notes: [], images: [] };
+        const trace = this.deps.tracer?.start({
+            name: options.traceName ?? "message",
+            userId,
+            input: text,
+            model: runtime.model.id,
+        });
         const result = await runAgent({
+            trace,
             runtime,
             systemPrompt: buildSystemPrompt(registry.renderIndex(capabilities), {
                 ...(await this.context(userId)),
@@ -529,6 +541,12 @@ export class Orchestrator {
             seesImages: runtime.model.input.includes("image"),
         });
         return runAgent({
+            trace: this.deps.tracer?.start({
+                name: sessionId.startsWith("check-") ? "check" : "background",
+                userId,
+                input: brief,
+                model: runtime.model.id,
+            }),
             runtime,
             systemPrompt: buildBackgroundPrompt(
                 registry.renderIndex(capabilities),

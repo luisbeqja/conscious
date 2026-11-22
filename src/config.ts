@@ -6,6 +6,7 @@ import type { GoogleClient } from "./google/oauth.js";
 import type { EmbeddingsConfig } from "./knowledge/embeddings.js";
 import { type McpServerEntry, readCatalog, selectServers } from "./mcp/catalog.js";
 import type { TranscriptionConfig } from "./media/transcribe.js";
+import type { LangfuseConfig } from "./observability/langfuse.js";
 import type { E2BOptions } from "./sandbox/e2b.js";
 import { type PacingConfig, parseQuietHours } from "./scheduler/pacing.js";
 import type { SpotifyClient } from "./spotify/oauth.js";
@@ -26,6 +27,8 @@ export interface Config {
     pacing: PacingConfig;
     /** Unset means no computer: memory and the conversation live in this process only. */
     sandbox?: E2BOptions;
+    /** Langfuse, to trace every run. */
+    tracing?: LangfuseConfig;
     /** A real browser per user, on an E2B desktop computer. Needs `sandbox` for the files it saves. */
     browser?: E2BBrowserOptions;
     /** MCP servers from the repo's catalog that this install connects to. */
@@ -146,6 +149,7 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): Config => {
             maxUnpromptedPerDay: Number(env.CONSCIOUS_MAX_UNPROMPTED || 3),
         },
         sandbox: loadSandboxConfig(env),
+        tracing: loadTracingConfig(env),
         browser: loadBrowserConfig(env),
         mcpServers: selectServers(readCatalog(), env.CONSCIOUS_MCP_SERVERS),
         shop: env.CONSCIOUS_SHOP !== "false",
@@ -265,6 +269,18 @@ const loadSearchConfig = (env: NodeJS.ProcessEnv): SearchConfig => {
     if (provider === "searxng") return { provider, url: required(env, "CONSCIOUS_SEARXNG_URL") };
     if (provider === "duckduckgo") return { provider };
     throw new Error(`CONSCIOUS_SEARCH must be "duckduckgo", "brave" or "searxng", not "${provider}"`);
+};
+
+/** Langfuse, when its keys are set: every run traced there. */
+const loadTracingConfig = (env: NodeJS.ProcessEnv): LangfuseConfig | undefined => {
+    if (!env.LANGFUSE_PUBLIC_KEY || !env.LANGFUSE_SECRET_KEY) return undefined;
+    return {
+        publicKey: env.LANGFUSE_PUBLIC_KEY,
+        secretKey: env.LANGFUSE_SECRET_KEY,
+        baseUrl: env.LANGFUSE_BASE_URL || "https://cloud.langfuse.com",
+        content: env.LANGFUSE_CONTENT !== "false",
+        environment: env.LANGFUSE_TRACING_ENVIRONMENT || undefined,
+    };
 };
 
 const loadSandboxConfig = (env: NodeJS.ProcessEnv): E2BOptions | undefined => {
