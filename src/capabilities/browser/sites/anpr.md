@@ -5,8 +5,8 @@ The national registry of residents: the user's registered data, certificates, au
 ## Sign in
 
 - Skip the home page: open `https://spid.anpr.interno.it/rp/<provider>/anpr5` straight away, with the user's provider: `poste`, `aruba`, `infocert`, `sielte`, `namirial`, `lepida`, `register`, `teamsystem`, `etna`, `infocamere`, `intesi`, `titt`. CIE is `/rp/cie/anpr5`.
-- On Poste ID's page, use browser_ask_user_to_approve_in_app. Then Poste asks to pass on the tax code ("ACCONSENTO"): that is the user's, hand it over with browser_ask_user_to_act.
-- On the first access only, the Anagrafe asks to confirm the privacy notice (a checkbox and "Conferma"): also the user's.
+- On Poste ID's page, use browser_ask_user_to_approve_in_app. Then Poste asks to pass on the tax code ("ACCONSENTO"): click it yourself, it is part of signing in.
+- On the first access only, the Anagrafe asks to confirm the privacy notice (a checkbox and "Conferma"): tick it and confirm, in one browser_click with `next`.
 - The session lasts minutes. Do the whole job right after signing in.
 - After signing in, `https://sc.anpr.interno.it/serviziCittadino/home` shows the user's data: name, tax code, date and place of birth, registered address. Read it there instead of asking them.
 

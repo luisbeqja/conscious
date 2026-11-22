@@ -82,19 +82,8 @@ describe("the commit guard", () => {
         expect(typingIsRefused(element({ tag: "input", type: "search", fieldHint: "q" }))).toBeUndefined();
     });
 
-    it("leaves consents and declarations in the user's name to the user, as on SPID and the Anagrafe", () => {
-        // Poste ID asking to pass on the tax code, and the Anagrafe's privacy notice on first access.
-        expect(clickIsDeclaration(element({ name: "ACCONSENTO" }))).toContain('"acconsento"');
-        expect(clickIsDeclaration(element({ name: "NON ACCONSENTO" }))).toBeDefined();
-        expect(
-            clickIsDeclaration(
-                element({
-                    tag: "input",
-                    type: "checkbox",
-                    name: "Conferma la presa visione dell'Informativa della Privacy",
-                }),
-            ),
-        ).toContain("presa visione");
+    it("leaves declarations in the user's name to the user, as for a stamp-duty exemption", () => {
+        expect(clickIsDeclaration(element({ name: "Dichiaro di aver letto e compreso" }))).toContain('"dichiaro"');
         // A stamp-duty exemption: the option itself, and a reason picked from the list of reasons.
         expect(
             clickIsDeclaration(element({ tag: "input", type: "radio", name: "In esenzione da imposta di bollo" })),
@@ -125,9 +114,19 @@ describe("the commit guard", () => {
             "Entra con SPID",
             "Di residenza",
             "In bollo Con pagamento",
+            // Consents the job needs: Poste ID passing on the tax code, a privacy notice read.
+            "ACCONSENTO",
+            "Autorizzo",
+            "Conferma la presa visione dell'Informativa della Privacy",
         ]) {
             expect(clickIsDeclaration(element({ name: label })), label).toBeUndefined();
+            expect(clickIsCommit(element({ name: label })), label).toBeUndefined();
         }
+    });
+
+    it("waits for the user's yes before authorizing a payment", () => {
+        expect(clickIsCommit(element({ name: "Autorizzo l'addebito" }))).toBeDefined();
+        expect(clickIsCommit(element({ name: "Autorizzo il pagamento" }))).toBeDefined();
     });
 });
 
@@ -318,7 +317,7 @@ describe("the browser tools", () => {
             e1: element({ tag: "input", type: "checkbox", name: "Nascita" }),
             e2: element({ tag: "input", type: "checkbox", name: "Famiglia" }),
             e3: element({ name: "Salva i dati e vai Avanti", submitsForm: true }),
-            e4: element({ name: "ACCONSENTO" }),
+            e4: element({ name: "In esenzione da imposta di bollo" }),
         });
         const { call } = setUp(tab);
         const output = await call("browser_click", { ref: "e1", next: ["e2", "e3"] });
@@ -352,7 +351,7 @@ describe("the browser tools", () => {
         const tab = new FakeTab({
             e1: element({ name: "Scarica autocertificazione" }),
             e2: element({ name: "Ottieni", submitsForm: true }),
-            e3: element({ name: "ACCONSENTO" }),
+            e3: element({ name: "Dichiaro di essere esente" }),
         });
         tab.downloads.e1 = { file: { name: "Autocertificazione-LUIS-BEQJA.pdf", bytes: pdf }, afterMs: 4_000 };
         const { call, sandboxes } = setUp(tab);
@@ -383,25 +382,33 @@ describe("the browser tools", () => {
         });
     });
 
-    it("hands a consent to the user instead of clicking it, on the page open now", async () => {
+    it("gives the consent signing in needs by itself", async () => {
+        const tab = new FakeTab({ e1: element({ name: "ACCONSENTO", submitsForm: true }) });
+        tab.address = "https://posteid.poste.it/jod-login-schema/consent.jsp";
+        const { call } = setUp(tab);
+        await call("browser_click", { ref: "e1" });
+        expect(tab.steps).toEqual(["click e1", "snapshot"]);
+    });
+
+    it("hands a declaration to the user instead of clicking it, on the page open now", async () => {
         const tab = new FakeTab({
-            e1: element({ name: "ACCONSENTO", submitsForm: true }),
+            e1: element({ tag: "input", type: "radio", name: "In esenzione da imposta di bollo" }),
             e2: element({ name: "Avanti", submitsForm: true }),
         });
-        tab.address = "https://posteid.poste.it/jod-login-schema/consent.jsp";
+        tab.address = "https://sc.anpr.interno.it/serviziCittadino/servizi/certificati/uso";
         const { call, views } = setUp(tab);
         await expect(call("browser_click", { ref: "e1" })).rejects.toThrow(/browser_ask_user_to_act/);
         await call("browser_click", { ref: "e2" });
         expect(tab.steps).toEqual(["click e2", "snapshot"]);
         const output = await call("browser_ask_user_to_act", {
-            what: "allow Poste to pass your tax code to the Anagrafe",
+            what: "choose why your certificate is exempt from stamp duty",
         });
         const data = output.data as { link: string; url: string };
         const code = /^\/browser\/([\w-]+)\/vnc\.html$/.exec(new URL(data.link).pathname)?.[1] ?? "";
         expect(views.find(code)?.userId).toBe("me");
-        expect(data.url).toBe("https://posteid.poste.it/jod-login-schema/consent.jsp");
+        expect(data.url).toBe("https://sc.anpr.interno.it/serviziCittadino/servizi/certificati/uso");
         expect(tab.steps.some((step) => step.startsWith("goto"))).toBe(false);
-        expect(output.guidance).toContain("allow Poste to pass your tax code to the Anagrafe");
+        expect(output.guidance).toContain("choose why your certificate is exempt from stamp duty");
     });
 
     it("turns Poste ID's QR code into a link that opens the PosteID app on the user's phone", async () => {
