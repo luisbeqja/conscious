@@ -18,6 +18,7 @@ import {
 } from "./config.js";
 import { createConscious } from "./create-conscious.js";
 import { modelSetupProblem } from "./engine/models.js";
+import { conversationCommands } from "./conversations/commands.js";
 import { type Command, inviteCommands } from "./invites/commands.js";
 import { Invites } from "./invites/invites.js";
 import { macCommands } from "./mac/commands.js";
@@ -82,7 +83,9 @@ const invite = inviteCommands({
 });
 const linkMac =
     mac && macCommands({ ...mac, publicUrl: config.vault.publicUrl, isOwner: (userId) => owners.has(userId) });
-const command: Command = (userId, text) => invite(userId, text) ?? linkMac?.(userId, text);
+const conversation = conversationCommands(orchestrator);
+const command: Command = (userId, text) =>
+    conversation(userId, text) ?? invite(userId, text) ?? linkMac?.(userId, text);
 // A Mac's QR opens the chat with its code ready to send, on Telegram or WhatsApp.
 if (mac) {
     mac.bridge.chatLinks = (code) => ({
