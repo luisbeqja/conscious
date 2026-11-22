@@ -4,6 +4,7 @@ import { SEND_MESSAGE } from "../capabilities/chat/capability.js";
 import type { Effect } from "../capabilities/types.js";
 import type { Budgets } from "../config.js";
 import type { RunTrace } from "../observability/tracing.js";
+import { withoutOldPages } from "./context.js";
 import type { ModelRuntime } from "./models.js";
 
 export interface AgentRun {
@@ -96,6 +97,8 @@ export const runAgent = async (run: AgentRun): Promise<AgentRunResult> => {
             messages: history,
         },
         streamFn: run.runtime.streamFn,
+        // Only the browser's latest page and screenshot go to the model; the rest were read already.
+        transformContext: async (messages) => withoutOldPages(messages),
         sessionId: run.sessionId,
         beforeToolCall: async ({ toolCall }) => {
             if (run.effects.get(toolCall.name) === "commit") {

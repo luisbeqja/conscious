@@ -32,6 +32,7 @@ import { loadOlderNotes, OLDER_NOTES } from "../sandbox/memory.js";
 import type { SandboxProvider } from "../sandbox/sandbox.js";
 import type { Reminder, Scheduler } from "../scheduler/scheduler.js";
 import type { SkillLibrary } from "../skills/library.js";
+import { withoutOldPages } from "./context.js";
 import type { ModelRuntime } from "./models.js";
 import type { Reactor } from "./reactions.js";
 import { type AgentRunResult, type RunProgress, runAgent } from "./run-agent.js";
@@ -332,7 +333,11 @@ export class Orchestrator {
             ),
         });
         await reacting;
-        await store.save(userId, withoutImages([...history, ...asSaid(result.messages.slice(history.length))]));
+        // Pages and screenshots are not kept: the next message would pay to read them all again.
+        await store.save(
+            userId,
+            withoutImages(withoutOldPages([...history, ...asSaid(result.messages.slice(history.length))], false)),
+        );
         // Silence is the agent's to choose; a run that broke before it said anything is not.
         if (!sent.length && result.status !== "completed") {
             await options.say?.(FALLBACK);
