@@ -16,9 +16,9 @@ import {
     type PhotonPlatform,
     type TelegramConfig,
 } from "./config.js";
+import { conversationCommands } from "./conversations/commands.js";
 import { createConscious } from "./create-conscious.js";
 import { modelSetupProblem } from "./engine/models.js";
-import { conversationCommands } from "./conversations/commands.js";
 import { type Command, inviteCommands } from "./invites/commands.js";
 import { Invites } from "./invites/invites.js";
 import { macCommands } from "./mac/commands.js";

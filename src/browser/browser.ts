@@ -67,6 +67,26 @@ export interface BrowserProvider {
 }
 
 const STEP_MS = 15_000;
+// Runs in the page, once: blobs the page makes are kept a minute after it revokes them, so a file it
+// hands the browser and drops at once can still be read from here.
+const KEEP_BLOBS = `(() => {
+    if (window.__consciousBlobs) return;
+    const kept = new Map();
+    window.__consciousBlobs = kept;
+    const create = URL.createObjectURL.bind(URL);
+    const revoke = URL.revokeObjectURL.bind(URL);
+    URL.createObjectURL = (object) => {
+        const address = create(object);
+        if (object instanceof Blob) kept.set(address, object);
+        return address;
+    };
+    URL.revokeObjectURL = (address) => {
+        setTimeout(() => {
+            revoke(address);
+            kept.delete(address);
+        }, 60000);
+    };
+})()`;
 const MAX_DOWNLOAD_BYTES = 20_000_000;
 const MAX_SHOT_HEIGHT = 4_000;
 
@@ -157,6 +177,8 @@ export class PlaywrightTab implements BrowserTab {
     }
 
     async click(ref: string, waitForFileMs = 0): Promise<DownloadedFile | undefined> {
+        // A page that makes a file in itself often revokes its blob right after the click: keep blobs a while.
+        await this.page.evaluate(KEEP_BLOBS).catch(() => undefined);
         // A download can start during the click or while the page settles: catch it either way.
         let download: Download | undefined;
         const started = (file: Download) => {
@@ -173,21 +195,41 @@ export class PlaywrightTab implements BrowserTab {
             this.page.off("download", started);
         }
         if (!download) return undefined;
-        const failure = await download.failure();
-        if (failure) throw new Error(`The download failed: ${failure}`);
-        // A stream, not a path: the browser runs on another computer.
-        const chunks: Buffer[] = [];
-        let size = 0;
-        for await (const chunk of await download.createReadStream()) {
-            const part = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-            size += part.length;
-            if (size > MAX_DOWNLOAD_BYTES) {
-                await download.cancel().catch(() => undefined);
-                throw new Error("The file is over 20 MB: too big to keep.");
-            }
-            chunks.push(part);
+        const name = download.suggestedFilename();
+        // Read from the page or the site, never from what the browser saved: it runs on another
+        // computer, where Playwright cannot read its files and hands back an empty one.
+        const bytes = await this.fetchDownload(download.url()).catch(() => new Uint8Array());
+        const failure = await download.failure().catch(() => null);
+        await download.delete().catch(() => undefined);
+        if (!bytes.length) {
+            throw new Error(
+                `The file "${name}" could not be read${failure ? ` (${failure})` : ""}. Nothing was saved: tell the user it did not work on your side, not the site's.`,
+            );
         }
-        return { name: download.suggestedFilename(), bytes: new Uint8Array(Buffer.concat(chunks)) };
+        if (bytes.length > MAX_DOWNLOAD_BYTES) throw new Error("The file is over 20 MB: too big to keep.");
+        return { name, bytes };
+    }
+
+    /**
+     * The bytes of what the browser downloaded, read where they are: a blob from inside the page,
+     * a file from the site with the browser's cookies.
+     */
+    private async fetchDownload(url: string): Promise<Uint8Array> {
+        if (url.startsWith("blob:") || url.startsWith("data:")) {
+            // Runs in the page: the blob kept by KEEP_BLOBS, or fetched while it still lives.
+            const base64 = await this.page.evaluate(async (address: string) => {
+                const kept = (window as unknown as { __consciousBlobs?: Map<string, Blob> }).__consciousBlobs;
+                const blob = kept?.get(address) ?? (await (await fetch(address)).blob());
+                const bytes = new Uint8Array(await blob.arrayBuffer());
+                let binary = "";
+                for (let index = 0; index < bytes.length; index += 0x8000) {
+                    binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
+                }
+                return btoa(binary);
+            }, url);
+            return new Uint8Array(Buffer.from(base64, "base64"));
+        }
+        return (await this.download(url)).bytes;
     }
 
     async type(ref: string, text: string, submit: boolean): Promise<void> {

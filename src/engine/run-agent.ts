@@ -73,8 +73,13 @@ const newlyWritten = (update: AssistantMessageEvent, written: Map<number, string
  * Everything Conscious-specific is policy around the loop: budgets, commits held for a yes, and
  * messages to the user, which are the only thing of the agent's the user sees.
  */
+/** Turns past the budget in which the agent may only tell the user where it got to. */
+const LAST_TURNS = 2;
+
 export const runAgent = async (run: AgentRun): Promise<AgentRunResult> => {
     let toolCalls = 0;
+    // Once the turns are used up, the agent gets a last few to tell the user where it got to.
+    let turnsUp = false;
     const history = run.history.filter((message) => message.role !== "system");
     let status: AgentRunResult["status"] = "completed";
     const agent = new Agent({
@@ -102,6 +107,12 @@ export const runAgent = async (run: AgentRun): Promise<AgentRunResult> => {
             const save = run.lastWords?.size
                 ? ` If you have not saved your notebook, save it now with ${[...run.lastWords].join(" or ")}.`
                 : "";
+            if (turnsUp) {
+                return {
+                    block: true,
+                    reason: `The turns for this message are used up. Use no tool but ${SEND_MESSAGE}: tell the user where you got to and what is left, then stop.${save}`,
+                };
+            }
             if (run.deadline && Date.now() > run.deadline) {
                 status = "budget_exhausted";
                 return {
@@ -135,7 +146,19 @@ export const runAgent = async (run: AgentRun): Promise<AgentRunResult> => {
         if (event.type !== "turn_end") return;
         if (++turns >= run.budgets.maxTurnsPerRun) {
             status = "budget_exhausted";
-            agent.abort();
+            // Cut off mid-job, it said nothing and the user got "something broke": let it say where it is.
+            if (turns >= run.budgets.maxTurnsPerRun + LAST_TURNS) {
+                agent.abort();
+                return;
+            }
+            if (!turnsUp) {
+                turnsUp = true;
+                agent.steer({
+                    role: "user",
+                    content: `[Not from the user: the turns for this message are used up. Use no tool but ${SEND_MESSAGE}: tell the user where you got to and what is left, so they can tell you to go on, then stop.]`,
+                    timestamp: Date.now(),
+                });
+            }
             return;
         }
         const steering = run.steering?.() ?? [];

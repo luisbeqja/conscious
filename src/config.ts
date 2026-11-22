@@ -96,6 +96,12 @@ export interface Budgets {
  * Keys go into HTTP headers, which take no characters past Latin-1. A key copied from a
  * page that masks it (sk-ant-u•••) otherwise fails only on the first message, as a vague error.
  */
+/** A whole number above zero from a setting, or `fallback` when it is unset or not one. */
+const positive = (value: string | undefined, fallback: number): number => {
+    const number = Number(value);
+    return Number.isInteger(number) && number > 0 ? number : fallback;
+};
+
 const checkKeys = (env: NodeJS.ProcessEnv): void => {
     for (const [name, value] of Object.entries(env)) {
         if (!/(_KEY|_SECRET|_TOKEN)$/.test(name) || !value) continue;
@@ -129,7 +135,12 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): Config => {
             env.CONSCIOUS_REACTIONS_MODEL === "none"
                 ? undefined
                 : { ...model, id: env.CONSCIOUS_REACTIONS_MODEL || model.id },
-        budgets: { maxTurnsPerRun: 20, maxToolCallsPerRun: 40, maxBackgroundAgents: 3 },
+        // A job in a browser (a certificate from a public office) takes thirty steps or more.
+        budgets: {
+            maxTurnsPerRun: positive(env.CONSCIOUS_MAX_TURNS, 20),
+            maxToolCallsPerRun: positive(env.CONSCIOUS_MAX_TOOL_CALLS, 40),
+            maxBackgroundAgents: 3,
+        },
         pacing: {
             quietHours: parseQuietHours(env.CONSCIOUS_QUIET_HOURS || "22-8"),
             maxUnpromptedPerDay: Number(env.CONSCIOUS_MAX_UNPROMPTED || 3),
