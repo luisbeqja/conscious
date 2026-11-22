@@ -189,20 +189,38 @@ export const createBrowserCapability = (
         name: "browser_click",
         label: "Click",
         description:
-            "Click an element of the page by its ref. A click that pays, books, orders, sends, posts, deletes or signs up is refused, and so is one that consents or declares something in the user's name.",
+            "Click an element of the page by its ref. With `next`, click more elements of the same page after it, in order, in one step: ticking or unticking boxes, picking options, then a button. A click that pays, books, orders, sends, posts, deletes or signs up is refused, and so is one that consents or declares something in the user's name.",
         effect: "draft",
-        parameters: Type.Object({ ref }),
+        parameters: Type.Object({
+            ref,
+            next: Type.Optional(
+                Type.Array(ref, {
+                    maxItems: 12,
+                    description:
+                        "More refs from the same page to click after the first, in order. Only for steps whose result you need not read in between.",
+                }),
+            ),
+        }),
         execute: async (params, context) => {
             const tab = await tabFor(context);
-            const element = await tab.inspect(params.ref);
-            const why = clickIsCommit(element);
-            if (why) throw commitRefused(element.name, why);
-            const declares = clickIsDeclaration(element);
-            if (declares) throw declarationRefused(element.name, declares);
-            const file = await tab.click(params.ref);
+            const refs = [params.ref, ...(params.next ?? [])];
+            const clicked: string[] = [];
+            let file: DownloadedFile | undefined;
+            for (const target of refs) {
+                const element = await tab.inspect(target);
+                const why = clickIsCommit(element);
+                const declares = why ? undefined : clickIsDeclaration(element);
+                // What was clicked before a refusal stays clicked: say so, so nothing is done twice.
+                const done = clicked.length ? ` Already clicked first: ${clicked.join(", ")}.` : "";
+                if (why) throw new Error(`${commitRefused(element.name, why).message}${done}`);
+                if (declares) throw new Error(`${declarationRefused(element.name, declares).message}${done}`);
+                file = (await tab.click(target)) ?? file;
+                clicked.push(target);
+            }
             const page = await look(context, tab);
-            if (!file) return { data: page };
-            return { data: { ...page, downloaded: await keep(context, file) }, guidance: keptGuidance };
+            const data = refs.length > 1 ? { ...page, clicked } : page;
+            if (!file) return { data };
+            return { data: { ...data, downloaded: await keep(context, file) }, guidance: keptGuidance };
         },
     });
 

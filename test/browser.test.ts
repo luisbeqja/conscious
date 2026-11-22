@@ -313,6 +313,24 @@ describe("the browser tools", () => {
         expect(saved.images?.[0]?.mimeType).toBe("image/jpeg");
     });
 
+    it("clicks several elements of a form in one step, and stops at a refused one saying what it did", async () => {
+        const tab = new FakeTab({
+            e1: element({ tag: "input", type: "checkbox", name: "Nascita" }),
+            e2: element({ tag: "input", type: "checkbox", name: "Famiglia" }),
+            e3: element({ name: "Salva i dati e vai Avanti", submitsForm: true }),
+            e4: element({ name: "ACCONSENTO" }),
+        });
+        const { call } = setUp(tab);
+        const output = await call("browser_click", { ref: "e1", next: ["e2", "e3"] });
+        expect(tab.steps).toEqual(["click e1", "click e2", "click e3", "snapshot"]);
+        expect((output.data as { clicked: string[] }).clicked).toEqual(["e1", "e2", "e3"]);
+        tab.steps.length = 0;
+        await expect(call("browser_click", { ref: "e1", next: ["e4", "e2"] })).rejects.toThrow(
+            /browser_ask_user_to_act.*Already clicked first: e1\./,
+        );
+        expect(tab.steps).toEqual(["click e1"]);
+    });
+
     it("saves the file a button makes the page download, as the Anagrafe does with its PDFs", async () => {
         const pdf = new Uint8Array([0x25, 0x50, 0x44, 0x46]);
         const tab = new FakeTab({
