@@ -205,6 +205,17 @@ export class Orchestrator {
     }
 
     /**
+     * Sets the conversation aside so the next message starts with a clean context. Memory,
+     * reminders and agents stay. Waits for any answer in progress, so it is not saved back after.
+     */
+    newConversation(userId: string): Promise<void> {
+        const previous = this.queues.get(userId) ?? Promise.resolve();
+        const next = previous.catch(() => {}).then(() => this.deps.store.save(userId, []));
+        this.queues.set(userId, next);
+        return next;
+    }
+
+    /**
      * Forgets the user entirely, so the next message is a first meeting: the conversation, memory,
      * reminders and checks, and background work. Files and learned skills on their computer stay.
      * Waits for any answer in progress, so nothing half-finished is saved after the wipe.

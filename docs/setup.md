@@ -97,6 +97,10 @@ Conscious asks Telegram for its messages (long polling), so like Photon it runs 
 
 With `pnpm photon`, a `TELEGRAM_BOT_TOKEN` adds the bot next to WhatsApp and iMessage. List yourself as `123456789=+393331234567`, your Telegram id and then your number as in `CONSCIOUS_ALLOWED_USERS`, and Telegram, WhatsApp and the app are one conversation; reminders go to whichever you wrote from last. An id alone is a user of its own, `telegram:123456789`. With `pnpm telegram`, `123456789=me` makes you the same user as `pnpm chat`.
 
+### Start a new conversation
+
+Send `/new` (or `/nuova`) on Telegram or WhatsApp to start over with a clean context: what you said so far is set aside, and Conscious still remembers what it knows about you, your reminders and agents. In `pnpm chat`, `/reset` instead forgets everything.
+
 ### Invite friends
 
 Whoever is listed in the settings (`CONSCIOUS_ALLOWED_USERS`, `CONSCIOUS_TELEGRAM_USERS`, `CONSCIOUS_APP_USERS`) owns the install and can invite people from Telegram or WhatsApp:

@@ -5,6 +5,7 @@ import { userIdOf } from "./channels/user-id.js";
 import { loadConfig, loadTelegramConfig } from "./config.js";
 import { createConscious } from "./create-conscious.js";
 import { modelSetupProblem } from "./engine/models.js";
+import { conversationCommands } from "./conversations/commands.js";
 import { inviteCommands } from "./invites/commands.js";
 import { Invites } from "./invites/invites.js";
 import { macCommands } from "./mac/commands.js";
@@ -37,6 +38,7 @@ const invite = inviteCommands({
 });
 const linkMac =
     mac && macCommands({ ...mac, publicUrl: config.vault.publicUrl, isOwner: (userId) => owners.has(userId) });
+const conversation = conversationCommands(orchestrator);
 const channel: TelegramChannel = new TelegramChannel(
     createTelegramApi(telegram.botToken),
     orchestrator,
@@ -45,7 +47,7 @@ const channel: TelegramChannel = new TelegramChannel(
         chats: new ChatBook(join(config.dataDir, "chats.json")),
         transcriber: config.transcription && createTranscriber(config.transcription),
         invites,
-        command: (userId, text) => invite(userId, text) ?? linkMac?.(userId, text),
+        command: (userId, text) => conversation(userId, text) ?? invite(userId, text) ?? linkMac?.(userId, text),
         onJoined: (guest) => {
             channel
                 .notify(guest.invitedBy, `${guest.userId} just joined Conscious on Telegram ✅`)
