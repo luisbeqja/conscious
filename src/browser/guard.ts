@@ -14,6 +14,8 @@ export interface ElementInfo {
     submitsForm: boolean;
     /** A plain link: clicking it only opens another page. */
     navigates: boolean;
+    /** The question a checkbox or radio answers: its fieldset's legend or its group's label. */
+    group?: string;
 }
 
 // Labels that act in the world for the user, in the languages Conscious's users write in. Matched
@@ -122,6 +124,45 @@ const COMMIT_LABEL = new RegExp(
 
 /** The commit word in a label, if there is one. */
 export const commitWord = (label: string): string | undefined => COMMIT_LABEL.exec(fold(label))?.[2];
+
+// Labels where the user consents to something or declares it in their own name: an identity
+// provider passing on their tax code, a privacy notice they confirm they read, the legal reason
+// they give for not paying a stamp duty. Choosing one for them would be a declaration they never
+// made, so these go to the user like a sign-in does. "Accetto" is left out: cookie banners say it.
+const DECLARATION_WORDS = [
+    // Italian
+    "acconsento",
+    "non acconsento",
+    "autorizzo",
+    "dichiaro",
+    "presa visione",
+    "esenzione",
+    "esente",
+    // English
+    "i consent",
+    "i declare",
+];
+
+const DECLARATION_LABEL = new RegExp(
+    `(^|[^\\p{L}\\p{N}])(${DECLARATION_WORDS.map(fold).map(escapeRegex).join("|")})($|[^\\p{L}\\p{N}])`,
+    "u",
+);
+
+/** The consent or declaration word in a label, if there is one. */
+export const declarationWord = (label: string): string | undefined => DECLARATION_LABEL.exec(fold(label))?.[2];
+
+/**
+ * Why clicking this would consent or declare something in the user's name, or undefined when it
+ * does not. Those clicks are the user's own: they make them in the live view.
+ */
+export const clickIsDeclaration = (element: ElementInfo): string | undefined => {
+    if (element.navigates) return undefined;
+    const word = declarationWord(element.name);
+    if (word) return `its label says "${word}"`;
+    // A reason picked from a list ("separazione o divorzio") declares as much as the list's title.
+    const asked = element.group ? declarationWord(element.group) : undefined;
+    return asked ? `it answers "${element.group?.trim().slice(0, 80)}"` : undefined;
+};
 
 /**
  * Why clicking this would act for the user (pay, book, send, delete), or undefined when it is safe.

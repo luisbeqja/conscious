@@ -1,7 +1,7 @@
 import { posix } from "node:path";
 import { Type } from "typebox";
 import type { BrowserProvider, BrowserTab } from "../../browser/browser.js";
-import { clickIsCommit, typingIsRefused } from "../../browser/guard.js";
+import { clickIsCommit, clickIsDeclaration, typingIsRefused } from "../../browser/guard.js";
 import type { LiveViews } from "../../browser/live-view.js";
 import { promptFile } from "../../prompts/prompt-file.js";
 import type { SandboxProvider } from "../../sandbox/sandbox.js";
@@ -101,11 +101,17 @@ export const createBrowserCapability = (
         execute: async (params, context) => ({ data: await look(context, await tabFor(context), params.from ?? 0) }),
     });
 
+    /** The click is the user's own consent or declaration: they make it in the live view. */
+    const declarationRefused = (label: string, why: string) =>
+        new Error(
+            `Not done: "${label}" would consent or declare something in the user's name (${why}). That choice is theirs alone. Call browser_ask_user_to_act on this page, saying what they are asked to consent to or declare, and wait for them.`,
+        );
+
     const click = defineTool({
         name: "browser_click",
         label: "Click",
         description:
-            "Click an element of the page by its ref. A click that pays, books, orders, sends, posts, deletes or signs up is refused.",
+            "Click an element of the page by its ref. A click that pays, books, orders, sends, posts, deletes or signs up is refused, and so is one that consents or declares something in the user's name.",
         effect: "draft",
         parameters: Type.Object({ ref }),
         execute: async (params, context) => {
@@ -113,6 +119,8 @@ export const createBrowserCapability = (
             const element = await tab.inspect(params.ref);
             const why = clickIsCommit(element);
             if (why) throw commitRefused(element.name, why);
+            const declares = clickIsDeclaration(element);
+            if (declares) throw declarationRefused(element.name, declares);
             await tab.click(params.ref);
             return { data: await look(context, tab) };
         },
@@ -268,21 +276,49 @@ export const createBrowserCapability = (
         name: "browser_ask_user_to_sign_in",
         label: "Ask the user to sign in",
         description:
-            "Whenever the user wants you signed in to a website in your browser (GitHub, Amazon, an airline): open its sign-in page and get a private link that shows your browser, so the user signs in themselves. You never see or type their password, and the browser stays signed in for next time. Not the Vault: that is for tools and plugins.",
+            "Whenever the user wants you signed in to a website in your browser (GitHub, Amazon, an airline, SPID or CIE on a public office's site): open its sign-in page and get a private link that shows your browser, so the user signs in themselves. You never see or type their password, and the browser stays signed in for next time. Leave out `url` when the sign-in page is already open, as after choosing an identity provider. Not the Vault: that is for tools and plugins.",
         effect: "draft",
         parameters: Type.Object({
-            url: Type.String({ description: "The site's sign-in page, starting with https://" }),
+            url: Type.Optional(
+                Type.String({
+                    description:
+                        "The site's sign-in page, starting with https://. Leave it out to keep the page open now.",
+                }),
+            ),
             site: Type.String({ description: "The site's name, as the user knows it." }),
         }),
         execute: async (params, context) => {
-            if (!/^https?:\/\//i.test(params.url.trim()))
+            const url = params.url?.trim();
+            if (url !== undefined && !/^https?:\/\//i.test(url))
                 throw new Error("Give a full address, starting with https://");
             const session = await browsers.forUser(context.userId);
-            await (await session.tab()).goto(params.url.trim());
+            if (url) await (await session.tab()).goto(url);
             const { link } = liveViews.open(context.userId, await session.liveView());
             return {
                 data: { link, expiresInMinutes: 15 },
                 guidance: `Send the user this link in one short message: it shows your browser on the ${params.site} sign-in page, where they sign in themselves, then tell you they are done. Never send it anywhere else. Stop now: in the chat, wait for their reply; in a background job, end with the link and what you will do once they are in.`,
+            };
+        },
+    });
+
+    const act = defineTool({
+        name: "browser_ask_user_to_act",
+        label: "Ask the user to act",
+        description:
+            "Hand your browser to the user, on the page open now, for a step that is theirs alone: a consent (an identity provider passing on their tax code), a declaration (that they read a privacy notice, the legal reason for a stamp-duty exemption), a choice only they can make. Returns a private link that shows your browser.",
+        effect: "draft",
+        parameters: Type.Object({
+            what: Type.String({
+                description:
+                    'What they are asked to do there, in plain words, e.g. "allow Poste to pass your tax code to the Anagrafe".',
+            }),
+        }),
+        execute: async (params, context) => {
+            const session = await browsers.forUser(context.userId);
+            const { link } = liveViews.open(context.userId, await session.liveView());
+            return {
+                data: { link, expiresInMinutes: 15, url: (await session.tab()).url() },
+                guidance: `Send the user this link in one short message, with what they are asked to do: ${params.what}. Say it is their choice and that you go on once they tell you they are done. Never send it anywhere else. Stop now: in the chat, wait for their reply; in a background job, end with the link.`,
             };
         },
     });
@@ -292,6 +328,6 @@ export const createBrowserCapability = (
         summary:
             "Your own browser: open pages, click and type, take screenshots, find and save pictures and files, and use sites the user signed in to.",
         skill: promptFile(import.meta.url, "SKILL.md"),
-        tools: [open, read, click, type, press, scroll, back, screenshot, findImages, saveFile, signIn],
+        tools: [open, read, click, type, press, scroll, back, screenshot, findImages, saveFile, signIn, act],
     };
 };

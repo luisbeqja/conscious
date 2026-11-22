@@ -3,7 +3,13 @@ import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
 import { WebSocket, WebSocketServer } from "ws";
 import type { BrowserProvider, BrowserTab, FoundImage, LiveViewTarget } from "../src/browser/browser.js";
-import { clickIsCommit, commitWord, type ElementInfo, typingIsRefused } from "../src/browser/guard.js";
+import {
+    clickIsCommit,
+    clickIsDeclaration,
+    commitWord,
+    type ElementInfo,
+    typingIsRefused,
+} from "../src/browser/guard.js";
 import { LiveViews, relayLiveView, serveLiveView } from "../src/browser/live-view.js";
 import { createBrowserCapability } from "../src/capabilities/browser/capability.js";
 import type { ToolContext } from "../src/capabilities/types.js";
@@ -67,6 +73,54 @@ describe("the commit guard", () => {
         expect(typingIsRefused(element({ tag: "input", autocomplete: "cc-number" }))).toBe("card");
         expect(typingIsRefused(element({ tag: "input", fieldHint: "cardNumber card-number" }))).toBe("card");
         expect(typingIsRefused(element({ tag: "input", type: "search", fieldHint: "q" }))).toBeUndefined();
+    });
+
+    it("leaves consents and declarations in the user's name to the user, as on SPID and the Anagrafe", () => {
+        // Poste ID asking to pass on the tax code, and the Anagrafe's privacy notice on first access.
+        expect(clickIsDeclaration(element({ name: "ACCONSENTO" }))).toContain('"acconsento"');
+        expect(clickIsDeclaration(element({ name: "NON ACCONSENTO" }))).toBeDefined();
+        expect(
+            clickIsDeclaration(
+                element({
+                    tag: "input",
+                    type: "checkbox",
+                    name: "Conferma la presa visione dell'Informativa della Privacy",
+                }),
+            ),
+        ).toContain("presa visione");
+        // A stamp-duty exemption: the option itself, and a reason picked from the list of reasons.
+        expect(
+            clickIsDeclaration(element({ tag: "input", type: "radio", name: "In esenzione da imposta di bollo" })),
+        ).toBeDefined();
+        expect(
+            clickIsDeclaration(
+                element({
+                    tag: "input",
+                    type: "radio",
+                    name: "Nell'ambito di un procedimento di separazione o divorzio",
+                    group: "Motivi di esenzione",
+                }),
+            ),
+        ).toContain("Motivi di esenzione");
+        expect(
+            clickIsDeclaration(element({ tag: "a", name: "Dichiarazione di accessibilità", navigates: true })),
+        ).toBeUndefined();
+    });
+
+    it("lets the agent through the steps that only move a form along", () => {
+        for (const label of [
+            "Accetta tutti i cookie",
+            "Avanti",
+            "Prosegui",
+            "Conferma e accedi al servizio",
+            "Ottieni",
+            "Scarica autocertificazione",
+            "Entra con SPID",
+            "Di residenza",
+            "In bollo Con pagamento",
+        ]) {
+            expect(clickIsDeclaration(element({ name: label })), label).toBeUndefined();
+        }
     });
 });
 
@@ -230,6 +284,39 @@ describe("the browser tools", () => {
         const saved = await call("browser_save_file", { url: "https://shop.example/big", name: "lisbon tram" });
         expect(saved.data).toMatchObject({ saved: "files/browser/20261025120000-lisbon-tram.jpg", type: "image/jpeg" });
         expect(saved.images?.[0]?.mimeType).toBe("image/jpeg");
+    });
+
+    it("hands a consent to the user instead of clicking it, on the page open now", async () => {
+        const tab = new FakeTab({
+            e1: element({ name: "ACCONSENTO", submitsForm: true }),
+            e2: element({ name: "Avanti", submitsForm: true }),
+        });
+        tab.address = "https://posteid.poste.it/jod-login-schema/consent.jsp";
+        const { call, views } = setUp(tab);
+        await expect(call("browser_click", { ref: "e1" })).rejects.toThrow(/browser_ask_user_to_act/);
+        await call("browser_click", { ref: "e2" });
+        expect(tab.steps).toEqual(["click e2", "snapshot"]);
+        const output = await call("browser_ask_user_to_act", {
+            what: "allow Poste to pass your tax code to the Anagrafe",
+        });
+        const data = output.data as { link: string; url: string };
+        const code = /^\/browser\/([\w-]+)\/vnc\.html$/.exec(new URL(data.link).pathname)?.[1] ?? "";
+        expect(views.find(code)?.userId).toBe("me");
+        expect(data.url).toBe("https://posteid.poste.it/jod-login-schema/consent.jsp");
+        expect(tab.steps.some((step) => step.startsWith("goto"))).toBe(false);
+        expect(output.guidance).toContain("allow Poste to pass your tax code to the Anagrafe");
+    });
+
+    it("asks for a SPID sign-in on the provider's page already open, without leaving it", async () => {
+        const tab = new FakeTab();
+        tab.address = "https://posteid.poste.it/jod-login-schema/login.jsp";
+        const { call } = setUp(tab);
+        const output = await call("browser_ask_user_to_sign_in", { site: "Poste ID" });
+        expect((output.data as { link: string }).link).toMatch(/^https:\/\/conscious\.example\/browser\//);
+        expect(tab.steps).toEqual([]);
+        await expect(call("browser_ask_user_to_sign_in", { site: "X", url: "posteid.poste.it" })).rejects.toThrow(
+            /https:\/\//,
+        );
     });
 
     it("asks the user to sign in through a private link to the browser, on the sign-in page", async () => {

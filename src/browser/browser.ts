@@ -91,12 +91,29 @@ export class PlaywrightTab implements BrowserTab {
             const tag = element.tagName.toLowerCase();
             const type = (element.getAttribute("type") ?? "").toLowerCase();
             const role = element.getAttribute("role") ?? "";
+            // A checkbox or radio, or a label around one, answers the question its group asks.
+            const control = tag === "label" ? (element as HTMLLabelElement).control : element;
+            const controlType = (control?.getAttribute("type") ?? "").toLowerCase();
+            const controlRole = control?.getAttribute("role") ?? "";
+            const choice =
+                control &&
+                (controlType === "radio" ||
+                    controlType === "checkbox" ||
+                    controlRole === "radio" ||
+                    controlRole === "checkbox")
+                    ? control
+                    : undefined;
+            // A checkbox or radio says what it means only in its label: "Conferma la presa visione…".
+            const labels = Array.from(input.labels ?? [])
+                .map((label) => label.innerText)
+                .join(" ");
             return {
                 tag,
                 type,
                 name: (
                     element.getAttribute("aria-label") ||
                     (element as HTMLElement).innerText ||
+                    labels ||
                     input.value ||
                     element.getAttribute("title") ||
                     ""
@@ -111,6 +128,15 @@ export class PlaywrightTab implements BrowserTab {
                     ((tag === "button" && (type === "" || type === "submit")) ||
                         (tag === "input" && (type === "submit" || type === "image"))),
                 navigates: tag === "a" && element.hasAttribute("href") && role !== "button",
+                group: choice
+                    ? (
+                          choice.closest("fieldset")?.querySelector("legend")?.textContent ||
+                          choice.closest("[role=radiogroup],[role=group]")?.getAttribute("aria-label") ||
+                          ""
+                      )
+                          .trim()
+                          .slice(0, 200)
+                    : "",
             };
         });
     }
