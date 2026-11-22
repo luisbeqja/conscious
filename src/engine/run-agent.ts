@@ -3,6 +3,7 @@ import type { AssistantMessageEvent, ImageContent } from "@earendil-works/pi-ai"
 import { SEND_MESSAGE } from "../capabilities/chat/capability.js";
 import type { Effect } from "../capabilities/types.js";
 import type { Budgets } from "../config.js";
+import type { RunTrace } from "../observability/tracing.js";
 import type { ModelRuntime } from "./models.js";
 
 export interface AgentRun {
@@ -27,6 +28,8 @@ export interface AgentRun {
     beforeStop?: (wrote: string) => string | undefined;
     /** Live progress, for a terminal or a typing indicator. Never stored. */
     onProgress?: (progress: RunProgress) => void;
+    /** Where the run is traced, turn by turn and tool by tool. */
+    trace?: RunTrace;
 }
 
 /** `text` is a message to the user as it is written, `tool` a step of the work. The agent's own text is never shown. */
@@ -134,6 +137,7 @@ export const runAgent = async (run: AgentRun): Promise<AgentRunResult> => {
     let turns = 0;
     let written = new Map<number, string>();
     agent.subscribe((event) => {
+        run.trace?.event(event);
         if (event.type === "message_start") written = new Map();
         if (event.type === "message_update") {
             const delta = newlyWritten(event.assistantMessageEvent, written);
@@ -187,10 +191,8 @@ export const runAgent = async (run: AgentRun): Promise<AgentRunResult> => {
         status = "failed";
     }
     const messages = agent.state.messages.filter((message) => message.role !== "system");
-    return {
-        messages,
-        // Only this run: what it wrote for an earlier message is not its notes now.
-        text: lastAssistantText(messages.slice(history.length)),
-        status,
-    };
+    // Only this run: what it wrote for an earlier message is not its notes now.
+    const text = lastAssistantText(messages.slice(history.length));
+    run.trace?.end({ status, text, error: agent.state.errorMessage || undefined });
+    return { messages, text, status };
 };

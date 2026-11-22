@@ -37,6 +37,7 @@ import { MAIL_CONNECTOR } from "./mail/account.js";
 import { openImap } from "./mail/imap.js";
 import { McpSignIn, McpUserServers } from "./mcp/sign-in.js";
 import { FileMemoryStore, type MemoryStore, SandboxMemoryStore } from "./memory/memory.js";
+import { createLangfuseTracer } from "./observability/langfuse.js";
 import { fetchTransport } from "./plugins/broker.js";
 import { manifestProblems } from "./plugins/manifest.js";
 import { loadPluginFolder, type PluginDeps, pluginCapabilities } from "./plugins/plugins.js";
@@ -264,6 +265,7 @@ export const createConscious = (config: Config, notify: Notify, extra: readonly 
         sent,
         agents,
         reactor: config.reactions && createReactor(createModelRuntime(config.reactions)),
+        tracer: config.tracing && createLangfuseTracer(config.tracing),
     });
     /** The Vault page. When a secret is saved, the user hears it in the chat. */
     const vaultPages = vaultHandler({
