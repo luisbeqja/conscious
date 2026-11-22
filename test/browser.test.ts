@@ -199,7 +199,7 @@ class FakeTab implements BrowserTab {
     }
 }
 
-const setUp = (tab: FakeTab, seesImages = true) => {
+const setUp = (tab: FakeTab, seesImages = true, resumed?: { userId: string; note: string; since: number }[]) => {
     const sandboxes = new FakeSandboxes();
     const views = new LiveViews("https://conscious.example", () => 0);
     const target: LiveViewTarget = {
@@ -208,7 +208,18 @@ const setUp = (tab: FakeTab, seesImages = true) => {
         password: "pw",
     };
     const browsers: BrowserProvider = { forUser: async () => ({ tab: async () => tab, liveView: async () => target }) };
-    const capability = createBrowserCapability(browsers, views, sandboxes, () => new Date("2026-10-25T12:00:00Z"));
+    const capability = createBrowserCapability(
+        browsers,
+        views,
+        sandboxes,
+        () => new Date("2026-10-25T12:00:00Z"),
+        resumed
+            ? {
+                  pollMs: 5,
+                  resume: async (userId, note, since) => void resumed.push({ userId, note, since }),
+              }
+            : {},
+    );
     const context: ToolContext = {
         userId: "me",
         timezone: "Europe/Rome",
@@ -386,6 +397,44 @@ describe("the browser tools", () => {
         const output = await call("browser_ask_user_to_sign_in", { site: "Poste ID" });
         expect((output.data as { link: string }).link).toMatch(/^https:\/\/appregistry-posteid\.mobile\.poste\.it\//);
         expect(output.guidance).toMatch(/PosteID app opens/);
+    });
+
+    it('goes on by itself once the user approved in PosteID, with no need to write "fatto"', async () => {
+        const tab = new FakeTab();
+        tab.address = "https://posteid.poste.it/jod-login-schema/login.jsp";
+        tab.transaction = { host: "posteid.poste.it", id: "4e7e85293eab46ad9f14f330f1ece5d8", lifetimeSeconds: 120 };
+        const resumed: { userId: string; note: string; since: number }[] = [];
+        const { call } = setUp(tab, true, resumed);
+        const output = await call("browser_ask_user_to_approve_in_app", {});
+        expect(output.guidance).toMatch(/woken to go on/);
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        expect(resumed).toEqual([]);
+        // The app approved it: Poste moves on to its consent page.
+        tab.address = "https://posteid.poste.it/jod-login-schema/consent.jsp";
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        expect(resumed).toHaveLength(1);
+        expect(resumed[0]?.userId).toBe("me");
+        expect(resumed[0]?.note).toMatch(/approved the sign-in in the PosteID app.*consent\.jsp/);
+    });
+
+    it("stops watching once the agent is at the browser again, and goes on after a consent in the live view", async () => {
+        const tab = new FakeTab({ e1: element({ name: "Avanti" }) });
+        tab.address = "https://posteid.poste.it/jod-login-schema/login.jsp";
+        tab.transaction = { host: "posteid.poste.it", id: "4e7e85293eab46ad9f14f330f1ece5d8" };
+        const resumed: { userId: string; note: string; since: number }[] = [];
+        const { call } = setUp(tab, true, resumed);
+        await call("browser_ask_user_to_approve_in_app", {});
+        // The user said "fatto" and the agent went on itself: its own steps must not wake it again.
+        await call("browser_read_page", {});
+        tab.address = "https://posteid.poste.it/jod-login-schema/consent.jsp";
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        expect(resumed).toEqual([]);
+        // The consent, handed over in the live view: going on once the page leaves it.
+        await call("browser_ask_user_to_act", { what: "allow Poste to pass your tax code to the Anagrafe" });
+        tab.address = "https://sc.anpr.interno.it/serviziCittadino/privacy";
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        expect(resumed).toHaveLength(1);
+        expect(resumed[0]?.note).toMatch(/allow Poste to pass your tax code/);
     });
 
     it("builds app links only for known providers and well-formed transactions", () => {

@@ -162,6 +162,10 @@ const toolsFor = (capabilities: readonly Capability[], context: ToolContext) => 
 export class Orchestrator {
     private readonly queues = new Map<string, Promise<unknown>>();
     private readonly memory?: MemoryStore;
+    /** Where each user last wrote from, so Conscious can go on there when something they did elsewhere lands. */
+    private readonly chats = new Map<string, { say?: SendOptions["say"]; sendFile?: SendOptions["sendFile"] }>();
+    /** When each user's last message arrived. */
+    private readonly lastMessage = new Map<string, number>();
 
     constructor(private readonly deps: OrchestratorDeps) {
         this.memory = deps.memory ?? (deps.sandboxes ? new SandboxMemoryStore(deps.sandboxes) : undefined);
@@ -172,6 +176,24 @@ export class Orchestrator {
      * Resolves with what the user was sent, in order: none when a reaction said it all.
      */
     send(userId: string, text: string, options: SendOptions = {}): Promise<string[]> {
+        this.lastMessage.set(userId, Date.now());
+        if (options.say) this.chats.set(userId, { say: options.say, sendFile: options.sendFile });
+        return this.enqueue(userId, text, options);
+    }
+
+    /**
+     * Goes on with the user's request after something they did outside the chat: they approved a
+     * sign-in in their SPID app, or clicked in the live view. Runs like a message of theirs, in the
+     * chat they last wrote from, with `note` saying what happened. Skipped when they wrote since
+     * `since` (they said so themselves) or never wrote from a chat Conscious can answer in.
+     */
+    resume(userId: string, note: string, since: number): Promise<string[]> {
+        const chat = this.chats.get(userId);
+        if (!chat || (this.lastMessage.get(userId) ?? 0) > since) return Promise.resolve([]);
+        return this.enqueue(userId, note, chat);
+    }
+
+    private enqueue(userId: string, text: string, options: SendOptions): Promise<string[]> {
         const previous = this.queues.get(userId) ?? Promise.resolve();
         const next = previous.catch(() => {}).then(() => this.handle(userId, text, options));
         this.queues.set(userId, next);

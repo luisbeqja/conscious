@@ -3,15 +3,19 @@ import { Type } from "typebox";
 import type { BrowserProvider, BrowserTab, DownloadedFile } from "../../browser/browser.js";
 import { clickIsCommit, clickIsDeclaration, typingIsRefused } from "../../browser/guard.js";
 import type { LiveViews } from "../../browser/live-view.js";
-import { appApproval, appProviders } from "../../browser/spid.js";
+import { type AppApproval, appApproval, appProviders } from "../../browser/spid.js";
 import { promptFile } from "../../prompts/prompt-file.js";
 import type { SandboxProvider } from "../../sandbox/sandbox.js";
-import { type Capability, defineTool, type ToolContext } from "../types.js";
+import { type Capability, defineTool, type ToolContext, type ToolOutput } from "../types.js";
 
 // A page is read in parts this long; the tree of a big page runs to hundreds of thousands.
 const PAGE_CHARS = 10_000;
 const MAX_FILE_BYTES = 20_000_000;
 const MAX_IMAGE_BYTES = 4_000_000;
+// How often the page is looked at while the user does their part elsewhere.
+const POLL_MS = 2_000;
+// As long as a live view link lasts.
+const LIVE_VIEW_MINUTES = 15;
 // A page may build the file after the click, as the Anagrafe does with its PDFs.
 const DOWNLOAD_WAIT_MS = 30_000;
 // Enter and Space are left out on purpose: they can press a focused "Pay" button past the guard.
@@ -30,6 +34,23 @@ const EXTENSIONS: Record<string, string> = {
 
 const ref = Type.String({ description: "The element's ref from the page, like e12." });
 
+/** How Conscious goes on by itself once the user did their part outside the chat. */
+export interface BrowserWatching {
+    /** Runs the user's request on, in their chat, with a note on what happened; skipped if they wrote since `since`. */
+    resume?: (userId: string, note: string, since: number) => Promise<unknown>;
+    pollMs?: number;
+}
+
+const withoutHash = (url: string): string => url.split("#")[0] ?? url;
+
+const hostOf = (url: string): string => {
+    try {
+        return new URL(url).hostname;
+    } catch {
+        return url;
+    }
+};
+
 const commitRefused = (label: string, why: string) =>
     new Error(
         `Not done: "${label}" would act for the user (${why}). That needs their explicit yes, which is not built yet. Stop here and tell them exactly what is left to click; they can do it themselves.`,
@@ -45,11 +66,50 @@ export const createBrowserCapability = (
     liveViews: LiveViews,
     sandboxes: SandboxProvider,
     now: () => Date = () => new Date(),
+    watching: BrowserWatching = {},
 ): Capability => {
+    const pollMs = watching.pollMs ?? POLL_MS;
+    // One watch per user: the latest hand-over, until the agent acts in the browser again.
+    const watches = new Map<string, symbol>();
+
+    /**
+     * Watches the user's page while they do their part elsewhere (the SPID app, the live view), and
+     * goes on by itself once `moved` says the page moved on, so they need not write "done".
+     */
+    const watch = (userId: string, until: number, moved: (url: string) => boolean, note: (url: string) => string) => {
+        const { resume } = watching;
+        if (!resume) return false;
+        const token = Symbol(userId);
+        watches.set(userId, token);
+        const since = Date.now();
+        void (async () => {
+            while (watches.get(userId) === token && Date.now() < until) {
+                await new Promise((done) => setTimeout(done, pollMs));
+                if (watches.get(userId) !== token) return;
+                const url = await browsers
+                    .forUser(userId)
+                    .then(async (session) => (await session.tab()).url())
+                    .catch(() => undefined);
+                if (url && moved(url)) {
+                    watches.delete(userId);
+                    await resume(userId, note(url), since).catch((error) =>
+                        console.error(`[browser] could not go on for ${userId}`, error),
+                    );
+                    return;
+                }
+            }
+            if (watches.get(userId) === token) watches.delete(userId);
+        })();
+        return true;
+    };
     // The last tree each user's agent read, so it can read on without the page shifting under it.
     const trees = new Map<string, { url: string; text: string }>();
 
-    const tabFor = async (context: ToolContext): Promise<BrowserTab> => (await browsers.forUser(context.userId)).tab();
+    const tabFor = async (context: ToolContext): Promise<BrowserTab> => {
+        // The agent is at the browser again: whatever it was waiting for, it is going on itself.
+        watches.delete(context.userId);
+        return (await browsers.forUser(context.userId)).tab();
+    };
 
     /** What the agent sees of a page: where it is, and a part of its tree. */
     const look = async (context: ToolContext, tab: BrowserTab, from = 0) => {
@@ -319,8 +379,34 @@ export const createBrowserCapability = (
         },
     });
 
-    const approveGuidance = (app: string, lifetimeSeconds: number) =>
-        `Send the user this link in one short message: they tap it on their phone, the ${app} app opens, and they approve the sign-in there. It lasts about ${Math.round(lifetimeSeconds / 60)} minutes. Never send it anywhere else. Stop now and wait for them; once they say they approved, read the page, which goes on by itself. If the code ran out first, reload the provider's page or press its button for a new code, then call browser_ask_user_to_approve_in_app again.`;
+    /** Sends the user to their SPID app, and goes on by itself once the page moves past the sign-in. */
+    const handToApp = (context: ToolContext, tab: BrowserTab, approval: AppApproval): ToolOutput => {
+        const from = withoutHash(tab.url());
+        const watched = watch(
+            context.userId,
+            Date.now() + (approval.lifetimeSeconds + 60) * 1000,
+            (url) => withoutHash(url) !== from,
+            (url) =>
+                `[Not from the user: they approved the sign-in in the ${approval.app} app, and your browser moved on to ${url}. Go on with what they asked. Do not ask them whether they approved.]`,
+        );
+        const after = watched
+            ? "Stop now. You need not ask them to tell you when they are done: as soon as the page moves on you are woken to go on, so say they only have to approve."
+            : "Stop now and wait for them; once they say they approved, read the page, which goes on by itself.";
+        return {
+            data: { ...approval, url: tab.url() },
+            guidance: `Send the user this link in one short message: they tap it on their phone, the ${approval.app} app opens, and they approve the sign-in there. It lasts about ${Math.round(approval.lifetimeSeconds / 60)} minutes. Never send it anywhere else. ${after} If the code ran out first, reload the provider's page or press its button for a new code, then call browser_ask_user_to_approve_in_app again.`,
+        };
+    };
+
+    /** Hands the live view over, and goes on by itself once the page moves on as `moved` says. */
+    const watchLiveView = (context: ToolContext, from: string, moved: (url: string) => boolean, did: string) =>
+        watch(
+            context.userId,
+            Date.now() + LIVE_VIEW_MINUTES * 60_000,
+            moved,
+            (url) =>
+                `[Not from the user: while they had the live view open, your browser moved on from ${from} to ${url}: ${did}. Read the page and go on with what they asked. Do not ask them whether they are done.]`,
+        );
 
     const signIn = defineTool({
         name: "browser_ask_user_to_sign_in",
@@ -347,16 +433,23 @@ export const createBrowserCapability = (
             // On a SPID provider whose app can approve the sign-in, that link is better on a phone.
             const transaction = await tab.spidTransaction().catch(() => undefined);
             const approval = transaction && appApproval(transaction);
-            if (approval) {
-                return {
-                    data: { ...approval, url: tab.url() },
-                    guidance: approveGuidance(approval.app, approval.lifetimeSeconds),
-                };
-            }
+            if (approval) return handToApp(context, tab, approval);
             const { link } = liveViews.open(context.userId, await session.liveView());
+            const from = tab.url();
+            const host = hostOf(from);
+            // Signing in moves through the provider's own pages; the user is done when the site's own comes back.
+            const watched = watchLiveView(
+                context,
+                from,
+                (url) => hostOf(url) !== host,
+                `they signed in to ${params.site}`,
+            );
+            const after = watched
+                ? "Stop now: you are woken to go on once they are in, so they need not tell you. In a background job, end with the link and what you will do once they are in."
+                : "Then they tell you they are done. Stop now: in the chat, wait for their reply; in a background job, end with the link and what you will do once they are in.";
             return {
-                data: { link, expiresInMinutes: 15 },
-                guidance: `Send the user this link in one short message: it shows your browser on the ${params.site} sign-in page, where they sign in themselves, then tell you they are done. Never send it anywhere else. Stop now: in the chat, wait for their reply; in a background job, end with the link and what you will do once they are in.`,
+                data: { link, expiresInMinutes: LIVE_VIEW_MINUTES },
+                guidance: `Send the user this link in one short message: it shows your browser on the ${params.site} sign-in page, where they sign in themselves. Never send it anywhere else. ${after}`,
             };
         },
     });
@@ -376,10 +469,7 @@ export const createBrowserCapability = (
                     "This page waits for no app sign-in Conscious knows. Open the identity provider's sign-in page first; for another provider, use browser_ask_user_to_sign_in.",
                 );
             }
-            return {
-                data: { ...approval, url: tab.url() },
-                guidance: approveGuidance(approval.app, approval.lifetimeSeconds),
-            };
+            return handToApp(context, tab, approval);
         },
     });
 
@@ -398,9 +488,19 @@ export const createBrowserCapability = (
         execute: async (params, context) => {
             const session = await browsers.forUser(context.userId);
             const { link } = liveViews.open(context.userId, await session.liveView());
+            const from = (await session.tab()).url();
+            const watched = watchLiveView(
+                context,
+                from,
+                (url) => withoutHash(url) !== withoutHash(from),
+                `they did their part: ${params.what}`,
+            );
+            const after = watched
+                ? "Say it is their choice, and that you go on by yourself once they have done it. Stop now: you are woken when the page moves on. If it does not move, they will tell you."
+                : "Say it is their choice and that you go on once they tell you they are done. Stop now: in the chat, wait for their reply; in a background job, end with the link.";
             return {
-                data: { link, expiresInMinutes: 15, url: (await session.tab()).url() },
-                guidance: `Send the user this link in one short message, with what they are asked to do: ${params.what}. Say it is their choice and that you go on once they tell you they are done. Never send it anywhere else. Stop now: in the chat, wait for their reply; in a background job, end with the link.`,
+                data: { link, expiresInMinutes: LIVE_VIEW_MINUTES, url: from },
+                guidance: `Send the user this link in one short message, with what they are asked to do: ${params.what}. Never send it anywhere else. ${after}`,
             };
         },
     });
