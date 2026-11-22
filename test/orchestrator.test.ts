@@ -240,6 +240,43 @@ describe("Orchestrator", () => {
         expect(said).toEqual(["one", "two", "three", "four", "five"]);
     });
 
+    it("goes on by itself in the user's chat once they did their part elsewhere, unless they wrote first", async () => {
+        const { faux, runtime } = scriptedModel();
+        faux.setResponses([...sends("Tap the link and approve in PosteID."), ...sends("You're in. Getting it now.")]);
+        const store = new InMemoryConversationStore();
+        const orchestrator = new Orchestrator({
+            registry: createRegistry(),
+            store,
+            runtime,
+            budgets: { maxTurnsPerRun: 10, maxToolCallsPerRun: 10, maxBackgroundAgents: 1 },
+            timezone: "Europe/Rome",
+            scheduler,
+            background: new BackgroundAgents(
+                async () => "",
+                async () => {},
+                1,
+            ),
+        });
+        // Nobody wrote from a chat yet: nowhere to go on.
+        expect(await orchestrator.resume("me", "[they approved]", 0)).toEqual([]);
+
+        const said: string[] = [];
+        await orchestrator.send("me", "get my autocertificazione", { say: async (text) => void said.push(text) });
+        const since = Date.now();
+        const resumed = await orchestrator.resume("me", "[Not from the user: they approved in PosteID]", since);
+        expect(resumed).toEqual(["You're in. Getting it now."]);
+        expect(said).toEqual(["Tap the link and approve in PosteID.", "You're in. Getting it now."]);
+        const users = (await store.load("me")).filter((message) => message.role === "user");
+        expect(JSON.stringify(users.at(-1))).toContain("they approved in PosteID");
+
+        // They wrote "done" themselves after the watch began: going on again would do it twice.
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        const watchBegan = Date.now() - 2;
+        faux.setResponses([...sends("On it.")]);
+        await orchestrator.send("me", "done", { say: async (text) => void said.push(text) });
+        expect(await orchestrator.resume("me", "[they approved]", watchBegan)).toEqual([]);
+    });
+
     it("says something broke when the answer failed before anything was sent", async () => {
         const { faux, runtime } = scriptedModel();
         faux.setResponses([]);

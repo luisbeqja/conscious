@@ -165,7 +165,15 @@ export const createConscious = (config: Config, notify: Notify, extra: readonly 
     const builtIn = [
         createMemoryCapability(memory),
         createAgentsCapability(agents),
-        ...(browsers && liveViews && sandboxes ? [createBrowserCapability(browsers, liveViews, sandboxes)] : []),
+        ...(browsers && liveViews && sandboxes
+            ? [
+                  createBrowserCapability(browsers, liveViews, sandboxes, undefined, {
+                      // The orchestrator is made below, from these capabilities.
+                      resume: (userId: string, note: string, since: number): Promise<string[]> =>
+                          orchestrator.resume(userId, note, since),
+                  }),
+              ]
+            : []),
         createQuietCapability(pacing),
         web,
         createMailCapability(openImap, vault),
